@@ -578,6 +578,14 @@ class WidgetManager  {
 
     // Generic widget panels
     _makeWidget(identifier, content) {
+    for (const [id, widget] of Object.entries(this.widgetClasses)) {
+    const showTitle = (typeof widget.isTitleVisible === "function")
+        ? widget.isTitleVisible()
+        : true; // Default to true if not defined
+    if (!showTitle) {
+        $(`#${id}-title`).hide();
+    }
+}
         const title = this.widgetTranslations[identifier].title;
         const link = this.breakoutLinks[identifier] !== "" ? `
                 <div id="link-handle-${identifier}" class="link-handle">
@@ -589,6 +597,9 @@ class WidgetManager  {
         let $panel = $(`<div class="widget widget-${identifier}"></div>`);
         let $content = $(`<div class="widget-content"></div>`);
         const widget = this.widgetClasses[identifier];
+        const isTitleVisible = (widget && typeof widget.isTitleVisible === "function")
+    ? widget.isTitleVisible()
+    : true;
         const headerStyle = widget && !widget.isTitleVisible() ? ' style="margin: 0;"' : '';
         const titleDisplay = widget && widget.isTitleVisible() ? '' : ' style="display: none;"';
         const linkDisplay = widget && widget.isTitleVisible() ? '' : ' style="display: none;"';
