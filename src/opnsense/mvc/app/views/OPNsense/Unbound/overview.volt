@@ -431,6 +431,8 @@
             $('#top, #top-blocked').hide();
             ajaxGet('/api/unbound/overview/totals/' + maxDomains, {}, function(data, status) {
 
+                $('#top, #top-blocked').fadeIn();
+
                 $('.top-item').remove();
 
                 $('#totalCounter').html(data.total);
@@ -446,7 +448,6 @@
 
                 $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
 
-                $('#top, #top-blocked').fadeIn();
             });
         }
 
