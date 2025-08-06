@@ -529,7 +529,7 @@
             updateClientChart(this.checked);
         })
 
-        $("#show-extended-domains").change(function() {
+        $("#toggle-extended-domains").change(function() {
             if (window.localStorage) {
                 window.localStorage.setItem("api.unbound.overview.extendeddomains", this.checked);
             }
