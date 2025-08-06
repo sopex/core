@@ -854,7 +854,7 @@
                         <div class="col-md-12">
                             <div class="form-group">
                                 <div class="vertical-center">
-                                    <label class="h-100 style="margin-right: 5px;" margin-top: 5px;">{{ lang._('Show top 50 domains (instead of 10)') }}</label>
+                                    <label class="h-100 style="margin-right: 5px; margin-top: 5px;">{{ lang._('Show top 50 domains (instead of 10)') }}</label>
                                     <input id="show-extended-domains" type="checkbox"></input>
                                 </div>
                             </div>
