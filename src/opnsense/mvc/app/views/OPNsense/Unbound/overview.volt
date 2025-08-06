@@ -430,7 +430,7 @@
             let maxDomains = $('#toggle-extended-domains').is(':checked') ? 50 : 10;
             ajaxGet('/api/unbound/overview/totals/' + maxDomains, {}, function(data, status) {
 
-                $('#top, #top-blocked').hide('slow');
+                $('#top, #top-blocked').hide(200');
 
                 $('.top-item').remove();
 
@@ -447,7 +447,7 @@
 
                 $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
 
-                $('#top, #top-blocked').fadeIn();
+                $('#top, #top-blocked').fadeIn(400);
             });
         }
 
