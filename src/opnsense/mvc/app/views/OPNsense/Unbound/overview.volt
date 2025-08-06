@@ -853,8 +853,8 @@
                     <div class="row">
                         <div class="col-md-12">
                             <div class="row" style="padding: 15px 20px 2px;">
-                                <label>{{ lang._('Show more domains') }}</label>
-                                <input type="checkbox" id="show-extended-domains" />
+                                <label style="margin-right: 5px;">{{ lang._('Show more domains') }}</label>
+                                <input type="checkbox" id="show-extended-domains"></input>
                             </div>
                         </div>
                     </div>
