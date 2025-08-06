@@ -852,7 +852,7 @@
                 <div class="container-fluid">
                     <div class="row">
     <div class="col-md-12">
-        <div class="padding: 8px 8px">
+        <div class="padding: 8px 8px;">
             <label>
                 <input type="checkbox" id="show-extended-domains" />
                 {{ lang._('Show top 50 domains (instead of 10)') }}
