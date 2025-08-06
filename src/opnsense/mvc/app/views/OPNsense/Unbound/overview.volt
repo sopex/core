@@ -429,6 +429,9 @@
         function create_or_update_totals() {
             let maxDomains = $('#toggle-extended-domains').is(':checked') ? 50 : 10;
             ajaxGet('/api/unbound/overview/totals/' + maxDomains, {}, function(data, status) {
+
+                $('#totalCounter, #blockedCounter, #sizeCounter, #resolvedCounter').hide();
+
                 $('.top-item').remove();
 
                 $('#totalCounter').html(data.total);
@@ -443,6 +446,8 @@
                 $('#top-blocked li:nth-child(even)').addClass('odd-bg');
 
                 $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
+
+                $('#totalCounter, #blockedCounter, #sizeCounter, #resolvedCounter').fadeIn(500);
             });
         }
 
