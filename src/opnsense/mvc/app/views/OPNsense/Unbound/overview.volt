@@ -854,21 +854,9 @@
                         <div class="col-md-12">
                             <div class="form-group">
                                 <label>
-                                    <input type="checkbox" id="show-extended-pass" />
+                                    <input type="checkbox" id="show-extended-domains" />
                                     {{ lang._('Show top 50 domains (instead of 10)') }}
                                 </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="row">
-                            <div class="col-md-12">
-                                <div class="form-group">
-                                    <label>
-                                        <input type="checkbox" id="show-extended-pass" />
-                                        {{ lang._('Show top 50 domains (instead of 10)') }}
-                                    </label>
-                                </div>
                             </div>
                         </div>
                         <div class="col-md-6">
