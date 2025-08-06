@@ -33,6 +33,41 @@
 <link rel="stylesheet" type="text/css" href="{{ cache_safe(theme_file_or_default('/css/chart.css', theme_name)) }}" rel="stylesheet" />
 <link rel="stylesheet" type="text/css" href="{{ cache_safe(theme_file_or_default('/css/dns-overview.css', theme_name)) }}" rel="stylesheet"/>
 
+<style>
+#domain-lists-container {
+    transition: opacity 0.3s ease-in-out;
+}
+
+#domain-lists-container.loading {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+.domain-lists-loading {
+    position: relative;
+}
+
+.domain-lists-loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    z-index: 1000;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+
 <script>
     $(document).ready(function() {
         $('#info').hide();
@@ -379,13 +414,13 @@
             return def;
         }
 
-        function createTopList(id, data, type, reverse_domains) {
+        function createTopList(id, data, type, reverse_domains, domainCount = 10) {
             ajaxGet('/api/unbound/overview/is_block_list_enabled', {}, function(bl_enabled, status) {
                 /* reverse_domains refers to the domains for which the opposite action should take place,
                  * e.g. if a domain is presented that has been blocked N amount of times, but has been
                  * whitelisted at a later point in time, the action should be to block it, not whitelist it.
                  */
-                for (let i = 0; i < 10; i++) {
+                for (let i = 0; i < domainCount; i++) {
                     let class_type = type == "pass" ? "block-domain" : "whitelist-domain";
                     let icon_type = type == "pass" ? "fa fa-ban text-danger" : "fa fa-pencil text-info";
                     let domain = Object.keys(data)[i];
@@ -426,22 +461,33 @@
             });
         }
 
-        function create_or_update_totals() {
-            ajaxGet('/api/unbound/overview/totals/10', {}, function(data, status) {
-                $('.top-item').remove();
+        function create_or_update_totals(domainCount = 10) {
+            // Add loading state
+            $('#domain-lists-container').addClass('loading');
+            
+            ajaxGet('/api/unbound/overview/totals/' + domainCount, {}, function(data, status) {
+                // Fade out before updating
+                $('#domain-lists-container').fadeTo(200, 0.3, function() {
+                    $('.top-item').remove();
 
-                $('#totalCounter').html(data.total);
-                $('#blockedCounter').html(data.blocked.total + " (" + data.blocked.pcnt + "%)");
-                $('#sizeCounter').html(data.blocklist_size);
-                $('#resolvedCounter').html(data.resolved.total + " (" + data.resolved.pcnt + "%)");
+                    $('#totalCounter').html(data.total);
+                    $('#blockedCounter').html(data.blocked.total + " (" + data.blocked.pcnt + "%)");
+                    $('#sizeCounter').html(data.blocklist_size);
+                    $('#resolvedCounter').html(data.resolved.total + " (" + data.resolved.pcnt + "%)");
 
-                createTopList('top', data.top, 'pass', new Set(data.blocklisted_domains));
-                createTopList('top-blocked', data.top_blocked, 'block', new Set(data.whitelisted_domains));
+                    createTopList('top', data.top, 'pass', new Set(data.blocklisted_domains), domainCount);
+                    createTopList('top-blocked', data.top_blocked, 'block', new Set(data.whitelisted_domains), domainCount);
 
-                $('#top li:nth-child(even)').addClass('odd-bg');
-                $('#top-blocked li:nth-child(even)').addClass('odd-bg');
+                    $('#top li:nth-child(even)').addClass('odd-bg');
+                    $('#top-blocked li:nth-child(even)').addClass('odd-bg');
 
-                $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
+                    $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
+                    
+                    // Fade back in and remove loading state
+                    $('#domain-lists-container').fadeTo(200, 1.0, function() {
+                        $('#domain-lists-container').removeClass('loading');
+                    });
+                });
             });
         }
 
@@ -483,6 +529,10 @@
                     if (window.localStorage.getItem("api.unbound.overview.logcchart") !== null) {
                         $("#toggle-log-cchart").prop('checked', window.localStorage.getItem("api.unbound.overview.logcchart") == 'true');
                     }
+
+                    if (window.localStorage.getItem("api.unbound.overview.extendeddomains") !== null) {
+                        $("#toggle-extended-domains").prop('checked', window.localStorage.getItem("api.unbound.overview.extendeddomains") == 'true');
+                    }
                 }
                 $('#timeperiod').selectpicker('refresh');
                 $('#timeperiod-clients').selectpicker('refresh');
@@ -491,7 +541,7 @@
                 g_clientChart = create_client_chart($("#rollingChartClient"), 60, [], false);
                 updateQueryChart($("#toggle-log-qchart")[0].checked);
                 updateClientChart($("#toggle-log-cchart")[0].checked);
-                create_or_update_totals();
+                create_or_update_totals($("#toggle-extended-domains")[0].checked ? 50 : 10);
             });
 
             return def;
@@ -523,6 +573,13 @@
                 window.localStorage.setItem("api.unbound.overview.logcchart", this.checked);
             }
             updateClientChart(this.checked);
+        })
+
+        $("#toggle-extended-domains").change(function() {
+            if (window.localStorage) {
+                window.localStorage.setItem("api.unbound.overview.extendeddomains", this.checked);
+            }
+            create_or_update_totals(this.checked ? 50 : 10);
         })
 
         let blocklist_cb = function() {
@@ -712,7 +769,7 @@
                 g_clientFilter = null;
                 g_timeFilter = null;
                 g_labelFilter = null;
-                create_or_update_totals();
+                create_or_update_totals($("#toggle-extended-domains")[0].checked ? 50 : 10);
                 updateQueryChart($("#toggle-log-qchart")[0].checked);
                 updateClientChart($("#toggle-log-cchart")[0].checked);
             }
@@ -850,7 +907,18 @@
             </div>
             <div class="content-box">
                 <div class="container-fluid">
-                    <div class="row">
+                    <div class="row" style="margin-bottom: 10px;">
+                        <div class="col-md-10">
+                            <h4 style="margin: 0; padding: 10px 0;">{{ lang._('Top Domains') }}</h4>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="vertical-center">
+                                <label class="h-100" style="margin-right: 5px;">{{ lang._('Extended (50)') }}</label>
+                                <input id="toggle-extended-domains" type="checkbox"></input>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row" id="domain-lists-container">
                         <div class="col-md-6">
                             <div class="top-list">
                                 <ul class="list-group list-group-wrapper" id="top">
