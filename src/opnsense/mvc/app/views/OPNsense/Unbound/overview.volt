@@ -430,7 +430,7 @@
             let maxDomains = $('#toggle-extended-domains').is(':checked') ? 50 : 10;
             ajaxGet('/api/unbound/overview/totals/' + maxDomains, {}, function(data, status) {
 
-                $('#top, #top-blocked').hide(100);
+                $('#top, #top-blocked').hide();
 
                 $('.top-item').remove();
 
