@@ -851,17 +851,13 @@
             <div class="content-box">
                 <div class="container-fluid">
                     <div class="row">
-    <div class="col-md-12">
-        <div class="vertical-center">
-        <div class="row" style="padding: 15px 20px 2px;">
-            <label>
-                <input type="checkbox" id="show-extended-domains" />
-                {{ lang._('Show top 50 domains (instead of 10)') }}
-            </label>
-        </div>
-        </div>
-    </div>
-</div>
+                        <div class="col-md-12">
+                            <div class="row" style="padding: 15px 20px 2px;">
+                                <label>{{ lang._('Show top 50 domains (instead of 10)') }}</label>
+                                <input type="checkbox" id="show-extended-domains" />
+                            </div>
+                        </div>
+                    </div>
                     <div class="row">
                         <div class="col-md-6">
                             <div class="top-list">
