@@ -852,9 +852,11 @@
                 <div class="container-fluid">
                     <div class="row">
                         <div class="col-md-12">
-                            <div class="vertical-center">
-                                <label class="h-100 style="margin-right: 5px;">{{ lang._('Show top 50 domains (instead of 10)') }}</label>
-                                <input id="show-extended-domains" type="checkbox"></input>
+                            <div class="form-group">
+                                <div class="vertical-center">
+                                    <label class="h-100 style="margin-right: 5px;">{{ lang._('Show top 50 domains (instead of 10)') }}</label>
+                                    <input id="show-extended-domains" type="checkbox"></input>
+                                </div>
                             </div>
                         </div>
                         <div class="col-md-6">
