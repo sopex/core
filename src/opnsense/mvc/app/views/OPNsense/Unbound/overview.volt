@@ -446,7 +446,7 @@
 
                 $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
 
-                $('#top, #top-blocked').fadeIn('slow');
+                $('#top, #top-blocked').fadeIn('fast');
             });
         }
 
