@@ -427,7 +427,7 @@
         }
 
         function create_or_update_totals() {
-            let maxDomains = $('#toggle-extended-domains').is(':checked') ? 50 : 10;
+            let maxDomains = ($('#toggle-extended-domains').val(), 10);
             $('#top, #top-blocked').hide();
             ajaxGet('/api/unbound/overview/totals/' + maxDomains, {}, function(data, status) {
 
