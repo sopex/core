@@ -430,26 +430,28 @@
             let maxDomains = ($('#toggle-extended-domains').val() || 10);
             $('#save-spinner').show();
             $('#top, #top-blocked').hide();
-            ajaxGet('/api/unbound/overview/totals/' + maxDomains, {}, function(data, status) {
+            requestAnimationFrame(function() {
+                ajaxGet('/api/unbound/overview/totals/' + maxDomains, {}, function(data, status) {
 
-                $('.top-item').remove();
+                    $('.top-item').remove();
 
-                $('#totalCounter').html(data.total);
-                $('#blockedCounter').html(data.blocked.total + " (" + data.blocked.pcnt + "%)");
-                $('#sizeCounter').html(data.blocklist_size);
-                $('#resolvedCounter').html(data.resolved.total + " (" + data.resolved.pcnt + "%)");
+                    $('#totalCounter').html(data.total);
+                    $('#blockedCounter').html(data.blocked.total + " (" + data.blocked.pcnt + "%)");
+                    $('#sizeCounter').html(data.blocklist_size);
+                    $('#resolvedCounter').html(data.resolved.total + " (" + data.resolved.pcnt + "%)");
 
-                createTopList('top', data.top, 'pass', new Set(data.blocklisted_domains), maxDomains);
-                createTopList('top-blocked', data.top_blocked, 'block', new Set(data.whitelisted_domains), maxDomains);
+                    createTopList('top', data.top, 'pass', new Set(data.blocklisted_domains), maxDomains);
+                    createTopList('top-blocked', data.top_blocked, 'block', new Set(data.whitelisted_domains), maxDomains);
 
-                $('#top li:nth-child(even)').addClass('odd-bg');
-                $('#top-blocked li:nth-child(even)').addClass('odd-bg');
+                    $('#top li:nth-child(even)').addClass('odd-bg');
+                    $('#top-blocked li:nth-child(even)').addClass('odd-bg');
 
-                $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
-                $('#save-spinner').hide();
-                $('#top, #top-blocked').fadeIn('slow');
+                    $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
+                    $('#save-spinner').hide();
+                    $('#top, #top-blocked').fadeIn('slow');
             });
-        }
+        });
+    }
 
         function reset_tooltips() {
             $(".block-domain").attr('title', "{{ lang._('Block Domain') }}").tooltip({container: 'body', trigger: 'hover'});
