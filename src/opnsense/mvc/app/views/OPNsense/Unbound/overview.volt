@@ -873,10 +873,10 @@
             </div>
             <div class="content-box">
                 <div class="container-fluid">
-                    <div class="row">
+                    <div class="row justify-content-center" style="display: flex; flex-wrap: wrap;">
                         <div class="col-md-4">
                             <div class="col-md-4 text-center" style="padding: 10px;">
-                                <label style="padding: 5px;">{{ lang._('Number of domains') }}</label>
+                                <span style="padding: 5px;"><b>{{ lang._('Number of domains') }}</b></span>
                                 <select class="selectpicker" id="toggle-extended-domains" data-width="auto">
                                     <option value="10">{{ lang._('10') }}</option>
                                     <option value="25">{{ lang._('25') }}</option>
