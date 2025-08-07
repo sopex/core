@@ -489,7 +489,7 @@
                         $("#toggle-log-cchart").prop('checked', window.localStorage.getItem("api.unbound.overview.logcchart") == 'true');
                     }
                     if (window.localStorage.getItem("api.unbound.overview.extendeddomains") !== null) {
-                        $("#toggle-extended-domains").prop('checked', window.localStorage.getItem("api.unbound.overview.extendeddomains") === 'true');
+                        $("#toggle-extended-domains").val(window.localStorage.getItem("api.unbound.overview.extendeddomains"));
                     }
                 }
                 $('#timeperiod').selectpicker('refresh');
@@ -535,7 +535,7 @@
 
         $("#toggle-extended-domains").change(function() {
             if (window.localStorage) {
-                window.localStorage.setItem("api.unbound.overview.extendeddomains", this.checked);
+                window.localStorage.setItem("api.unbound.overview.extendeddomains", $(this).val());
             }
             create_or_update_totals();
         });
