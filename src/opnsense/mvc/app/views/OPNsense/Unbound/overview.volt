@@ -876,7 +876,7 @@
                     <div class="row">
                         <div class="col-md-4">
                             <div class="col-md-4 text-center" style="padding: 10px;">
-                                <label style="margin-right: 5px;">{{ lang._('Number of domains') }}</label>
+                                <label style="padding: 5px;">{{ lang._('Number of domains') }}</label>
                                 <select class="selectpicker" id="toggle-extended-domains" data-width="auto">
                                     <option value="10">{{ lang._('10') }}</option>
                                     <option value="25">{{ lang._('25') }}</option>
