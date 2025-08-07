@@ -874,17 +874,15 @@
             <div class="content-box">
                 <div class="container-fluid">
                     <div class="row justify-content-center" style="display: flex; flex-wrap: wrap;">
-                        <div class="col-md-4">
-                            <div class="col-md-4 text-center" style="padding: 10px;">
-                                <span style="padding: 5px;"><b>{{ lang._('Number of domains') }}</b></span>
-                                <select class="selectpicker" id="toggle-extended-domains" data-width="auto">
-                                    <option value="10">{{ lang._('10') }}</option>
-                                    <option value="25">{{ lang._('25') }}</option>
-                                    <option value="50">{{ lang._('50') }}</option>
-                                    <option value="75">{{ lang._('75') }}</option>
-                                    <option value="100">{{ lang._('100') }}</option>
-                                </select>
-                            </div>
+                        <div class="col-md-4 text-center" style="padding: 10px;">
+                            <span style="padding: 5px;"><b>{{ lang._('Number of domains') }}</b></span>
+                            <select class="selectpicker" id="toggle-extended-domains" data-width="auto">
+                                <option value="10">{{ lang._('10') }}</option>
+                                <option value="25">{{ lang._('25') }}</option>
+                                <option value="50">{{ lang._('50') }}</option>
+                                <option value="75">{{ lang._('75') }}</option>
+                                <option value="100">{{ lang._('100') }}</option>
+                            </select>
                         </div>
                     </div>
                     <div class="row">
