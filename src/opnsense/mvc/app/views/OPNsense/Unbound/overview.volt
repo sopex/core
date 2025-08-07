@@ -428,7 +428,7 @@
 
         function create_or_update_totals() {
             let maxDomains = ($('#toggle-extended-domains').val() || 10);
-            showDomainsSpinner();
+            $('#save-spinner').show();
             $('#top, #top-blocked').hide();
             ajaxGet('/api/unbound/overview/totals/' + maxDomains, {}, function(data, status) {
 
@@ -446,7 +446,7 @@
                 $('#top-blocked li:nth-child(even)').addClass('odd-bg');
 
                 $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
-                hideDomainsSpinner();
+                $('#save-spinner').hide();
                 $('#top, #top-blocked').fadeIn('slow');
             });
         }
