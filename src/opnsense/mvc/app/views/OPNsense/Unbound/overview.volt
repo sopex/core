@@ -429,10 +429,11 @@
         function create_or_update_totals() {
             let maxDomains = ($('#toggle-extended-domains').val() || 10);
             let $dropdown = $('#toggle-extended-domains');
+            let $dropdownButton = $dropdown.parent().find('.dropdown-toggle');
             let originalHtml = $dropdown.parent().find('.dropdown-toggle').html();
             
             $dropdown.prop('disabled', true).selectpicker('refresh');
-            $dropdown.parent().find('.dropdown-toggle').html('<i class="fa fa-spinner fa-spin"></i>');
+            $dropdownButton.append(' <i id="domains-spinner" class="fa fa-spinner fa-spin fa-sm" style="margin-left: 5px;"></i>');
     
             $('#top, #top-blocked').fadeOut(200); 
     
@@ -452,7 +453,7 @@
 
             $('#bannersub').html("Starting from " + (new Date(data.start_time * 1000)).toLocaleString());
         
-            $dropdown.parent().find('.dropdown-toggle').html(originalHtml);
+            $dropdownButton.html(originalHtml);
             $dropdown.prop('disabled', false).selectpicker('refresh');
             $('#top, #top-blocked').fadeIn(200);
         });
