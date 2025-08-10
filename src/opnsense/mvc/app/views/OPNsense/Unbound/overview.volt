@@ -430,6 +430,7 @@
             let maxDomains = ($('#toggle-extended-domains').val() || 10);
             let $dropdown = $('#toggle-extended-domains');
             let originalHtml = $dropdown.parent().find('.dropdown-toggle').html();
+            $dropdown.prop('disabled', true).selectpicker('refresh');
     
             $dropdown.prop('disabled', true);
             $dropdown.parent().find('.dropdown-toggle').html('<i class="fa fa-spinner fa-spin"></i>');
@@ -454,6 +455,7 @@
         
             $dropdown.prop('disabled', false);
             $dropdown.parent().find('.dropdown-toggle').html(originalHtml);
+            $dropdown.prop('disabled', false).selectpicker('refresh');
             $('#top, #top-blocked').fadeIn(200);
         });
     }
