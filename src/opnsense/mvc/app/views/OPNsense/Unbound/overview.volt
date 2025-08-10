@@ -429,11 +429,17 @@
         function create_or_update_totals() {
             let maxDomains = ($('#toggle-extended-domains').val() || 10);
             let $dropdown = $('#toggle-extended-domains');
-            let $dropdownButton = $dropdown.parent().find('.dropdown-toggle');
-            let originalHtml = $dropdown.parent().find('.dropdown-toggle').html();
+            const $wrapper = $dropdown.closest('.bootstrap-select');
+
+                let $spinner = $wrapper.next('.inline-spinner');
+                if (!$spinner.length) {
+                    $spinner = $('<span class="inline-spinner" style="display:none; margin-left:8px; vertical-align:middle;">' +
+                        '<i class="fa fa-spinner fa-spin"></i></span>');
+                    $wrapper.after($spinner);
+                }
             
             $dropdown.prop('disabled', true).selectpicker('refresh');
-            $dropdownButton.append(' <i id="domains-spinner" class="fa fa-spinner fa-spin fa-sm" style="margin-left: 5px;"></i>');
+            $spinner.hide();
     
             $('#top, #top-blocked').fadeOut(200); 
     
