@@ -874,8 +874,8 @@
             </div>
             <div class="content-box">
                 <div class="container-fluid">
-                    <div class="col-md-4"></div>
                     <div class="row justify-content-center" style="display: flex; flex-wrap: wrap;">
+                    <div class="col-md-4"></div>
                         <div class="col-md-4 text-center" style="padding: 10px;">
                             <span style="padding: 5px;"><b>{{ lang._('Number of domains') }}</b></span>
                             <select class="selectpicker" id="toggle-extended-domains" data-width="auto">
