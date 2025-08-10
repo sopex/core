@@ -502,6 +502,7 @@
                 }
                 $('#timeperiod').selectpicker('refresh');
                 $('#timeperiod-clients').selectpicker('refresh');
+                $('#toggle-extended-domains').selectpicker('refresh')
 
                 g_queryChart = create_chart($("#rollingChart"), 60, [], false);
                 g_clientChart = create_client_chart($("#rollingChartClient"), 60, [], false);
@@ -873,6 +874,7 @@
             </div>
             <div class="content-box">
                 <div class="container-fluid">
+                    <div class="col-md-4"></div>
                     <div class="row justify-content-center" style="display: flex; flex-wrap: wrap;">
                         <div class="col-md-12 text-center" style="padding: 10px;">
                             <span style="padding: 5px;"><b>{{ lang._('Number of domains') }}</b></span>
@@ -884,6 +886,7 @@
                                 <option value="100">{{ lang._('100') }}</option>
                             </select>
                         </div>
+                        <div class="col-md-4"></div>
                     </div>
                     <div class="row">
                         <div class="col-md-6">
