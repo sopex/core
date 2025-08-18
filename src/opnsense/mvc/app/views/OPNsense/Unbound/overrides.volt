@@ -49,6 +49,7 @@ $( document ).ready(function() {
             },
         }
     }).on("selected.rs.jquery.bootgrid", function (e, rows) {
+        $("#{{formGridHostAlias['table_id']}}").bootgrid('setPage', 1);
         $("#{{formGridHostAlias['table_id']}}").bootgrid('reload');
     }).on("loaded.rs.jquery.bootgrid", function (e) {
         let ids = $("#{{formGridHostOverride['table_id']}}").bootgrid("getCurrentRows");

@@ -1953,6 +1953,12 @@ class UIBootgrid {
         this._destroyTable();
     }
 
+    setPage(page) {
+        if (this.tableInitialized) {
+            this.table.setPage(page);
+        }
+    }
+
     setColumns(columns) {
         this.table.getColumns().forEach((col) => {
             const def = col.getDefinition();
