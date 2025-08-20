@@ -491,25 +491,28 @@ function initFormAdvancedUI() {
  */
 function initGlobalOpenShortcuts() {
     $(document).off('keydown.opnsenseGlobalOpenToggles').on('keydown.opnsenseGlobalOpenToggles', function (e) {
-        if (e.ctrlKey || e.altKey || e.metaKey) return;
-        const t = e.target;
-        const tag = (t.tagName || '').toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable) return;
+            if (e.ctrlKey || e.altKey || e.metaKey) return;
 
-        if (e.key === 'a' || e.key === 'A') {
-            const $adv = $('[id*="show_advanced"]').first();
-            if ($adv.length) {
-                $adv.click();
-                e.preventDefault();
+            const t = e.target;
+            const tag = (t && t.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable) return;
+
+            const key = (e.key || '').toLowerCase();
+
+            if (key === 'a') {
+                const $adv = $('[data-shortcut="show-advanced"]').first();
+                if ($adv.length && $adv.is(':visible') && !$adv.is(':disabled')) {
+                    $adv.trigger('click');
+                    e.preventDefault();
+                }
+            } else if (key === 'h') {
+                const $help = $('[data-shortcut="show-help"]').first();
+                if ($help.length && $help.is(':visible') && !$help.is(':disabled')) {
+                    $help.trigger('click');
+                    e.preventDefault();
+                }
             }
-        } else if (e.key === 'h' || e.key === 'H') {
-            const $help = $('[id*="show_all_help"]').first();
-            if ($help.length) {
-                $help.click();
-                e.preventDefault();
-            }
-        }
-    });
+        });
 }
 
 /**
