@@ -98,5 +98,12 @@ $product = product::getInstance();
         });
       });
     </script>
+    <script>
+      $(document).ready(function() {
+        if (typeof initGlobalOpenShortcuts === 'function') {
+          initGlobalOpenShortcuts();
+        }
+      });
+    </script>
   </body>
 </html>
