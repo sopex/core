@@ -8,6 +8,11 @@
     opacity: 0 !important;
 }
 
+/* Hide gauge chart while grid widget is actively being resized */
+.ui-resizable-resizing .gauge-chart-container {
+    opacity: 0;
+}
+
 #save-grid {
     width: inherit;
     height: inherit;

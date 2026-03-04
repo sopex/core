@@ -33,7 +33,7 @@ class BaseGaugeWidget extends BaseWidget {
 
     getMarkup() {
         return $(`
-            <div class="${this.id}-chart-container">
+            <div class="${this.id}-chart-container gauge-chart-container">
                 <div class="canvas-container">
                     <canvas id="${this.id}-chart" style="display: inline-block"></canvas>
                 </div>
