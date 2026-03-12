@@ -29,6 +29,12 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
+    getGridOptions() {
+        return {
+            noResize: true
+        };
+    }
+
     getMarkup() {
         let $container = $(`
             <div id="notepad-container" class="widget-content">
@@ -49,13 +55,11 @@ export default class Notepad extends BaseWidget {
         const saveButton = $(`#notepad-save-btn-${this.id}`);
         const savedMsg = $(`#notepad-saved-msg-${this.id}`);
 
-        // Load the note
         const data = await this.ajaxCall('/api/core/dashboard/getNote');
         if (data.result === 'ok') {
             textElement.val(data.note);
         }
 
-        // Save on click
         $(saveButton).on('click', async () => {
             $(saveButton).prop('disabled', true);
             const result = await this.ajaxCall('/api/core/dashboard/saveNote', JSON.stringify({
