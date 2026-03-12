@@ -29,10 +29,8 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
-    getGridOptions() {
-        return {
-            noResize: true
-        };
+    getResizeHandles() {
+        return "";
     }
 
     getMarkup() {
