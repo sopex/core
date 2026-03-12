@@ -58,9 +58,9 @@ export default class Notepad extends BaseWidget {
         // Save on click
         $(saveButton).on('click', async () => {
             $(saveButton).prop('disabled', true);
-            const result = await this.ajaxCall('/api/core/dashboard/saveNote', {
+            const result = await this.ajaxCall('/api/core/dashboard/saveNote', JSON.stringify({
                 note: textElement.val()
-            }, 'POST');
+            }), 'POST');
 
             $(saveButton).prop('disabled', false);
             if (result.result === 'saved') {
