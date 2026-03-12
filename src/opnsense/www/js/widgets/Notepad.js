@@ -71,10 +71,10 @@ export default class Notepad extends BaseWidget {
         let viewPort = document.getElementsByClassName('page-content-main')[0].getBoundingClientRect().width;
         if (width > (viewPort / 2)) {
             $(elem).find('.notepad-flex-container').css('flex-direction', 'row');
-            $(elem).find('.notepad-text-area').css('margin', '0px 10px 0px 0px');
+            $(elem).find('.notepad-text-area').css({'margin': '0px 10px 0px 0px', 'width': 'auto'});
         } else {
             $(elem).find('.notepad-flex-container').css('flex-direction', 'column');
-            $(elem).find('.notepad-text-area').css('margin', '0px 0px 10px 0px');
+            $(elem).find('.notepad-text-area').css({'margin': '0px 0px 10px 0px', 'width': '100%'});
         }
 
         return true;
