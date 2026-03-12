@@ -32,8 +32,8 @@ export default class Notepad extends BaseWidget {
     getMarkup() {
         let $container = $(`
             <div id="notepad-container" class="widget-content">
-                <div style="padding: 10px; display: flex; flex-direction: column; height: 100%;">
-                    <textarea id="notepad-text-${this.id}" style="width: 100%; resize: vertical; min-height: 150px; flex-grow: 1; margin-bottom: 10px;"></textarea>
+                <div class="notepad-flex-container" style="padding: 10px; display: flex; flex-direction: column; height: 100%;">
+                    <textarea id="notepad-text-${this.id}" class="notepad-text-area" style="width: 100%; resize: vertical; min-height: 150px; flex-grow: 1; margin-bottom: 10px;"></textarea>
                     <div style="display: flex; justify-content: flex-end; align-items: center;">
                         <span id="notepad-saved-msg-${this.id}" style="color: green; margin-right: 10px; display: none;"><i class="fa fa-check"></i> ${this.translations.saved}</span>
                         <button id="notepad-save-btn-${this.id}" class="btn btn-primary btn-sm">${this.translations.save}</button>
@@ -65,5 +65,18 @@ export default class Notepad extends BaseWidget {
                 $(savedMsg).fadeIn().delay(2000).fadeOut();
             }
         });
+    }
+
+    onWidgetResize(elem, width, height) {
+        let viewPort = document.getElementsByClassName('page-content-main')[0].getBoundingClientRect().width;
+        if (width > (viewPort / 2)) {
+            $(elem).find('.notepad-flex-container').css('flex-direction', 'row');
+            $(elem).find('.notepad-text-area').css('margin', '0px 10px 0px 0px');
+        } else {
+            $(elem).find('.notepad-flex-container').css('flex-direction', 'column');
+            $(elem).find('.notepad-text-area').css('margin', '0px 0px 10px 0px');
+        }
+
+        return true;
     }
 }
