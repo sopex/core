@@ -32,9 +32,9 @@ export default class Notepad extends BaseWidget {
     getMarkup() {
         let $container = $(`
             <div id="notepad-container" class="widget-content">
-                <div style="padding: 10px; display: flex; flex-direction: column; height: calc(100% - 20px);">
-                    <textarea id="notepad-text-${this.id}" style="width: 100%; resize: none; flex-grow: 1; margin-bottom: 10px;"></textarea>
-                    <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: auto;">
+                <div style="padding: 10px; display: flex; flex-direction: column; height: 100%;">
+                    <textarea id="notepad-text-${this.id}" style="width: 100%; resize: vertical; min-height: 150px; flex-grow: 1; margin-bottom: 10px;"></textarea>
+                    <div style="display: flex; justify-content: flex-end; align-items: center;">
                         <span id="notepad-saved-msg-${this.id}" style="color: green; margin-right: 10px; display: none;"><i class="fa fa-check"></i> ${this.translations.saved}</span>
                         <button id="notepad-save-btn-${this.id}" class="btn btn-primary btn-sm">${this.translations.save}</button>
                     </div>
@@ -44,20 +44,18 @@ export default class Notepad extends BaseWidget {
         return $container;
     }
 
-    onWidgetResize(elem, width, height) {
-        return true;
-    }
-
     async onMarkupRendered() {
         const textElement = $(`#notepad-text-${this.id}`);
         const saveButton = $(`#notepad-save-btn-${this.id}`);
         const savedMsg = $(`#notepad-saved-msg-${this.id}`);
 
+        // Load the note
         const data = await this.ajaxCall('/api/core/dashboard/getNote');
         if (data.result === 'ok') {
             textElement.val(data.note);
         }
 
+        // Save on click
         $(saveButton).on('click', async () => {
             $(saveButton).prop('disabled', true);
             const result = await this.ajaxCall('/api/core/dashboard/saveNote', JSON.stringify({
