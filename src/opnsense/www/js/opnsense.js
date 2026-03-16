@@ -285,6 +285,9 @@ function ajaxCall(url, sendData, callback) {
         dataType:'json',
         contentType: 'application/json',
         complete: function(data, status) {
+            if (status === "success") {
+                resetSessionTimeout();
+            }
             if (callback != null) {
                 if ('responseJSON' in data) {
                     callback(data['responseJSON'], status);
@@ -311,6 +314,9 @@ function ajaxGet(url,sendData,callback) {
         dataType:'json',
         contentType: 'application/json',
         complete: function(data,status) {
+            if (status === "success") {
+                resetSessionTimeout();
+            }
             if (callback != null) {
                 if ('responseJSON' in data) {
                     callback(data['responseJSON'], status);

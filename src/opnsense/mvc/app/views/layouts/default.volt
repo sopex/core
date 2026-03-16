@@ -42,6 +42,7 @@
 
     <script>
             // setup default scripting after page loading.
+            window.sessionTimeout = {{ session_timeout|default('0') }};
             $( document ).ready(function() {
                 // hook into jquery ajax requests to ensure csrf handling.
                 $.ajaxSetup({
@@ -96,6 +97,8 @@
                 initFormAdvancedUI();
                 addMultiSelectClearUI();
                 initGlobalOpenShortcuts();
+
+                initSessionTimeout();
 
                 updateSystemStatus();
 

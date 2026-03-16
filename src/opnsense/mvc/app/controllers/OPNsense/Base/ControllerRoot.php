@@ -56,6 +56,11 @@ class ControllerRoot extends Controller
     protected $logged_in_user = null;
 
     /**
+     * @var int session timeout in seconds
+     */
+    public $session_timeout = 14400;
+
+    /**
      * current language code
      */
     protected $langcode = 'en_US';
@@ -130,10 +135,11 @@ class ControllerRoot extends Controller
     {
         $cnf = Config::getInstance()->object();
         if (!empty($cnf->system->webgui->session_timeout)) {
-            $session_timeout = $cnf->system->webgui->session_timeout * 60;
+            $this->session_timeout = $cnf->system->webgui->session_timeout * 60;
         } else {
-            $session_timeout = 14400;
+            $this->session_timeout = 14400;
         }
+        $session_timeout = $this->session_timeout;
         $redirect_uri = "/?url=" . $_SERVER['REQUEST_URI'];
         if ($this->session->has("Username") == false) {
             // user unknown
