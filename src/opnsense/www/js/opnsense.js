@@ -391,20 +391,36 @@ function resetSessionTimeout() {
  */
 function initSessionTimeout() {
     if ($('input[name="usernamefld"]').length > 0 || window.location.href.includes('?url=')) {
-        setInterval(function() {
-            if (localStorage.getItem(ACTIVITY_KEY)) {
-                let urlParams = new URLSearchParams(window.location.search);
-                let previousUrl = urlParams.get('url');
 
-                if (previousUrl) {
-                    window.location.href = previousUrl;
-                } else {
-                    window.location.reload();
-                }
+        function autoLoginTab() {
+            let urlParams = new URLSearchParams(window.location.search);
+            let previousUrl = urlParams.get('url');
+            if (previousUrl) {
+                window.location.href = previousUrl;
+            } else {
+                window.location.reload();
             }
-        }, 3000);
+        }
+
+        if (localStorage.getItem(ACTIVITY_KEY)) {
+            if (!sessionStorage.getItem('auto_login_attempted')) {
+                sessionStorage.setItem('auto_login_attempted', 'true');
+                autoLoginTab();
+                return;
+            } else {
+                localStorage.removeItem(ACTIVITY_KEY);
+            }
+        }
+
+        window.addEventListener('storage', function(e) {
+            if (e.key === ACTIVITY_KEY && e.newValue !== null) {
+                autoLoginTab();
+            }
+        });
         return;
     }
+
+    sessionStorage.removeItem('auto_login_attempted');
 
     if (typeof window.sessionTimeout !== 'number' || window.sessionTimeout <= 0) {
         return;
@@ -415,7 +431,6 @@ function initSessionTimeout() {
     if (!localStorage.getItem(ACTIVITY_KEY)) {
         localStorage.setItem(ACTIVITY_KEY, Date.now().toString());
     }
-
     $(document).on('mousemove keydown click scroll touchstart', function() {
         resetSessionTimeout();
     });
