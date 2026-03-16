@@ -391,6 +391,7 @@ function resetSessionTimeout() {
  */
 function initSessionTimeout() {
     if ($('input[name="usernamefld"]').length > 0 || window.location.href.includes('?url=')) {
+        sessionStorage.setItem('opn_login_tab', '1');
 
         function autoLoginTab() {
             let urlParams = new URLSearchParams(window.location.search);
@@ -402,25 +403,21 @@ function initSessionTimeout() {
             }
         }
 
-        if (localStorage.getItem(ACTIVITY_KEY)) {
-            if (!sessionStorage.getItem('auto_login_attempted')) {
-                sessionStorage.setItem('auto_login_attempted', 'true');
-                autoLoginTab();
-                return;
-            } else {
-                localStorage.removeItem(ACTIVITY_KEY);
-            }
-        }
-
         window.addEventListener('storage', function(e) {
-            if (e.key === ACTIVITY_KEY && e.newValue !== null) {
+            if (e.key === LOGIN_SIGNAL_KEY && e.newValue !== null) {
                 autoLoginTab();
             }
         });
         return;
     }
 
-    sessionStorage.removeItem('auto_login_attempted');
+    if (sessionStorage.getItem('opn_login_tab') !== null) {
+        sessionStorage.removeItem('opn_login_tab');
+        localStorage.setItem(LOGIN_SIGNAL_KEY, Date.now().toString());
+        setTimeout(function() {
+            localStorage.removeItem(LOGIN_SIGNAL_KEY);
+        }, 1000);
+    }
 
     if (typeof window.sessionTimeout !== 'number' || window.sessionTimeout <= 0) {
         return;
