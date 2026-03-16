@@ -393,7 +393,14 @@ function initSessionTimeout() {
     if ($('input[name="usernamefld"]').length > 0 || window.location.href.includes('?url=')) {
         setInterval(function() {
             if (localStorage.getItem(ACTIVITY_KEY)) {
-                window.location.reload();
+                let urlParams = new URLSearchParams(window.location.search);
+                let previousUrl = urlParams.get('url');
+
+                if (previousUrl) {
+                    window.location.href = previousUrl;
+                } else {
+                    window.location.reload();
+                }
             }
         }, 3000);
         return;
