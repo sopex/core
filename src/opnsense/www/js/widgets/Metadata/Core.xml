@@ -392,6 +392,7 @@
             <title>Notepad</title>
             <save>Save</save>
             <saved>Saved</saved>
+            <error>Save failed</error>
         </translations>
     </notepad>
 </metadata>

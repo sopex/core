@@ -277,11 +277,15 @@ class DashboardController extends ApiControllerBase
         $result = ['result' => 'failed'];
 
         if ($this->request->isPost() && $this->request->hasPost('note')) {
+            $note = $this->request->getPost('note');
+            if (strlen($note) > 8192) {
+                return ['result' => 'failed', 'error' => 'note_too_long'];
+            }
             $config = Config::getInstance()->object();
             $name = $this->getUserName();
             foreach ($config->system->user as $node) {
                 if ($name === (string)$node->name) {
-                    $node->dashboard_note = $this->request->getPost('note');
+                    $node->dashboard_note = $note;
                     Config::getInstance()->save();
                     $result = ['result' => 'saved'];
                     break;
