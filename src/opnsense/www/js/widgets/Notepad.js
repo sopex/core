@@ -29,6 +29,12 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
+    getGridOptions() {
+        return {
+            minH: 150
+        }
+    }
+
     getMarkup() {
         let $container = $(`
         <div id="notepad-container-${this.id}" class="widget-content">
@@ -40,6 +46,7 @@ export default class Notepad extends BaseWidget {
                         resize: none;
                         min-height: 150px;
                         margin-bottom: 10px;
+                        max-width: 100%;
                     ">
                 </textarea>
                 <div style="display: flex; justify-content: flex-end; align-items: center;">
