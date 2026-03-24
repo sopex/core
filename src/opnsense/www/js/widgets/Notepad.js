@@ -48,6 +48,7 @@ export default class Notepad extends BaseWidget {
                         min-height: 150px;
                         margin-bottom: 10px;
                         max-width: 100%;
+                        flex-grow: 1;
                         box-sizing: border-box;
                     ">
                 </textarea>
