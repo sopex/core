@@ -380,13 +380,7 @@
                     <Default>1</Default>
                     <Required>Y</Required>
                 </addptr>
-                <aliases type=".\AliasReflector" volatile="true">
-                    <HostWildcardAllowed>Y</HostWildcardAllowed>
-                    <FqdnWildcardAllowed>Y</FqdnWildcardAllowed>
-                    <IsDNSName>Y</IsDNSName>
-                    <IpAllowed>N</IpAllowed>
-                    <AsList>Y</AsList>
-                </aliases>
+                <aliascount type=".\AliasRefCount" volatile="true"/>
                 <description type="DescriptionField"/>
             </host>
         </hosts>

@@ -72,33 +72,25 @@ class LeasesController extends ApiControllerBase
             $records = [];
         }
 
-        // Mark records as reserved
-        $reservedKeys = [
-            'client_id' => [],
-            'hwaddr' => [],
-        ];
+        // Mark records as reserved based on hwaddr (IPv4) or client_id (IPv6) match
+        $reservedKeys = [];
 
         foreach ((new Dnsmasq())->hosts->iterateItems() as $host) {
             if (!$host->client_id->isEmpty()) {
-                $reservedKeys['client_id'][strtolower($host->client_id->getValue())] = true;
+                $reservedKeys[] = strtolower($host->client_id->getValue());
             }
 
             if (!$host->hwaddr->isEmpty()) {
                 foreach ($host->hwaddr->getValues() as $hwaddr) {
-                    $reservedKeys['hwaddr'][strtolower($hwaddr)] = true;
+                    $reservedKeys[] = strtolower($hwaddr);
                 }
             }
         }
 
         foreach ($records as &$record) {
-            $reservedBy = [];
-            foreach (['client_id', 'hwaddr'] as $reservedType) {
-                $value = strtolower($record[$reservedType] ?? '');
-                if ($value !== '' && isset($reservedKeys[$reservedType][$value])) {
-                    $reservedBy[] = $reservedType;
-                }
-            }
-            $record['is_reserved'] = $reservedBy;
+            $is_ipv6 = Util::isIpv6Address($record['address'] ?? '');
+            $key = strtolower($is_ipv6 ? ($record['client_id'] ?? '') : ($record['hwaddr'] ?? ''));
+            $record['is_reserved'] = in_array($key, $reservedKeys, true) ? '1' : '0';
         }
 
         $response = $this->searchRecordsetBase(

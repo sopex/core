@@ -250,6 +250,18 @@ class Dnsmasq extends BaseModel
                 }
             }
 
+            if (
+                $range->constructor->isEmpty() &&
+                (str_starts_with($range->start_addr, '::') || str_starts_with($range->end_addr, '::'))
+            ) {
+                $messages->appendMessage(
+                    new Message(
+                        gettext("Partial addresses can only be used with a constructor."),
+                        $key . ".start_addr"
+                    )
+                );
+            }
+
             if (!$range->prefix_len->isEmpty() && $start_inet != 'inet6') {
                 $messages->appendMessage(
                     new Message(

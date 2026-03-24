@@ -112,14 +112,4 @@ class BaseSetField extends BaseField
             return !!strlen($k);
         }));
     }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function setValues(array $values)
-    {
-        $this->setValue(implode($this->internalFieldSeparator, array_values(array_filter($values, function ($k) {
-            return !!strlen($k);
-        }))));
-    }
 }

@@ -186,13 +186,11 @@ function kea_configure_do($verbose = false)
 
 function kea_syslog()
 {
-    return ['kea' => ['facility' => [
-        'kea-dhcp4',
-        'kea-dhcp6',
-        'kea-ctrl-agent',
-        'kea-dhcp-ddns',
-    ]]];
+    $logfacilities = [];
+    $logfacilities['kea'] = ['facility' => ['kea-dhcp4', 'kea-dhcp6', 'kea-ctrl-agent','kea-dhcp-ddns']];
+    return $logfacilities;
 }
+
 
 function kea_firewall($fw)
 {
@@ -297,10 +295,14 @@ function kea_firewall($fw)
 
 function kea_xmlrpc_sync()
 {
-    return [[
-        'services' => ['kea-dhcpv4', 'kea-dhcpv6', 'kea-dhcp-ddns'],
+    $result = [];
+
+    $result[] = [
         'description' => gettext('Kea DHCP'),
         'section' => 'OPNsense.Kea',
         'id' => 'kea',
-    ]];
+        'services' => ["kea-dhcpv4", "kea-dhcpv6", "kea-dhcp-ddns"],
+    ];
+
+    return $result;
 }

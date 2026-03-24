@@ -1,14 +1,5 @@
 <form>
     <field>
-        <label></label>
-        <type>hidden</type>
-        <id>host.tree</id>
-        <grid_view>
-            <sequence>1</sequence>
-            <width>10</width>
-        </grid_view>
-    </field>
-    <field>
         <id>host.enabled</id>
         <label>Enabled</label>
         <type>checkbox</type>
@@ -88,15 +79,9 @@
         </grid_view>
     </field>
     <field>
-        <id>host.aliases</id>
+        <id>host.aliascount</id>
         <label>Aliases</label>
-        <type>select_multiple</type>
-        <style>tokenize</style>
-        <allownew>true</allownew>
-        <help>Quickly add or remove aliases</help>
-        <grid_view>
-            <visible>false</visible>
-        </grid_view>
+        <type>info</type>
     </field>
     <field>
         <id>host.description</id>

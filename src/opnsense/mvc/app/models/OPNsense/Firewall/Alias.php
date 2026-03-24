@@ -112,23 +112,19 @@ class Alias extends BaseModel
         $sources[] = [['filter', 'scrub', 'rule'], ['src']];
         $sources[] = [['filter', 'scrub', 'rule'], ['dstport']];
         $sources[] = [['filter', 'scrub', 'rule'], ['srcport']];
-        $sources[] = [['nat', 'rule'], ['source', 'address']]; /* XXX */
-        $sources[] = [['nat', 'rule'], ['source', 'network']];
+        $sources[] = [['nat', 'rule'], ['source', 'address']];
         $sources[] = [['nat', 'rule'], ['source', 'port']];
-        $sources[] = [['nat', 'rule'], ['destination', 'address']]; /* XXX */
-        $sources[] = [['nat', 'rule'], ['destination', 'network']];
+        $sources[] = [['nat', 'rule'], ['destination', 'address']];
         $sources[] = [['nat', 'rule'], ['destination', 'port']];
         $sources[] = [['nat', 'rule'], ['target']];
         $sources[] = [['nat', 'rule'], ['local-port']];
-        $sources[] = [['nat', 'onetoone'], ['destination', 'address']]; /* XXX */
+        $sources[] = [['nat', 'onetoone'], ['destination', 'address']];
         $sources[] = [['nat', 'outbound', 'rule'], ['source', 'network']];
         $sources[] = [['nat', 'outbound', 'rule'], ['sourceport']];
         $sources[] = [['nat', 'outbound', 'rule'], ['destination', 'network']];
         $sources[] = [['nat', 'outbound', 'rule'], ['dstport']];
         $sources[] = [['nat', 'outbound', 'rule'], ['target']];
         $sources[] = [['staticroutes', 'route'], ['network']];
-        $sources[] = [['OPNsense', 'Firewall', 'Filter', 'onetoone', 'rule'], ['source_net']];
-        $sources[] = [['OPNsense', 'Firewall', 'Filter', 'onetoone', 'rule'], ['destination_net']];
         $sources[] = [['OPNsense', 'Firewall', 'Filter', 'rules', 'rule'], ['source_net']];
         $sources[] = [['OPNsense', 'Firewall', 'Filter', 'rules', 'rule'], ['source_port']];
         $sources[] = [['OPNsense', 'Firewall', 'Filter', 'rules', 'rule'], ['destination_net']];
@@ -137,7 +133,6 @@ class Alias extends BaseModel
         $sources[] = [['OPNsense', 'Firewall', 'Filter', 'snatrules', 'rule'], ['source_port']];
         $sources[] = [['OPNsense', 'Firewall', 'Filter', 'snatrules', 'rule'], ['destination_net']];
         $sources[] = [['OPNsense', 'Firewall', 'Filter', 'snatrules', 'rule'], ['destination_port']];
-        $sources[] = [['OPNsense', 'Firewall', 'Filter', 'snatrules', 'rule'], ['target']];
 
         return $sources;
     }

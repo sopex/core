@@ -351,18 +351,18 @@ class FilterRule extends Rule
     {
         if (!empty($this->rule['from'])) {
             return preg_replace('/,(?=[^\s])/', ', ', $this->rule['from']);
-        } elseif (!empty($this->rule['source']['address'])) {
+        } elseif (isset($this->rule['source']['address'])) {
             return $this->rule['source']['address'];
         } elseif (isset($this->rule['source']['any'])) {
             return '*';
-        } elseif (!empty($this->rule['source']['network'])) {
+        } elseif (isset($this->rule['source']['network'])) {
             return $this->uiConvertNet($this->rule['source']['network']);
         }
         return '*';
     }
     public function isUIFromNot()
     {
-        return !empty($this->rule['source']['not']) || !empty($this->rule['from_not']);
+        return (isset($this->rule['source']) && isset($this->rule['source']['not'])) || !empty($this->rule['from_not']);
     }
     public function getUIFromPort()
     {
@@ -377,18 +377,18 @@ class FilterRule extends Rule
     {
         if (!empty($this->rule['to'])) {
             return preg_replace('/,(?=[^\s])/', ', ', $this->rule['to']);
-        } elseif (!empty($this->rule['destination']['address'])) {
+        } elseif (isset($this->rule['destination']['address'])) {
             return $this->rule['destination']['address'];
         } elseif (isset($this->rule['destination']['any'])) {
             return '*';
-        } elseif (!empty($this->rule['destination']['network'])) {
+        } elseif (isset($this->rule['destination']['network'])) {
             return $this->uiConvertNet($this->rule['destination']['network']);
         }
         return '*';
     }
     public function isUIToNot()
     {
-        return !empty($this->rule['destination']['not']) || !empty($this->rule['to_not']);
+        return isset($this->rule['destination']) && isset($this->rule['destination']['not']) || !empty($this->rule['to_not']);
     }
     public function getUIToPort()
     {

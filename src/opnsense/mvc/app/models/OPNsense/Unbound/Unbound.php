@@ -35,8 +35,6 @@ use OPNsense\Core\Backend;
 
 class Unbound extends BaseModel
 {
-    private $aliasCache = null;
-
     public function performValidation($validateFullModel = false)
     {
         $messages = parent::performValidation($validateFullModel);
@@ -88,26 +86,5 @@ class Unbound extends BaseModel
         }
 
         return $messages;
-    }
-
-    public function getHostAliases($host = null)
-    {
-        if ($this->aliasCache === null) {
-            $this->aliasCache = [];
-            foreach ($this->aliases->alias->iterateItems() as $node) {
-                $hostUUID = $node->host->getValue();
-                if (!isset($this->aliasCache[$hostUUID])) {
-                    $this->aliasCache[$hostUUID] = [];
-                }
-
-                $this->aliasCache[$hostUUID][] = $node;
-            }
-        }
-
-        if ($host !== null) {
-            return $this->aliasCache[$host] ?? [];
-        }
-
-        return $this->aliasCache;
     }
 }

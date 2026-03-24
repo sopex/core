@@ -150,8 +150,7 @@ class TextFieldTest extends Field_Framework_TestCase
     public function testEmptyValue()
     {
         $field = new TextField();
-        $field->setValue("foo");
-        $field->setValues([]);
+        $field->setValue("");
 
         $this->assertEmpty($this->validate($field));
         $this->assertEquals(0, count($field->getValues()));
@@ -217,16 +216,10 @@ class TextFieldTest extends Field_Framework_TestCase
     public function testIntegerValue()
     {
         $field = new TextField();
+        $field->setValue(1234);
 
-        $field->setValues(['nope', 1234]);
-        $this->assertEquals($field->getNodeData(), "nope");
-
-        $field->setValues([1234, 'nope']);
         $this->assertEquals($field->getNodeData(), "1234");
         $this->assertEmpty($this->validate($field));
-
-        $field->setValues(['']);
-        $this->assertEquals($field->getNodeData(), '');
     }
 
     /**

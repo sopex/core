@@ -111,8 +111,7 @@ class UIBootgrid {
         this.searchTimer = null;
         this.curRowCount = null;
         this.navigationRendered = false;
-        this.pageHeight = null;
-        this.tableHeight = null;
+        this.originalTableHeight = null;
         this.tableInitialized = false;
         this.isResizing = false;
         this.totalKnown = false;
@@ -174,7 +173,6 @@ class UIBootgrid {
             rowSelect: false,
             triggerEditFor: null,
             static: false, // no persistent storage, no resizable columns
-            bottomReserveElement: null,
             ...options
         };
 
@@ -337,19 +335,6 @@ class UIBootgrid {
             this.options.static = true;
             this.compatOptions['resizable'] = false;
             this.compatOptions['persistence'] = false;
-        }
-
-        if (bootGridOptions?.bottomReserveElement) {
-            const target = bootGridOptions.bottomReserveElement;
-            if (typeof target === 'string') {
-                this.options.bottomReserveElement = document.querySelector(target);
-            } else if (target instanceof Element) {
-                this.options.bottomReserveElement = target;
-            } else if (target.jquery && target.length) {
-                this.options.bottomReserveElement = target[0];
-            }
-        } else {
-            this.options.bottomReserveElement = document.querySelector('.grid-bottom-reserve');
         }
 
         if (compatOptions.get) this.crud.get = compatOptions.get;
@@ -658,36 +643,6 @@ class UIBootgrid {
         }
     }
 
-    _onDimensionChange() {
-        const scrollbarGutterOffset = 16;
-        const defaultHeight = 120;
-
-        const tableEl = document.getElementById(this.id);
-        const holderEl = tableEl?.querySelector(".tabulator-tableholder");
-
-        if (!tableEl || !holderEl) return;
-
-        const currentTotalHeight = tableEl.offsetHeight;
-        const holderHeight = holderEl.offsetHeight;
-
-        let nextContentHeight;
-
-        if (!this.dataAvailable && !this.loading && holderHeight > this.tableHeight) {
-            nextContentHeight = defaultHeight;
-        } else {
-            const adjustedHeight = currentTotalHeight + (this.tableHeight - holderHeight);
-            nextContentHeight = Math.min(adjustedHeight, this.pageHeight);
-            nextContentHeight = Math.max(defaultHeight, nextContentHeight);
-        }
-
-        const nextHeight = nextContentHeight + scrollbarGutterOffset;
-
-        if (Math.abs(currentTotalHeight - nextHeight) > 1) {
-            this.table.setHeight(nextHeight);
-            this.table.redraw();
-        }
-    }
-
     _registerEvents() {
         this.table.on('dataLoading', () => {
             this._getPlaceholder().html('');
@@ -700,6 +655,12 @@ class UIBootgrid {
         });
 
         this.table.on('dataLoading', () => {
+            if (!this.originalTableHeight) {
+                // allow content to grow to 60vh
+                // XXX needs option
+                this.originalTableHeight = parseInt(parseInt(60) * window.innerHeight / 100);
+            }
+
             window.addEventListener('resize', this._debounce(() => {
                 // this is mainly intended for scaling the width of the table if
                 // the width of the window changes.
@@ -765,35 +726,12 @@ class UIBootgrid {
         this.table.on('cellMouseEnter', onMouseEnter);
 
         this.table.on('rowSelected', (row) => {
-            let findTreeRowByIndex = (targetIndex) => {
-                let walk = (rows) => {
-                    for (const row of rows) {
-                        if (row.getIndex() === targetIndex) return row;
-                        const children = row.getTreeChildren?.() || [];
-                        const found = walk(children);
-                        if (found) return found;
-                    }
-                    return false;
-                }
-
-                return walk(this.table.getRows());
-            }
-
             if (!this.options.rowSelect) {
-                /**
-                 * Tabulator cannot find nested rows by index through getRow().
-                 * Since "selected" only contains indices as strings, we
-                 * define our own tree walk above to fetch the row component objects
-                 * in order to deselect them.
-                 */
                 const selected = this.getSelectedRows();
                 if (!this.options.multiSelect && selected.length > 1) {
                     const curRowId = row.getData()[this.options.datakey];
                     selected.forEach((r) => {
-                        if (r !== curRowId) {
-                            const potentiallyNestedRow = findTreeRowByIndex(r);
-                            if (potentiallyNestedRow) potentiallyNestedRow.deselect();
-                        }
+                        if (r !== curRowId) this.table.deselectRow(r);
                     });
                 }
             }
@@ -832,32 +770,50 @@ class UIBootgrid {
         });
 
         this.table.on('tableBuilt', () => {
-            if (!this.options.disableScroll) {
-                const pageTarget = $('main.page-content')[0];
-                const tableTarget = $(`#${this.id} .tabulator-table`)[0];
-                this.pageHeight = pageTarget.clientHeight;
-                this.tableHeight = tableTarget.clientHeight;
+            // Dynamically adjust table height to prevent dead space
+            // (workaround for https://github.com/olifolkerd/tabulator/issues/4419: maxHeight does not work without a fixed height)
+            const target = $(`#${this.id} .tabulator-table`)[0];
+            const resizeObserver = new ResizeObserver(this._debounce((entries) => {
+                for (let entry of entries) {
+                    const height = entry.contentRect.height;
+                    const scollbarGutterOffset = 16;
+                    let curTotalTableHeight = $(`#${this.id}`)[0].offsetHeight;
+                    const holderHeight = $(`#${this.id} .tabulator-tableholder`)[0].offsetHeight;
 
-                const pageObserver = new ResizeObserver(this._debounce((entries) => {
-                    for (let entry of entries) {
-                        const topDistance = document.getElementById(this.id).getBoundingClientRect().top;
-                        this.pageHeight = entry.contentRect.height - topDistance;
-                        if (this.options.bottomReserveElement) {
-                            this.pageHeight -= this.options.bottomReserveElement.getBoundingClientRect().height;
+                    if (holderHeight > height) {
+                        if (!this.dataAvailable && !this.loading) {
+                            this.table.setHeight(120); // default tabulator height
+                        } else {
+                            // dead space, shrink
+                            const diff = holderHeight - height;
+                            this.table.setHeight((curTotalTableHeight - diff) + scollbarGutterOffset);
                         }
-                        this._onDimensionChange();
+                        return;
                     }
-                }));
-                pageObserver.observe(pageTarget);
 
-                const tableObserver = new ResizeObserver(this._debounce((entries) => {
-                    for (let entry of entries) {
-                        this.tableHeight = entry.contentRect.height;
-                        this._onDimensionChange();
+                    if (height > holderHeight) {
+                        const diff = height - holderHeight;
+                        const was = curTotalTableHeight;
+                        curTotalTableHeight = curTotalTableHeight + diff;
+                        if (was < this.originalTableHeight && curTotalTableHeight > this.originalTableHeight) {
+                            // max height reached, set it explicitly in case we're coming from a smaller size
+                            this.table.setHeight(this.originalTableHeight + scollbarGutterOffset);
+                            this.table.redraw();
+                            return;
+                        }
+
+                        if (curTotalTableHeight < this.originalTableHeight) {
+                            // we can grow
+                            this.table.setHeight(curTotalTableHeight + scollbarGutterOffset);
+                            this.table.redraw();
+                            return;
+                        }
                     }
-                }));
-                tableObserver.observe(tableTarget);
+                }
+            }));
 
+            if (!this.options.disableScroll) {
+                resizeObserver.observe(target);
             }
 
             // make sure we redraw the table as it enters the viewport (multiple tabbed grids)
@@ -1707,9 +1663,6 @@ class UIBootgrid {
                 requires: ['del'],
                 classname: 'fa fa-trash-o fa-fw',
                 sequence: 400,
-                filter: () => {
-                    return this.options.selection;
-                },
                 footer: true,
                 primary: true,
                 title: this._translate('deleteSelected')
@@ -1898,8 +1851,9 @@ class UIBootgrid {
         }
     }
 
-    show_edit_dialog(event, endpoint, editDlg) {
+    show_edit_dialog(event, endpoint) {
         return new Promise((resolve, rejects) => {
+            let editDlg = this.$compatElement.attr('data-editDialog');
             let urlMap = {};
             let server_params = this.options.requestHandler({});
 
@@ -1994,7 +1948,8 @@ class UIBootgrid {
     /**
     * init / clear save button
     */
-    init_save_btn(editDlg) {
+    init_save_btn() {
+        let editDlg = this.$compatElement.attr('data-editDialog');
         let saveDlg = $("#btn_" + editDlg + "_save").unbind('click');
         saveDlg.find('i').removeClass("fa fa-spinner fa-pulse");
         return saveDlg;
@@ -2003,21 +1958,19 @@ class UIBootgrid {
     /**
     * add event
     */
-    command_add(event, cell = null, override = null) {
+    command_add(event) {
         event.stopPropagation();
-        let editDlg = override?.dialog ?? this.$compatElement.attr('data-editDialog');
+        let editDlg = this.$compatElement.attr('data-editDialog');
         if (editDlg !== undefined) {
-            let saveDlg = this.init_save_btn(editDlg);
-            const getEndpoint = override?.get ?? this.crud.get;
-            const addEndpoint = override?.add ?? this.crud.add;
-            this.show_edit_dialog(event, getEndpoint, editDlg).then(() => {
+            let saveDlg = this.init_save_btn();
+            this.show_edit_dialog(event, this.crud.get).then(() => {
                 $('#' + editDlg).trigger('opnsense_bootgrid_mapped', ['add']);
                 saveDlg.click(() => {
                     if (saveDlg.find('i').hasClass('fa-spinner')) {
                         return;
                     }
                     saveDlg.find('i').addClass("fa fa-spinner fa-pulse");
-                    saveFormToEndpoint(addEndpoint, 'frm_' + editDlg, () => {
+                    saveFormToEndpoint(this.crud.add, 'frm_' + editDlg, () => {
                         if ($('#' + editDlg).hasClass('modal')) {
                             $("#" + editDlg).modal('hide');
                         } else {
@@ -2044,23 +1997,9 @@ class UIBootgrid {
     showSaveAlert(event) {
         let editAlert = this.$compatElement.attr('data-editAlert');
         if (editAlert !== undefined) {
-            const $el = $("#" + editAlert);
-            const rect = $(".page-content-head").first()[0].getBoundingClientRect();
-            const top = $('.navbar').first().outerHeight() + 5;
-            const centerX = rect.left + (rect.width / 2);
-
-            $el.css({
-                position: "fixed",
-                top: top + "px",
-                left: centerX + "px",
-                right: "auto",
-                zIndex: 9999,
-                transform: "translateX(-50%)"
-            });
-
-            $el.slideDown(1000, function () {
+            $("#" + editAlert).slideDown(1000, function () {
                 setTimeout(function () {
-                    $el.not(":animated").slideUp(2000);
+                    $("#" + editAlert).not(":animated").slideUp(2000);
                 }, 2000);
             });
         }
@@ -2069,23 +2008,21 @@ class UIBootgrid {
     /**
     * edit event
     */
-    command_edit(event, cell = null, uuid = null, override = null) {
+    command_edit(event, cell = null, uuid = null) {
         if (uuid === null)
             event.stopPropagation();
-        let editDlg = override?.dialog ?? this.$compatElement.attr('data-editDialog');
+        let editDlg = this.$compatElement.attr('data-editDialog');
         if (editDlg !== undefined) {
             if (uuid === null)
                 uuid = $(event.currentTarget).data('row-id') ?? '';
-            let saveDlg = this.init_save_btn(editDlg);
-            const getEndpoint = override?.get ?? this.crud.get;
-            const setEndpoint = override?.set ?? this.crud.set;
-            this.show_edit_dialog(event, getEndpoint + uuid, editDlg).then(() => {
+            let saveDlg = this.init_save_btn();
+            this.show_edit_dialog(event, this.crud.get + uuid).then(() => {
                 saveDlg.unbind('click').click(() => {
                     if (saveDlg.find('i').hasClass('fa-spinner')) {
                         return;
                     }
                     saveDlg.find('i').addClass("fa fa-spinner fa-pulse");
-                    saveFormToEndpoint(setEndpoint + uuid, 'frm_' + editDlg, () => {
+                    saveFormToEndpoint(this.crud.set + uuid, 'frm_' + editDlg, () => {
                         if ($('#' + editDlg).hasClass('modal')) {
                             $("#" + editDlg).modal('hide');
                         } else {
@@ -2110,12 +2047,11 @@ class UIBootgrid {
     /**
     * delete event
     */
-    command_delete(event, cell = null, uuid = null, override = null) {
+    command_delete(event) {
         event.stopPropagation();
-        uuid = uuid ?? $(event.currentTarget).data('row-id');
+        let uuid = $(event.currentTarget).data('row-id');
         stdDialogRemoveItem(this._translate('removeWarning'), () => {
-            const endpoint = override?.del ?? this.crud.del;
-            ajaxCall(endpoint + uuid, {}, (data, status) => {
+            ajaxCall(this.crud.del + uuid, {}, (data, status) => {
                 // reload grid after delete
                 this._reload(true);
                 this.showSaveAlert(event);
@@ -2145,15 +2081,13 @@ class UIBootgrid {
     /**
     * copy event
     */
-    command_copy(event, cell = null, uuid = null, override = null) {
+    command_copy(event) {
         event.stopPropagation();
-        const editDlg = override?.dialog ?? this.$compatElement.attr('data-editDialog');
+        const editDlg = this.$compatElement.attr('data-editDialog');
         if (editDlg !== undefined) {
-            uuid = uuid ?? $(event.currentTarget).data('row-id');
+            const uuid = $(event.currentTarget).data('row-id');
             const urlMap = {};
-            const getEndpoint = override?.get ?? this.crud.get;
-            const addEndpoint = override?.add ?? this.crud.add;
-            urlMap['frm_' + editDlg] = getEndpoint + uuid + "?fetchmode=copy";
+            urlMap['frm_' + editDlg] = this.crud.get + uuid + "?fetchmode=copy";
             mapDataToFormUI(urlMap).done(() => {
                 // update selectors
                 formatTokenizersUI();
@@ -2169,13 +2103,13 @@ class UIBootgrid {
                     $('#' + editDlg).click();
                 }
                 // define save action
-                let saveDlg = this.init_save_btn(editDlg);
+                let saveDlg = this.init_save_btn();
                 saveDlg.click(() => {
                     if (saveDlg.find('i').hasClass('fa-spinner')) {
                         return;
                     }
                     saveDlg.find('i').addClass("fa fa-spinner fa-pulse");
-                    saveFormToEndpoint(addEndpoint, 'frm_' + editDlg, () => {
+                    saveFormToEndpoint(this.crud['add'], 'frm_' + editDlg, () => {
                         if ($('#' + editDlg).hasClass('modal')) {
                             $("#" + editDlg).modal('hide');
                         } else {
@@ -2216,12 +2150,11 @@ class UIBootgrid {
     /**
     * toggle event
     */
-    command_toggle(event, cell = null, uuid = null, override = null) {
+    command_toggle(event) {
         event.stopPropagation();
-        uuid = uuid ?? $(event.currentTarget).data('row-id');
+        const uuid = $(event.currentTarget).data('row-id');
         $(event.currentTarget).removeClass('fa-check-square-o fa-square-o').addClass("fa-spinner fa-pulse");
-        const endpoint = override?.toggle ?? this.crud.toggle;
-        ajaxCall(endpoint + uuid, {}, (data, status) => {
+        ajaxCall(this.crud['toggle'] + uuid, {}, (data, status) => {
             // reload grid after delete
             this._reload(true);
             this.showSaveAlert(event);
