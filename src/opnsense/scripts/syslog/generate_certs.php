@@ -1,7 +1,8 @@
+#!/usr/local/bin/php
 <?php
 
 /*
- * Copyright (C) 2025 Deciso B.V.
+ * Copyright (C) 2021-2026 Deciso B.V.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,28 +27,29 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-namespace OPNsense\Unbound\FieldTypes;
+require_once("script/load_phalcon.php");
 
-use OPNsense\Base\FieldTypes\BaseField;
+use OPNsense\Core\File;
+use OPNsense\Syslog\Syslog;
+use OPNsense\Trust\Store;
 
-class AliasRefCount extends BaseField
-{
-    protected $internalIsContainer = false;
-    private $refcountcache = null;
-
-    public function actionPostLoadingEvent()
-    {
-        if ($this->refcountcache === null) {
-            $this->refcountcache = [];
-            foreach ($this->getParentModel()->aliases->alias->iterateItems() as $node) {
-                $uuid = $node->host->getValue();
-                if (!isset($this->refcountcache[$uuid])) {
-                    $this->refcountcache[$uuid] = 0;
-                }
-                $this->refcountcache[$uuid]++;
+$filenames = [];
+$targetdir = "/usr/local/etc/syslog-ng/cert.d";
+@mkdir($targetdir, 0700, true);
+foreach ((new Syslog())->destinations->destination->iterateItems() as $id => $item) {
+    if (in_array($item->transport, ['tls4', 'tls6']) && !$item->enabled->isEmpty()) {
+        if (($cert = Store::getCertificate((string)$item->certificate)) && isset($cert['prv'])) {
+            $basename = $targetdir . "/" . str_replace("-", "", $id);
+            foreach (['prv' => "{$basename}.key", 'crt' => "{$basename}.crt"] as $key => $filename) {
+                File::file_update_contents($filename, $cert[$key], 0640);
+                $filenames[] = $filename;
             }
         }
-        $uuid = $this->getParentNode()->getAttribute('uuid') ?? '';
-        $this->setValue($this->refcountcache[$uuid] ?? '0');
+    }
+}
+// cleanup old/unused certs
+foreach (glob("/usr/local/etc/syslog-ng/cert.d/*.{crt,key}", GLOB_BRACE) as $filename) {
+    if (!in_array($filename, $filenames)) {
+        unlink($filename);
     }
 }

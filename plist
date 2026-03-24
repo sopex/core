@@ -410,6 +410,8 @@
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Kea/DhcpController.php
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Kea/forms/agentSettings.xml
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Kea/forms/ddnsSettings.xml
+/usr/local/opnsense/mvc/app/controllers/OPNsense/Kea/forms/dialogOption4.xml
+/usr/local/opnsense/mvc/app/controllers/OPNsense/Kea/forms/dialogOption6.xml
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Kea/forms/dialogPDPool6.xml
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Kea/forms/dialogPeer4.xml
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Kea/forms/dialogPeer6.xml
@@ -573,6 +575,7 @@
 /usr/local/opnsense/mvc/app/library/OPNsense/OpenVPN/PlainOpenVPN.php
 /usr/local/opnsense/mvc/app/library/OPNsense/OpenVPN/ViscosityVisz.php
 /usr/local/opnsense/mvc/app/library/OPNsense/System/AbstractStatus.php
+/usr/local/opnsense/mvc/app/library/OPNsense/System/Status/CaptivePortalStatus.php
 /usr/local/opnsense/mvc/app/library/OPNsense/System/Status/ConfigdProxyOverrideStatus.php
 /usr/local/opnsense/mvc/app/library/OPNsense/System/Status/CrashReporterStatus.php
 /usr/local/opnsense/mvc/app/library/OPNsense/System/Status/DiskSpaceStatus.php
@@ -838,6 +841,7 @@
 /usr/local/opnsense/mvc/app/models/OPNsense/Interfaces/VxLan.xml
 /usr/local/opnsense/mvc/app/models/OPNsense/Kea/ACL/ACL.xml
 /usr/local/opnsense/mvc/app/models/OPNsense/Kea/FieldTypes/KeaClasslessStaticRouteField.php
+/usr/local/opnsense/mvc/app/models/OPNsense/Kea/FieldTypes/KeaOptionDataField.php
 /usr/local/opnsense/mvc/app/models/OPNsense/Kea/FieldTypes/KeaPoolsField.php
 /usr/local/opnsense/mvc/app/models/OPNsense/Kea/FieldTypes/KeaStaticRoutesField.php
 /usr/local/opnsense/mvc/app/models/OPNsense/Kea/KeaCtrlAgent.php
@@ -901,7 +905,7 @@
 /usr/local/opnsense/mvc/app/models/OPNsense/Trust/General.xml
 /usr/local/opnsense/mvc/app/models/OPNsense/Trust/Migrations/M1_0_0.php
 /usr/local/opnsense/mvc/app/models/OPNsense/Unbound/ACL/ACL.xml
-/usr/local/opnsense/mvc/app/models/OPNsense/Unbound/FieldTypes/AliasRefCount.php
+/usr/local/opnsense/mvc/app/models/OPNsense/Unbound/FieldTypes/AliasReflector.php
 /usr/local/opnsense/mvc/app/models/OPNsense/Unbound/FieldTypes/UnboundInterfaceField.php
 /usr/local/opnsense/mvc/app/models/OPNsense/Unbound/Menu/Menu.xml
 /usr/local/opnsense/mvc/app/models/OPNsense/Unbound/Migrations/M1_0_0.php
@@ -1096,6 +1100,7 @@
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Base/FieldTypes/VirtualIPFieldTest.php
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Base/FieldTypes/VirtualIPFieldTest/config.xml
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Dnsmasq/FieldTypes/HostnameFieldTest.php
+/usr/local/opnsense/mvc/tests/app/models/OPNsense/Kea/FieldTypes/KeaOptionDataFieldTest.php
 /usr/local/opnsense/mvc/tests/phpunit.xml
 /usr/local/opnsense/mvc/tests/setup.php
 /usr/local/opnsense/scripts/auth/add_user.php
@@ -1294,6 +1299,7 @@
 /usr/local/opnsense/scripts/ipsec/spddelete.py
 /usr/local/opnsense/scripts/ipsec/updown_event.py
 /usr/local/opnsense/scripts/kea/get_kea_leases.py
+/usr/local/opnsense/scripts/kea/kea_dhcp_options.py
 /usr/local/opnsense/scripts/kea/kea_prefix_watcher.py
 /usr/local/opnsense/scripts/monit/carp_status.php
 /usr/local/opnsense/scripts/monit/gateway_alert.php
@@ -1364,7 +1370,7 @@
 /usr/local/opnsense/scripts/suricata/rule-updater.py
 /usr/local/opnsense/scripts/suricata/setup.sh
 /usr/local/opnsense/scripts/syslog/clearlog.php
-/usr/local/opnsense/scripts/syslog/generate_certs
+/usr/local/opnsense/scripts/syslog/generate_certs.php
 /usr/local/opnsense/scripts/syslog/list_applications.php
 /usr/local/opnsense/scripts/syslog/lockout_handler
 /usr/local/opnsense/scripts/syslog/log_archive
