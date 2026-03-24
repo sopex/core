@@ -31,7 +31,6 @@ export default class Notepad extends BaseWidget {
 
     getGridOptions() {
         return {
-            sizeToContent: false,
             minH: 150,
         }
     }
@@ -43,7 +42,6 @@ export default class Notepad extends BaseWidget {
                 <textarea
                     id="notepad-text-${this.id}" maxlength="8192"
                     style="
-                        width: 100%;
                         min-width: 0;
                         resize: none;
                         margin-bottom: 10px;
@@ -65,10 +63,13 @@ export default class Notepad extends BaseWidget {
     }
 
     onWidgetResize(elem, width, height) {
-        const reserved = 34 + 20 + 8; // button-row + padding + gap
-        const textareaHeight = Math.max(60, height - reserved);
-        $(`#notepad-text-${this.id}`).css('height', textareaHeight + 'px');
-    }
+        const padding = 20;   // 10px left + 10px right
+        const footer  = 42;   // button row height + margin-bottom
+
+        $(`#notepad-text-${this.id}`).css({
+            width:  Math.max(100, width  - padding) + 'px',
+            height: Math.max(60,  height - footer - padding) + 'px'
+        });
 
     async onMarkupRendered() {
         const textElement = $(`#notepad-text-${this.id}`);
