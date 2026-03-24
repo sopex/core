@@ -29,13 +29,6 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
-    getGridOptions() {
-        return {
-            minH: 1,
-            maxH: 10,
-        }
-    }
-
     getMarkup() {
         let $container = $(`
         <div id="notepad-container-${this.id}" class="widget-content">
@@ -45,6 +38,7 @@ export default class Notepad extends BaseWidget {
                     style="
                         width: 100%;
                         min-width: 0;
+                        min-height: 150;
                         resize: none;
                         margin-bottom: 10px;
                         box-sizing: border-box;
