@@ -29,20 +29,38 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
-    getMarkup() {
-        let $container = $(`
-            <div id="notepad-container" class="widget-content">
-                <div style="padding: 10px; display: flex; flex-direction: column; height: 100%;">
-                    <textarea id="notepad-text-${this.id}" style="width: 100%; resize: vertical; min-height: 150px; flex-grow: 1; margin-bottom: 10px;"></textarea>
-                    <div style="display: flex; justify-content: flex-end; align-items: center;">
-                        <span id="notepad-saved-msg-${this.id}" style="color: green; margin-right: 10px; display: none;"><i class="fa fa-check"></i> ${this.translations.saved}</span>
-                        <button id="notepad-save-btn-${this.id}" class="btn btn-primary btn-sm">${this.translations.save}</button>
-                    </div>
+getMarkup() {
+    let $container = $(`
+        <div id="notepad-container-${this.id}" class="widget-content">
+            <div style="padding: 10px; display: flex; flex-direction: column; height: 100%;">
+                <textarea
+                    id="notepad-text-${this.id}" maxlength="8192"
+                    style="
+                        width: 100%;
+                        min-width: 0;
+                        resize: both;
+                        min-height: 80px;
+                        flex-grow: 1;
+                        margin-bottom: 10px;
+                        box-sizing: border-box;
+                    ">
+                </textarea>
+                <div style="display: flex; justify-content: flex-end; align-items: center;">
+                    <span id="notepad-error-msg-${this.id}" style="color: red; margin-right: 10px; display: none;">
+                        <i class="fa fa-exclamation-circle"></i> ${this.translations.error}
+                    </span>
+                    <span id="notepad-saved-msg-${this.id}" style="color: green; margin-right: 10px; display: none;">
+                        <i class="fa fa-check"></i> ${this.translations.saved}
+                    </span>
+                    <button id="notepad-save-btn-${this.id}" class="btn btn-primary btn-sm">
+                        ${this.translations.save}
+                    </button>
                 </div>
             </div>
-        `);
-        return $container;
-    }
+        </div>
+    `);
+    return $container;
+}
 
     async onMarkupRendered() {
         const textElement = $(`#notepad-text-${this.id}`);
