@@ -31,7 +31,7 @@ export default class Notepad extends BaseWidget {
 
     getGridOptions() {
         return {
-            minH: 150
+            minH: 2
         }
     }
 
