@@ -32,14 +32,13 @@ export default class Notepad extends BaseWidget {
 getMarkup() {
     let $container = $(`
         <div id="notepad-container-${this.id}" class="widget-content">
-            <div style="padding: 10px; display: flex; flex-direction: column; height: 100%;">
+            <div style="padding: 10px;">
                 <textarea
                     id="notepad-text-${this.id}" maxlength="8192"
                     style="
                         width: 100%;
                         min-width: 0;
-                        resize: both;
-                        min-height: 80px;
+                        min-height: 150px;
                         flex-grow: 1;
                         margin-bottom: 10px;
                         box-sizing: border-box;
