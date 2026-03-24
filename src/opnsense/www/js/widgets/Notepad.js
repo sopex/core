@@ -31,7 +31,7 @@ export default class Notepad extends BaseWidget {
 
     getGridOptions() {
         return {
-            sizeToContent: 150
+            minH: 150
         }
     }
 
@@ -45,11 +45,11 @@ export default class Notepad extends BaseWidget {
                         width: 100%;
                         min-width: 0;
                         resize: none;
-                        min-height: 150px;
                         margin-bottom: 10px;
                         box-sizing: border-box;
                     ">
                 </textarea>
+                <div style="display: flex; justify-content: flex-end; align-items: center;">
                     <span id="notepad-saved-msg-${this.id}" style="color: green; margin-right: 10px; display: none;">
                         <i class="fa fa-check"></i> ${this.translations.saved}
                     </span>
@@ -59,8 +59,14 @@ export default class Notepad extends BaseWidget {
                 </div>
             </div>
         </div>
-    `);
+        `);
         return $container;
+    }
+
+    onWidgetResize(elem, width, height) {
+        const reserved = 34 + 20 + 8; // button-row + padding + gap
+        const textareaHeight = Math.max(60, height - reserved);
+        $(`#notepad-text-${this.id}`).css('height', textareaHeight + 'px');
     }
 
     async onMarkupRendered() {
