@@ -29,7 +29,7 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
-        getGridOptions() {
+    getGridOptions() {
         return {
             sizeToContent: 150
         }
@@ -50,10 +50,6 @@ export default class Notepad extends BaseWidget {
                         box-sizing: border-box;
                     ">
                 </textarea>
-                <div style="display: flex; justify-content: flex-end; align-items: center;">
-                    <span id="notepad-error-msg-${this.id}" style="color: red; margin-right: 10px; display: none;">
-                        <i class="fa fa-exclamation-circle"></i> ${this.translations.error}
-                    </span>
                     <span id="notepad-saved-msg-${this.id}" style="color: green; margin-right: 10px; display: none;">
                         <i class="fa fa-check"></i> ${this.translations.saved}
                     </span>
