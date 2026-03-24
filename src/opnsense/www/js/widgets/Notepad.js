@@ -31,7 +31,8 @@ export default class Notepad extends BaseWidget {
 
     getGridOptions() {
         return {
-            minH: 2
+            minH: 2,
+            sizeToContent: false
         }
     }
 
@@ -47,6 +48,7 @@ export default class Notepad extends BaseWidget {
                         min-height: 150px;
                         margin-bottom: 10px;
                         max-width: 100%;
+                        box-sizing: border-box;
                     ">
                 </textarea>
                 <div style="display: flex; justify-content: flex-end; align-items: center;">
