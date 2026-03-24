@@ -29,13 +29,6 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
-    getGridOptions() {
-        return {
-            minH: 150,
-            sizeToContent: 650
-        }
-    }
-
     getMarkup() {
         let $container = $(`
         <div id="notepad-container-${this.id}" class="widget-content">
@@ -45,6 +38,7 @@ export default class Notepad extends BaseWidget {
                     style="
                         min-width: 0;
                         resize: none;
+                        min-height: 150px;
                         margin-bottom: 10px;
                         box-sizing: border-box;
                     ">
@@ -62,7 +56,7 @@ export default class Notepad extends BaseWidget {
         `);
         return $container;
     }
-    
+
     async onMarkupRendered() {
         const textElement = $(`#notepad-text-${this.id}`);
         const saveButton = $(`#notepad-save-btn-${this.id}`);
