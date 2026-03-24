@@ -40,7 +40,6 @@ export default class Notepad extends BaseWidget {
                         resize: none;
                         min-height: 150px;
                         margin-bottom: 10px;
-                        box-sizing: border-box;
                     ">
                 </textarea>
                 <div style="display: flex; justify-content: flex-end; align-items: center;">
