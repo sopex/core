@@ -29,26 +29,22 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
-    getGridOptions() {
-        return {
-            minH: 150,
-            sizeToContent: 650
-        }
-    }
-
     getMarkup() {
-        let $container = $(`
+        return $(`
         <div id="notepad-container-${this.id}" class="widget-content">
-            <div style="padding: 10px;">
+            <div style="padding: 10px; height: 100%; box-sizing: border-box;">
                 <textarea
                     id="notepad-text-${this.id}" maxlength="8192"
                     style="
-                        min-width: 0;
+                        width: 100%;
+                        min-height: 150px;
                         resize: none;
+                        overflow-y: auto;
                         margin-bottom: 10px;
                         box-sizing: border-box;
                     ">
-                </textarea>
+                    </textarea>
+                    
                 <div style="display: flex; justify-content: flex-end; align-items: center;">
                     <span id="notepad-saved-msg-${this.id}" style="color: green; margin-right: 10px; display: none;">
                         <i class="fa fa-check"></i> ${this.translations.saved}
@@ -60,16 +56,19 @@ export default class Notepad extends BaseWidget {
             </div>
         </div>
         `);
-        return $container;
     }
 
     onWidgetResize(elem, width, height) {
-        const padding = 20;   // 10px left + 10px right
-        const footer = 42;   // button row height + margin-bottom
+        const container = $(`#notepad-container-${this.id}`);
+        const textarea = container.find(`#notepad-text-${this.id}`);
+        const buttonRow = container.find(`#notepad-save-btn-${this.id}`).parent();
 
-        $(`#notepad-text-${this.id}`).css({
-            width: Math.max(100, width - padding) + 'px',
-            height: Math.max(60, height - footer - padding) + 'px'
+        const reserved = buttonRow.outerHeight(true) + 20;
+        const textareaHeight = Math.max(60, height - reserved);
+
+        textarea.css({
+            height: textareaHeight + 'px',
+            width: '100%'
         });
     }
 
@@ -80,16 +79,20 @@ export default class Notepad extends BaseWidget {
 
         const data = await this.ajaxCall('/api/core/dashboard/getNote');
         if (data.result === 'ok') {
-            textElement.val(data.note);
+            textElement.val(data.note || '');
         }
 
         $(saveButton).on('click', async () => {
             $(saveButton).prop('disabled', true);
-            const result = await this.ajaxCall('/api/core/dashboard/saveNote', JSON.stringify({
-                note: textElement.val()
-            }), 'POST');
+
+            const result = await this.ajaxCall(
+                '/api/core/dashboard/saveNote',
+                JSON.stringify({note: textElement.val()}),
+                'POST'
+            );
 
             $(saveButton).prop('disabled', false);
+
             if (result.result === 'saved') {
                 $(savedMsg).fadeIn().delay(2000).fadeOut();
             }
