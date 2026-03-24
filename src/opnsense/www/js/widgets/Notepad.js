@@ -29,8 +29,14 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
-getMarkup() {
-    let $container = $(`
+        getGridOptions() {
+        return {
+            sizeToContent: 150
+        }
+    }
+
+    getMarkup() {
+        let $container = $(`
         <div id="notepad-container-${this.id}" class="widget-content">
             <div style="padding: 10px;">
                 <textarea
@@ -38,8 +44,8 @@ getMarkup() {
                     style="
                         width: 100%;
                         min-width: 0;
+                        resize: none;
                         min-height: 150px;
-                        flex-grow: 1;
                         margin-bottom: 10px;
                         box-sizing: border-box;
                     ">
@@ -58,8 +64,8 @@ getMarkup() {
             </div>
         </div>
     `);
-    return $container;
-}
+        return $container;
+    }
 
     async onMarkupRendered() {
         const textElement = $(`#notepad-text-${this.id}`);
