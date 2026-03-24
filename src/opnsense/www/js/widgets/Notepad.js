@@ -62,17 +62,7 @@ export default class Notepad extends BaseWidget {
         `);
         return $container;
     }
-
-    onWidgetResize(elem, width, height) {
-        const padding = 20;   // 10px left + 10px right
-        const footer = 42;   // button row height + margin-bottom
-
-        $(`#notepad-text-${this.id}`).css({
-            width: Math.max(100, width - padding) + 'px',
-            height: Math.max(60, height - footer - padding) + 'px'
-        });
-    }
-
+    
     async onMarkupRendered() {
         const textElement = $(`#notepad-text-${this.id}`);
         const saveButton = $(`#notepad-save-btn-${this.id}`);
