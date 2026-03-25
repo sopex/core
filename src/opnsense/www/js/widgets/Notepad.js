@@ -29,12 +29,6 @@ export default class Notepad extends BaseWidget {
         super(config);
     }
 
-    getGridOptions() {
-        return {
-            sizeToContent: false,
-        }
-    }
-
     getMarkup() {
         let $container = $(`
         <div id="notepad-container-${this.id}" class="widget-content">
