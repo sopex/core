@@ -28,60 +28,23 @@ export default class Notes extends BaseWidget {
     constructor(config) {
         super(config);
         this.titleVisible = false;
-
     }
 
     getMarkup() {
+        const noteText = this.config.note_content || '';
+
         let $container = $(`
         <div id="notes-container-${this.id}" class="widget-content">
-            <div style="padding: 10px;">
-                <textarea
-                    id="notes-text-${this.id}" maxlength="8192"
-                    style="
-                        min-width: 0;
-                        resize: none;
-                        min-height: 150px;
-                        margin-bottom: 10px;
-                        max-width: 100%;
-                        max-height: 100%;
-                        flex-grow: 1;
-                        box-sizing: border-box;
-                    ">
-                </textarea>
-                <div style="display: flex; justify-content: flex-end; align-items: center;">
-                    <span id="notes-saved-msg-${this.id}" style="color: green; margin-right: 10px; display: none;">
-                        <i class="fa fa-check"></i> ${this.translations.saved}
-                    </span>
-                    <button id="notes-save-btn-${this.id}" class="btn btn-primary btn-sm">
-                        ${this.translations.save}
-                    </button>
-                </div>
+            <div id="notes-text-${this.id}" style="padding: 10px; white-space: pre-wrap; word-wrap: break-word;">
             </div>
         </div>
         `);
+
+        $container.find(`#notes-text-${this.id}`).text(noteText);
+
         return $container;
     }
 
     async onMarkupRendered() {
-        const textElement = $(`#notes-text-${this.id}`);
-        const saveButton = $(`#notes-save-btn-${this.id}`);
-        const savedMsg = $(`#notes-saved-msg-${this.id}`);
-
-        const data = await this.ajaxCall('/api/core/dashboard/getNote');
-        if (data.result === 'ok') {
-            textElement.val(data.note);
-        }
-
-        $(saveButton).on('click', async () => {
-            $(saveButton).prop('disabled', true);
-            const result = await this.ajaxCall('/api/core/dashboard/saveNote', JSON.stringify({
-                note: textElement.val()
-            }), 'POST');
-
-            $(saveButton).prop('disabled', false);
-            if (result.result === 'saved') {
-                $(savedMsg).fadeIn().delay(2000).fadeOut();
-            }
-        });
     }
 }

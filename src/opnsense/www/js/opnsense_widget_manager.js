@@ -793,6 +793,18 @@ class WidgetManager  {
                     $option.append($(`<div><b>${value.title}</b></div>`));
                     $option.append($selectSingle);
                     break;
+                case 'text':
+                    let $text = $(`<input type="text" class="form-control" id="${value.id}">`);
+                    $text.val(config[key] ?? value.default ?? '');
+                    $option.append($(`<div><b>${value.title}</b></div>`));
+                    $option.append($text);
+                    break;
+                case 'textarea':
+                    let $textarea = $(`<textarea class="form-control" id="${value.id}" rows="5" style="resize: vertical;"></textarea>`);
+                    $textarea.val(config[key] ?? value.default ?? '');
+                    $option.append($(`<div><b>${value.title}</b></div>`));
+                    $option.append($textarea);
+                    break;
                 case 'select_multiple':
                     let $select = $(`<select class="widget_optionsform_selectpicker"
                                      id="${value.id}"
@@ -837,6 +849,10 @@ class WidgetManager  {
                                 if (values[key].count === 0) {
                                     values[key] = value.default;
                                 }
+                                break;
+                            case 'text':
+                            case 'textarea':
+                                values[key] = $(`#${value.id}`).val() ?? value.default ?? '';
                                 break;
                             default:
                                 console.error('Unknown option type', value.type);

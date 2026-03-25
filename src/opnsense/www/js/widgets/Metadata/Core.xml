@@ -384,14 +384,14 @@
     </dnsmasqleases>
     <notes>
         <filename>Notes.js</filename>
-        <endpoints>
-            <endpoint>/api/core/dashboard/getNote</endpoint>
-            <endpoint>/api/core/dashboard/saveNote</endpoint>
-        </endpoints>
         <translations>
             <title>Notes</title>
-            <save>Save</save>
-            <saved>Saved</saved>
         </translations>
+        <config>
+            <note_content>
+                <type>textarea</type>
+                <title>Note Content</title>
+            </note_content>
+        </config>
     </notes>
 </metadata>
