@@ -27,6 +27,8 @@
 export default class Notes extends BaseWidget {
     constructor(config) {
         super(config);
+        this.titleVisible = false;
+
     }
 
     getMarkup() {
