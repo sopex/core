@@ -31,8 +31,7 @@ export default class Notepad extends BaseWidget {
 
     getGridOptions() {
         return {
-            sizeToContent: false,
-            minH: 2
+            sizeToContent: 350,
         }
     }
 
