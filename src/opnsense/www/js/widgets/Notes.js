@@ -53,4 +53,21 @@ export default class Notes extends BaseWidget {
 
     async onMarkupRendered() {
     }
+
+    async getWidgetOptions() {
+        return {
+            note_content: {
+                title: this.translations.title || 'Note Content',
+                type: 'textarea',
+                id: `note_content_input_${this.id}`, // Provides the ID for the widget manager to target
+                default: ''
+            }
+        };
+    }
+
+    async onWidgetOptionsChanged(options) {
+        this.config.note_content = options.note_content;
+
+        $(`#notes-text-${this.id}`).text(this.config.note_content);
+    }
 }

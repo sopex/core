@@ -387,11 +387,5 @@
         <translations>
             <title>Notes</title>
         </translations>
-        <config>
-            <note_content>
-                <type>textarea</type>
-                <title>Note Content</title>
-            </note_content>
-        </config>
     </notes>
 </metadata>
