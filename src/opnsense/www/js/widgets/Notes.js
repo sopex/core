@@ -34,8 +34,14 @@ export default class Notes extends BaseWidget {
         const noteText = this.config.note_content || '';
 
         let $container = $(`
-        <div id="notes-container-${this.id}" class="widget-content">
-            <div id="notes-text-${this.id}" style="padding: 10px; white-space: pre-wrap; word-wrap: break-word;">
+        <div id="notes-container-${this.id}" class="widget-content" style="height: 100%; display: flex; flex-direction: column;">
+            <div id="notes-text-${this.id}" style="
+                padding: 10px; 
+                white-space: pre-wrap; 
+                word-wrap: break-word; 
+                overflow-y: auto; 
+                flex-grow: 1;
+            ">
             </div>
         </div>
         `);
