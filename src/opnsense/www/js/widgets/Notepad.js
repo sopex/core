@@ -66,6 +66,12 @@ export default class Notepad extends BaseWidget {
         return $container;
     }
 
+    onWidgetResize(elem, width, height) {
+        if (height) {
+            $(`#notepad-container-${this.id}`).css('height', height + 'px');
+        }
+    }
+
     async onMarkupRendered() {
         const textElement = $(`#notepad-text-${this.id}`);
         const saveButton = $(`#notepad-save-btn-${this.id}`);
