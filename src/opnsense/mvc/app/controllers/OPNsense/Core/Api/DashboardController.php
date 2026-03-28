@@ -272,23 +272,4 @@ class DashboardController extends ApiControllerBase
         return $result;
     }
 
-    public function saveNoteAction()
-    {
-        $result = ['result' => 'failed'];
-
-        if ($this->request->isPost() && $this->request->hasPost('note')) {
-            $config = Config::getInstance()->object();
-            $name = $this->getUserName();
-            foreach ($config->system->user as $node) {
-                if ($name === (string)$node->name) {
-                    $node->dashboard_note = $this->request->getPost('note');
-                    Config::getInstance()->save();
-                    $result = ['result' => 'saved'];
-                    break;
-                }
-            }
-        }
-
-        return $result;
-    }
 }

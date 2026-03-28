@@ -808,6 +808,21 @@ class WidgetManager  {
                     $option.append($(`<div><b>${value.title}</b></div>`));
                     $option.append($select);
                     break;
+                case 'textarea':
+                    let $textarea = $(`<textarea
+                                     id="${value.id}"
+                                     maxlength="${value.maxlength || 8192}"
+                                     class="form-control"
+                                     style="
+                                         width: 100%;
+                                         resize: vertical;
+                                         min-height: ${value.minHeight || '150px'};
+                                         box-sizing: border-box;
+                                     ">${config[key] || ''}</textarea>`);
+
+                    $option.append($(`<div><b>${value.title}</b></div>`));
+                    $option.append($textarea);
+                    break;
                 default:
                     console.error('Unknown option type', value.type);
                     continue;
@@ -837,6 +852,9 @@ class WidgetManager  {
                                 if (values[key].count === 0) {
                                     values[key] = value.default;
                                 }
+                                break;
+                            case 'textarea':
+                                values[key] = $(`#${value.id}`).val() ?? value.default;
                                 break;
                             default:
                                 console.error('Unknown option type', value.type);
