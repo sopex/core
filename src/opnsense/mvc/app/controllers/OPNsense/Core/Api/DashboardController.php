@@ -170,7 +170,7 @@ class DashboardController extends ApiControllerBase
             $dashboard = json_encode($this->request->getPost());
             if (strlen($dashboard) > (1024 * 1024)) {
                 // prevent saving large blobs of data
-                $result['message'] = 'dashboard size limit reached';
+                $result['message'] = 'Dashboard size limit reached';
                 return $result;
             }
 
@@ -253,22 +253,6 @@ class DashboardController extends ApiControllerBase
             ];
         }
 
-        return $result;
-    }
-
-    public function getNoteAction()
-    {
-        $result = ['result' => 'failed'];
-        $config = Config::getInstance()->object();
-        $name = $this->getUserName();
-        foreach ($config->system->user as $node) {
-            if ($name === (string)$node->name) {
-                return [
-                    'result' => 'ok',
-                    'note' => (string)$node->dashboard_note,
-                ];
-            }
-        }
         return $result;
     }
 }

@@ -387,9 +387,6 @@
     </dnsmasqleases>
     <notes>
         <filename>Notes.js</filename>
-        <endpoints>
-            <endpoint>/api/core/dashboard/getNote</endpoint>
-        </endpoints>
         <translations>
             <title>Notes</title>
         </translations>
