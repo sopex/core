@@ -29,6 +29,7 @@ export default class Notes extends BaseWidget {
         super(config);
         this.titleVisible = false;
         this.configurable = true;
+        this.dialogTitle = "Note editor";
     }
 
     getMarkup() {
@@ -57,20 +58,7 @@ export default class Notes extends BaseWidget {
 
     async onMarkupRendered() {
         const config = await this.getWidgetConfig();
-        let note = config.note || '';
-
-        // migrate from legacy API storage if widget config is empty
-        if (!note) {
-            try {
-                const data = await this.ajaxCall('/api/core/dashboard/getNote');
-                if (data.result === 'ok' && data.note) {
-                    note = data.note;
-                    this.setWidgetConfig({ note });
-                }
-            } catch (e) {
-                // endpoint may not exist, ignore
-            }
-        }
+        const note = config.note || '';
 
         $(`#notes-text-${this.id}`).text(note);
     }

@@ -805,7 +805,6 @@ class WidgetManager  {
                         $select.append($(`<option value="${option.value}" ${selected ? 'selected' : ''}>${option.label}</option>`));
                     }
 
-                    $option.append($(`<div><b>${value.title}</b></div>`));
                     $option.append($select);
                     break;
                 case 'textarea':
@@ -814,7 +813,7 @@ class WidgetManager  {
                                      maxlength="${value.maxlength || 8192}"
                                      class="form-control"
                                      style="
-                                         width: 100%;
+                                         max-width: 100%;
                                          resize: vertical;
                                          min-height: ${value.minHeight || '150px'};
                                          box-sizing: border-box;
@@ -831,12 +830,11 @@ class WidgetManager  {
             $content.append($option);
         }
 
-        // disable Enter hotkey when form contains a textarea to allow newlines
         const hasTextarea = Object.values(options).some(v => v.type === 'textarea');
-
+        const modalTitle = widget.dialogTitle || this.gettext.options;
         // present widget options
         BootstrapDialog.show({
-            title: this.gettext.options,
+            title: modalTitle,
             draggable: true,
             animate: false,
             message: $content,

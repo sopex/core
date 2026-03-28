@@ -271,5 +271,4 @@ class DashboardController extends ApiControllerBase
         }
         return $result;
     }
-
 }
