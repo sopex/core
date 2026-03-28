@@ -831,6 +831,9 @@ class WidgetManager  {
             $content.append($option);
         }
 
+        // disable Enter hotkey when form contains a textarea to allow newlines
+        const hasTextarea = Object.values(options).some(v => v.type === 'textarea');
+
         // present widget options
         BootstrapDialog.show({
             title: this.gettext.options,
@@ -839,7 +842,7 @@ class WidgetManager  {
             message: $content,
             buttons: [{
                 label: this.gettext.ok,
-                hotkey: 13,
+                hotkey: hasTextarea ? undefined : 13,
                 action: async (dialog) => {
                     let values = {};
                     for (const [key, value] of Object.entries(options)) {
