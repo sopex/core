@@ -818,8 +818,6 @@ class WidgetManager  {
                                          min-height: ${value.minHeight || '150px'};
                                          box-sizing: border-box;
                                      ">${config[key] || ''}</textarea>`);
-
-                    $option.append($(`<div><b>${value.title}</b></div>`));
                     $option.append($textarea);
                     break;
                 default:
