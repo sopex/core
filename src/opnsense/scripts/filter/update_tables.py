@@ -119,9 +119,10 @@ if __name__ == '__main__':
                     # read before write, only save when the contents have changed
                     open(alias_filename, 'w').write(alias_content_str)
 
-            # use  current alias content when not trying to update a targetted list
+            # determine if the pf table needs to be updated.
+            # in case of targeted updates, we should still check if the pf table matches the source
             cnt_alias_content = len(alias_content)
-            cnt_alias_pf_content = alias.get_pf_addr_count() if to_update is None else cnt_alias_content
+            cnt_alias_pf_content = alias.get_pf_addr_count()
 
             if (cnt_alias_content != cnt_alias_pf_content or alias_changed_or_expired):
                 # if the alias is changed, expired or the one in memory has a different number of items, load table
@@ -142,9 +143,28 @@ if __name__ == '__main__':
                         result['status'] = 'error'
                         if 'messages' not in result:
                             result['messages'] = list()
-                        if error_output not in result['messages']:
+                        if error_message not in result['messages']:
                             result['messages'].append(error_message)
                             syslog.syslog(syslog.LOG_NOTICE, error_message)
+                    elif cnt_alias_content > 0:
+                        # double check if the number of addresses matches the expected number,
+                        new_pf_cnt = 0
+                        for alias_name, alias_info in PF.list_tables():
+                            if alias_name == alias.get_name():
+                                new_pf_cnt = alias_info.get('addresses', 0)
+                                break
+                        if new_pf_cnt != cnt_alias_content:
+                            error_message = "Error loading alias [%s], expected %d entries, but got %d" % (
+                                alias.get_name(),
+                                cnt_alias_content,
+                                new_pf_cnt
+                            )
+                            result['status'] = 'error'
+                            if 'messages' not in result:
+                                result['messages'] = list()
+                            if error_message not in result['messages']:
+                                result['messages'].append(error_message)
+                                syslog.syslog(syslog.LOG_NOTICE, error_message)
         else:
             # We are not resolving these aliases and are not using their contents,
             # they are not being used in any of the ones we manage, we still need to call pre_process()
