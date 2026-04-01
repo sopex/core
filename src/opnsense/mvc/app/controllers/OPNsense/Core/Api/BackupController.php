@@ -268,35 +268,35 @@ class BackupController extends ApiControllerBase
     public function downloadThisAction()
     {
         if ($this->request->isPost()) {
-        require_once("rrd.inc");
-        $config = Config::getInstance()->object();
-        $hostname = "OPNsense";
-        if (isset($config->system->hostname)) {
-            $hostname = (string)$config->system->hostname . "." . (string)$config->system->domain;
-        }
-        $name = "config-" . $hostname . "-" . date("YmdHis") . ".xml";
-        $data = file_get_contents('/conf/config.xml');
+            require_once("rrd.inc");
+            $config = Config::getInstance()->object();
+            $hostname = "OPNsense";
+            if (isset($config->system->hostname)) {
+                $hostname = (string)$config->system->hostname . "." . (string)$config->system->domain;
+            }
+            $name = "config-" . $hostname . "-" . date("YmdHis") . ".xml";
+            $data = file_get_contents('/conf/config.xml');
 
-        if (empty($this->request->getPost('donotbackuprrd'))) {
-            $rrd_data_xml = rrd_export();
-            $data = str_replace("</opnsense>", $rrd_data_xml . "</opnsense>", $data);
-        }
+            if (empty($this->request->getPost('donotbackuprrd'))) {
+                $rrd_data_xml = rrd_export();
+                $data = str_replace("</opnsense>", $rrd_data_xml . "</opnsense>", $data);
+            }
 
-        if (!empty($this->request->getPost('encrypt'))) {
-            $password = $this->request->getPost('encrypt_password');
-            $crypter = new Local();
-            $data = $crypter->encrypt($data, $password);
-        }
+            if (!empty($this->request->getPost('encrypt'))) {
+                $password = $this->request->getPost('encrypt_password');
+                $crypter = new Local();
+                $data = $crypter->encrypt($data, $password);
+            }
 
-        $size = strlen($data);
-        $this->response->setContentType('application/octet-stream');
-        $this->response->setRawHeader("Content-Disposition: attachment; filename={$name}");
-        $this->response->setRawHeader("Content-Length: $size");
-        $this->response->setRawHeader("Pragma: private");
-        $this->response->setRawHeader("Cache-Control: private, must-revalidate");
-        $this->response->setContent($data);
-        return $this->response;
-    }
+            $size = strlen($data);
+            $this->response->setContentType('application/octet-stream');
+            $this->response->setRawHeader("Content-Disposition: attachment; filename={$name}");
+            $this->response->setRawHeader("Content-Length: $size");
+            $this->response->setRawHeader("Pragma: private");
+            $this->response->setRawHeader("Cache-Control: private, must-revalidate");
+            $this->response->setContent($data);
+            return $this->response;
+        }
     }
 
     public function restoreAction()
@@ -343,7 +343,7 @@ class BackupController extends ApiControllerBase
                         convert_config();
                     }
                     if ($do_reboot) {
-                        Backend::getInstance()->configdRun('system reboot', true);
+                        (new Backend())->configdRun('system reboot', true);
                     }
                     return ['status' => 'success', 'message' => gettext("The configuration area has been restored."), 'reboot' => $do_reboot];
                 }
@@ -399,7 +399,7 @@ class BackupController extends ApiControllerBase
                         return ['status' => 'success', 'message' => gettext("The interface configuration was restored but physical interfaces could not be matched. No automatic reboot was performed."), 'reboot' => false];
                     }
                     if ($do_reboot) {
-                        configd_run('system reboot', true);
+                        (new Backend())->configdRun('system reboot', true);
                     }
                     return ['status' => 'success', 'message' => gettext("The configuration has been restored."), 'reboot' => $do_reboot];
                 } else {
@@ -453,13 +453,13 @@ class BackupController extends ApiControllerBase
                         foreach ($filesInBackup as $filename) {
                              $msg .= "<br>" . htmlspecialchars($filename);
                         }
-                        Backend::getInstance()->configdRun('template reload OPNsense/Cron');
-                        Backend::getInstance()->configdRun('cron restart');
+                        (new Backend())->configdRun('template reload OPNsense/Cron');
+                        (new Backend())->configdRun('cron restart');
                         return ['status' => 'success', 'message' => $msg];
                     }
                 }
-                Backend::getInstance()->configdRun('template reload OPNsense/Cron');
-                Backend::getInstance()->configdRun('cron restart');
+                (new Backend())->configdRun('template reload OPNsense/Cron');
+                (new Backend())->configdRun('cron restart');
                 return ['status' => 'success', 'message' => gettext("Settings configured.")];
             } else {
                 return ['status' => 'failed', 'message' => implode(", ", $input_errors)];
