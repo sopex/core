@@ -215,14 +215,19 @@ class BackupController extends ApiControllerBase
 
     public function getSettingsAction()
     {
-        $result = ['backup' => ['backupcount' => null, 'pushtime' => null]];
+        $result = ['backup' => ['backupcount' => null]];
         $config = Config::getInstance()->object();
+
         if (isset($config->system->backupcount)) {
             $result['backup']['backupcount'] = (string)$config->system->backupcount;
         }
+
         if (isset($config->system->backuppushtime)) {
             $result['backup']['pushtime'] = (string)$config->system->backuppushtime;
+        } else {
+            $result['backup']['pushtime'] = '02:00';
         }
+
         return $result;
     }
 
