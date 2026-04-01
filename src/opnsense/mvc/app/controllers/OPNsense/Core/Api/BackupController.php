@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (C) 2023 Deciso B.V.
+ * Copyright (C) 2026 Konstantinos Spartalis (cspartalis@potatonetworks.com)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,11 +28,20 @@
 
 namespace OPNsense\Core\Api;
 
+require_once("config.inc");
+require_once("interfaces.inc");
+require_once("console.inc");
+require_once("filter.inc");
+require_once("rrd.inc");
+require_once("system.inc");
+
 use OPNsense\Base\ApiControllerBase;
+use OPNsense\Base\UserException;
 use OPNsense\Core\ACL;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
 use OPNsense\Core\Shell;
+use OPNsense\Backup\Local;
 
 /**
  * Class BackupController
@@ -212,5 +221,331 @@ class BackupController extends ApiControllerBase
                 }
             }
         }
+    }
+
+    public function getSettingsAction()
+    {
+        $result = ['backup' => ['backupcount' => null]];
+        $config = Config::getInstance()->object();
+        if (isset($config->system->backupcount)) {
+            $result['backup']['backupcount'] = (string)$config->system->backupcount;
+        }
+        return $result;
+    }
+
+    public function setSettingsAction()
+    {
+        $this->throwReadOnly();
+        $result = ['status' => 'failed'];
+        if ($this->request->isPost()) {
+            $post = $this->request->getPost('backup');
+            if (isset($post['backupcount'])) {
+                $count = trim($post['backupcount']);
+                $config = Config::getInstance()->object();
+                if ($count === "") {
+                    if (isset($config->system->backupcount)) {
+                        unset($config->system->backupcount);
+                    }
+                } elseif (is_numeric($count) && $count > 0) {
+                    $config->system->backupcount = $count;
+                } else {
+                    return ['status' => 'failed', 'message' => gettext('Backup count must be greater than zero.')];
+                }
+                Config::getInstance()->save();
+                write_config('Changed backup revision count');
+                $result = ['status' => 'success'];
+            }
+        }
+        return $result;
+    }
+
+    public function downloadCurrentAction()
+    {
+        if ($this->request->isGet()) {
+            $config = Config::getInstance()->object();
+            $hostname = "OPNsense";
+            if (isset($config->system) && isset($config->system->hostname)) {
+                $hostname = (string)$config->system->hostname . "." . (string)$config->system->domain;
+            }
+            $name = "config-" . $hostname . "-" . date("YmdHis") . ".xml";
+            $data = file_get_contents('/conf/config.xml');
+
+            if (empty($this->request->getQuery('donotbackuprrd'))) {
+                $rrd_data_xml = rrd_export();
+                $closing_tag = "</opnsense>";
+                $data = str_replace($closing_tag, $rrd_data_xml . $closing_tag, $data);
+            }
+
+            if (!empty($this->request->getQuery('encrypt'))) {
+                $password = $this->request->getQuery('encrypt_password');
+                $crypter = new Local();
+                $data = $crypter->encrypt($data, $password);
+            }
+
+            $size = strlen($data);
+            $this->response->setContentType('application/octet-stream');
+            $this->response->setRawHeader("Content-Disposition: attachment; filename={$name}");
+            $this->response->setRawHeader("Content-Length: $size");
+            $this->response->setRawHeader("Pragma: private");
+            $this->response->setRawHeader("Cache-Control: private, must-revalidate");
+            $this->response->setContent($data);
+            return $this->response;
+        }
+    }
+
+    public function restoreAction()
+    {
+        $this->throwReadOnly();
+
+        if ($this->request->isPost() && $this->request->hasFiles('conffile')) {
+            $file = $this->request->getUploadedFiles()[0];
+            $data = file_get_contents($file->getTempName());
+
+            if (empty($data)) {
+                return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $file->getName())];
+            }
+
+            if (!empty($this->request->getPost('decrypt'))) {
+                $password = $this->request->getPost('decrypt_password');
+                $crypter = new Local();
+                $data = $crypter->decrypt($data, $password);
+                if (empty($data)) {
+                    return ['status' => 'failed', 'message' => gettext('The uploaded file could not be decrypted.')];
+                }
+            }
+
+            $post = $this->request->getPost();
+            $restoreareas = !empty($post['restorearea']) ? $post['restorearea'] : [];
+            $do_reboot = !empty($post['rebootafterrestore']);
+
+            if (!empty($restoreareas)) {
+                $ret = $this->restore_config_section($restoreareas, $data);
+                if ($ret === false) {
+                    return ['status' => 'failed', 'message' => gettext('The selected config file could not be parsed.')];
+                } elseif (count($ret)) {
+                    return ['status' => 'failed', 'message' => gettext('At least one requested restore area could not be found.')];
+                } else {
+                    global $config;
+                    if (!empty($config['rrddata'])) {
+                        rrd_import();
+                        unset($config['rrddata']);
+                        write_config();
+                        convert_config();
+                    }
+                    if ($do_reboot) {
+                        configd_run('system reboot', true);
+                    }
+                    return ['status' => 'success', 'message' => gettext("The configuration area has been restored."), 'reboot' => $do_reboot];
+                }
+            } else {
+                /* full config restore */
+                global $config;
+                $config = parse_config();
+                $cfieldnames = [
+                    'usevirtualterminal',
+                    'primaryconsole',
+                    'secondaryconsole',
+                    'serialspeed',
+                    'serialusb',
+                    'disableconsolemenu'
+                ];
+                $csettings = [];
+                foreach ($cfieldnames as $fieldname) {
+                    $csettings[$fieldname] = $config['system'][$fieldname] ?? null;
+                }
+
+                $filename = '/tmp/config_restore.xml';
+                file_put_contents($filename, $data);
+                $cnf = Config::getInstance();
+                if ($cnf->restoreBackup($filename)) {
+                    @unlink($filename);
+                    $config = parse_config();
+                    $flush = false;
+                    if (!empty($post['keepconsole'])) {
+                        foreach ($csettings as $fieldname => $fieldcontent) {
+                            if ($fieldcontent === null && isset($config[$fieldname])) {
+                                unset($config[$fieldname]);
+                            } else {
+                                $config['system'][$fieldname] = $fieldcontent;
+                            }
+                        }
+                        $flush = true;
+                    }
+                    if (!empty($config['rrddata'])) {
+                        rrd_import();
+                        unset($config['rrddata']);
+                        $flush = true;
+                    }
+                    if ($flush) {
+                        write_config();
+                        convert_config();
+                    }
+                    if (empty($input_errors) && !empty($post['flush_history'])) {
+                        configd_run('system flush config_history');
+                        write_config('System restore flushed local history');
+                    }
+                    if ($do_reboot) {
+                        configd_run('system reboot', true);
+                    }
+                    return ['status' => 'success', 'message' => gettext("The configuration has been restored."), 'reboot' => $do_reboot];
+                } else {
+                    return ['status' => 'failed', 'message' => gettext("The configuration could not be restored.")];
+                }
+            }
+        }
+        return ['status' => 'failed', 'message' => 'No files uploaded'];
+    }
+
+    public function setupProviderAction($providerName)
+    {
+        $this->throwReadOnly();
+        if ($this->request->isPost()) {
+            $backupFactory = new \OPNsense\Backup\BackupFactory();
+            $provider = $backupFactory->getProvider($providerName);
+            if (!$provider) {
+                return ['status' => 'failed', 'message' => 'Provider not found.'];
+            }
+
+            $providerSet = array();
+            $post = $this->request->getPost();
+            foreach ($provider['handle']->getConfigurationFields() as $field) {
+                if ($field['type'] == 'file') {
+                    if ($this->request->hasFiles($field['name'])) {
+                        $files = $this->request->getUploadedFiles();
+                        foreach ($files as $f) {
+                            if ($f->getKey() == $field['name']) {
+                                $providerSet[$field['name']] = file_get_contents($f->getTempName());
+                            }
+                        }
+                    } else {
+                        $providerSet[$field['name']] = null;
+                    }
+                } else {
+                    $providerSet[$field['name']] = isset($post[$field['name']]) ? $post[$field['name']] : '';
+                }
+            }
+            $input_errors = $provider['handle']->setConfiguration($providerSet);
+            if (count($input_errors) == 0) {
+                if ($provider['handle']->isEnabled()) {
+                    try {
+                        $filesInBackup = $provider['handle']->backup();
+                    } catch (\Exception $e) {
+                        return ['status' => 'failed', 'message' => $e->getMessage()];
+                    }
+                    if (count($filesInBackup) == 0) {
+                        return ['status' => 'success', 'message' => gettext('Saved settings, but remote backup returned no files.')];
+                    } else {
+                        $msg = gettext("Backup successful, current file list:") . "<br>";
+                        foreach ($filesInBackup as $filename) {
+                             $msg .= "<br>" . htmlspecialchars($filename);
+                        }
+                        system_cron_configure();
+                        return ['status' => 'success', 'message' => $msg];
+                    }
+                }
+                system_cron_configure();
+                return ['status' => 'success', 'message' => gettext("Settings configured.")];
+            } else {
+                return ['status' => 'failed', 'message' => implode(", ", $input_errors)];
+            }
+        }
+        return ['status' => 'failed', 'message' => 'Invalid request'];
+    }
+
+    private function restore_config_section($section_sets, $new_contents)
+    {
+        global $config;
+
+        $tmpxml = '/tmp/tmpxml';
+        $xml = null;
+
+        try {
+            file_put_contents($tmpxml, $new_contents);
+            $xml = load_config_from_file($tmpxml);
+        } catch (\Exception $e) { }
+
+        @unlink($tmpxml);
+
+        if (!is_array($xml)) {
+            return false;
+        }
+
+        $restored = [];
+        $failed = [];
+
+        foreach ($section_sets as $section_set) {
+            $sections = explode(',', $section_set);
+            $found = [];
+
+            foreach ($sections as $section) {
+                $new = &$xml;
+                $path = explode('.', $section);
+                $target = array_pop($path);
+
+                foreach ($path as $node) {
+                    if (!isset($new[$node])) {
+                        continue 2;
+                    }
+                    $new = &$new[$node];
+                }
+
+                if (isset($new[$target])) {
+                    $found[] = $section;
+                }
+            }
+
+            if (!count($found)) {
+                $failed[] = $section_set;
+                continue;
+            }
+
+            foreach (array_diff($sections, $found) as $section) {
+                $old = &$config;
+                $path = explode('.', $section);
+                $target = array_pop($path);
+
+                foreach ($path as $node) {
+                    if (!isset($old[$node])) {
+                        continue 2;
+                    }
+                    $old = &$old[$node];
+                }
+
+                if (isset($old[$target])) {
+                    unset($old[$target]);
+                    $restored[] = $section;
+                }
+            }
+
+            foreach ($found as $section) {
+                $old = &$config;
+                $new = &$xml;
+                $path = explode('.', $section);
+                $target = array_pop($path);
+
+                foreach ($path as $node) {
+                    if (!isset($new[$node])) {
+                        continue 2;
+                    }
+                    $new = &$new[$node];
+                    if (!isset($old[$node])) {
+                        $old[$node] = [];
+                    }
+                    $old = &$old[$node];
+                }
+
+                if (isset($new[$target])) {
+                    $old[$target] = $new[$target];
+                    $restored[] = $section;
+                }
+            }
+        }
+
+        if (count($restored) && !count($failed)) {
+            write_config(sprintf('Restored sections (%s) of config file', join(',', $restored)));
+            convert_config();
+        }
+
+        return $failed;
     }
 }
