@@ -131,29 +131,29 @@ class TesterController extends ApiControllerBase
      * function local_user_get_groups() was left in auth.inc
      * @param string $username internal username
      * @return array
-     */
-    private function getUserGroups($username)
+    */
+    private function getUserGroups(string $username): array
     {
         $member_groups = [];
-        $userUID = null;
         $configObj = Config::getInstance()->object();
+        $userUID = null;
 
-        if (isset($configObj->system->user)) {
-            foreach ($configObj->system->user as $userNode) {
-                if ((string) $userNode->name === $username) {
-                    $userUID = (string) $userNode->uid;
-                    break;
-                }
+        foreach ($configObj->system->user ?? [] as $userNode) {
+            if ((string)$userNode->name === $username) {
+                $userUID = (string)$userNode->uid;
+                break;
             }
         }
 
-        if ($userUID !== null && isset($configObj->system->group)) {
-            foreach ($configObj->system->group as $groupNode) {
-                if (!empty($groupNode->member)) {
-                    $members = explode(',', (string) $groupNode->member);
-                    if (in_array($userUID, $members)) {
-                        $member_groups[] = (string) $groupNode->name;
-                    }
+        if ($userUID === null) {
+            return $member_groups;
+        }
+
+        foreach ($configObj->system->group ?? [] as $groupNode) {
+            foreach ($groupNode->member as $memberUID) {
+                if ((string)$memberUID === $userUID) {
+                    $member_groups[] = (string)$groupNode->name;
+                    break;
                 }
             }
         }
