@@ -73,7 +73,7 @@
                                 $.each(data.attributes, (k, v) => tbody.append(`<tr><td>${k}</td><td>${v}</td></tr>`));
                             }
                         } else {
-                            tbody.append(`<tr><td colspan="2" class="text-danger">{{ lang._('Authentication failed.') }}</td></tr>`);
+                            tbody.append(`<tr><td colspan="2" class="text-danger">{{ lang._('Authentication failed') }}</td></tr>`);
                             $.each(data.errors || {}, (k, v) => tbody.append(`<tr><td>${k}</td><td class="text-danger">${v}</td></tr>`));
                         }
 
