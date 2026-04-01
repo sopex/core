@@ -38,7 +38,7 @@
                     return;
                 }
             }
-            window.open("/api/core/backup/downloadCurrent?" + $.param(params), "_blank");
+            window.open("/api/core/backup/downloadThis?" + $.param(params), "_blank");
         });
 
         $("#encrypt").change(function(){
@@ -91,6 +91,7 @@
              let formId = "frm_provider_" + providerId;
              
              let formData = new FormData($("#"+formId)[0]);
+             formData.append("_csrf_token", $('meta[name="csrf-token"]').attr("content"));
              
              $("#"+formId+"_progress").addClass("fa fa-spinner fa-pulse");
              
@@ -131,6 +132,7 @@
                }
                
                let formData = new FormData(this);
+               formData.append("_csrf_token", $('meta[name="csrf-token"]').attr("content"));
                $("#btn_restore_progress").addClass("fa fa-spinner fa-pulse");
                
                $.ajax({
