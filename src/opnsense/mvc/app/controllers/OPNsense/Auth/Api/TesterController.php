@@ -28,39 +28,51 @@
 
 namespace OPNsense\Auth\Api;
 
-require_once("auth.inc");
-require_once("interfaces.inc");
-
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Auth\AuthenticationFactory;
 use OPNsense\Core\ACL;
 use OPNsense\Core\Config;
 
+/**
+ * Class TesterController
+ * @package OPNsense\Auth\Api
+ */
 class TesterController extends ApiControllerBase
 {
+    /**
+     * Get settings for the tester form
+     * @return array
+     */
     public function getSettingsAction()
     {
         $result = ['tester' => ['authmode' => []]];
-        foreach (auth_get_authserver_list() as $auth_server_id => $auth_server) {
-            $result['tester']['authmode'][$auth_server_id] = [
-                'value' => htmlspecialchars($auth_server['name']),
+        $authFactory = new AuthenticationFactory();
+        foreach ($authFactory->listServers() as $auth_server_name => $auth_server) {
+            $result['tester']['authmode'][$auth_server_name] = [
+                'value' => $auth_server['name'],
                 'selected' => 0
             ];
         }
         return $result;
     }
 
+    /**
+     * Run authentication test
+     * @return array
+     */
     public function testAction()
     {
         $result = ['status' => 'failed'];
         if ($this->request->isPost()) {
-            $postInfo = $this->request->getPost('tester', []);
+            $postInfo = $this->request->getPost('tester') ?? [];
             $authmode = !empty($postInfo['authmode']) ? $postInfo['authmode'] : '';
             $username = !empty($postInfo['username']) ? $postInfo['username'] : '';
             $password = !empty($postInfo['password']) ? $postInfo['password'] : '';
 
-            $authcfg = auth_get_authserver($authmode);
-            if (!$authcfg) {
+            $authFactory = new AuthenticationFactory();
+            $authServers = $authFactory->listServers();
+
+            if (!isset($authServers[$authmode])) {
                 $result['errors'] = ['authmode' => gettext("Invalid authentication server")];
                 return $result;
             }
@@ -69,23 +81,25 @@ class TesterController extends ApiControllerBase
                 return $result;
             }
 
+            $authcfg = $authServers[$authmode];
             $authName = $authcfg['name'];
             if ($authcfg['type'] == 'local') {
                 $authName = 'Local Database';
             }
 
-            $authFactory = new AuthenticationFactory();
+            /** @var \OPNsense\Auth\Base $authenticator */
             $authenticator = $authFactory->get($authName);
 
             if ($authenticator->authenticate($username, $password)) {
                 $result['status'] = 'ok';
                 $result['message'] = gettext("User") . ": " . $username . " " . gettext("authenticated successfully.");
-                
+
+                // Config may be updated during LDAP group sync, reload before proceeding
                 Config::getInstance()->forceReload();
-                
-                $result['groups'] = getUserGroups($authenticator->getUserName($username));
+
+                $result['groups'] = $this->getUserGroups($authenticator->getUserName($username));
                 $result['privileges'] = (new ACL())->userUrlMasks($username);
-                
+
                 $attributes = [];
                 foreach ($authenticator->getLastAuthProperties() as $attr_name => $attr_value) {
                     if (is_array($attr_value)) {
@@ -102,7 +116,7 @@ class TesterController extends ApiControllerBase
                     }
                     $errors[$err_name] = $err_value;
                 }
-                // Fallback if no specific errors were returned
+                // Fallback
                 if (empty($errors)) {
                     $errors['authentication'] = gettext("Authentication failed.");
                 }
@@ -110,5 +124,40 @@ class TesterController extends ApiControllerBase
             }
         }
         return $result;
+    }
+
+    /**
+     * Helper to statically extract groups specific to a user from config since legacy
+     * function local_user_get_groups() was left in auth.inc
+     * @param string $username internal username
+     * @return array
+     */
+    private function getUserGroups($username)
+    {
+        $member_groups = [];
+        $userUID = null;
+        $configObj = Config::getInstance()->object();
+
+        if (isset($configObj->system->user)) {
+            foreach ($configObj->system->user as $userNode) {
+                if ((string) $userNode->name === $username) {
+                    $userUID = (string) $userNode->uid;
+                    break;
+                }
+            }
+        }
+
+        if ($userUID !== null && isset($configObj->system->group)) {
+            foreach ($configObj->system->group as $groupNode) {
+                if (!empty($groupNode->member)) {
+                    $members = explode(',', (string) $groupNode->member);
+                    if (in_array($userUID, $members)) {
+                        $member_groups[] = (string) $groupNode->name;
+                    }
+                }
+            }
+        }
+
+        return $member_groups;
     }
 }
