@@ -72,7 +72,6 @@
 
                         $("#test_results").show();
                     },
-                    },
                     true,
                     function () {
                         $("#frm_testerSettings_progress").removeClass("fa fa-spinner fa-pulse");
