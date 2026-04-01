@@ -31,6 +31,13 @@
             $('.selectpicker').selectpicker('refresh');
         });
 
+        $("#frm_testerSettings").on('keydown', 'input', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                $("#btn_test").click();
+            }
+        });
+
         $("#btn_test").click(function () {
             if (!$("#frm_testerSettings_progress").hasClass("fa-spinner")) {
                 $("#test_results").hide();

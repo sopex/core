@@ -110,7 +110,7 @@ class TesterController extends ApiControllerBase
                 );
 
                 $result['errors'] = !empty($errors) ? $errors : [
-                    'Authentication' => gettext("Authentication failed.")
+                    'Authentication' => gettext("Authentication failed")
                 ];
             }
         }
