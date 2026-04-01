@@ -87,8 +87,6 @@
         {{ partial("layout_partials/base_form",['fields':testerForm,'id':'frm_testerSettings',
         'apply_btn_id':'btn_test', 'apply_btn_title': lang._('Test')])}}
     </div>
-</div>
-<div class="tab-content content-box col-xs-12 __mb">
     <table class="table table-condensed" id="test_results" style="display:none;">
         <thead>
             <tr>

@@ -73,11 +73,11 @@ class TesterController extends ApiControllerBase
             $authServers = $authFactory->listServers();
 
             if (!isset($authServers[$authmode])) {
-                $result['errors'] = ['authmode' => gettext("Invalid authentication server")];
+                $result['errors'] = ['Authmode' => gettext("Invalid authentication server")];
                 return $result;
             }
             if (empty($username) || empty($password)) {
-                $result['errors'] = ['credentials' => gettext("A username and password must be specified.")];
+                $result['errors'] = ['Credentials' => gettext("A username and password must be specified.")];
                 return $result;
             }
 
@@ -110,7 +110,7 @@ class TesterController extends ApiControllerBase
                 );
 
                 $result['errors'] = !empty($errors) ? $errors : [
-                    'authentication' => gettext("Authentication failed.")
+                    'Authentication' => gettext("Authentication failed.")
                 ];
             }
         }
