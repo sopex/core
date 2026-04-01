@@ -28,19 +28,9 @@
 
 namespace OPNsense\Core\Api;
 
-require_once("config.inc");
-require_once("interfaces.inc");
-require_once("console.inc");
-require_once("filter.inc");
-require_once("rrd.inc");
-require_once("system.inc");
-
 use OPNsense\Base\ApiControllerBase;
-use OPNsense\Base\UserException;
-use OPNsense\Core\ACL;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
-use OPNsense\Core\Shell;
 use OPNsense\Backup\Local;
 
 /**
@@ -235,7 +225,6 @@ class BackupController extends ApiControllerBase
 
     public function setSettingsAction()
     {
-        $this->throwReadOnly();
         $result = ['status' => 'failed'];
         if ($this->request->isPost()) {
             $post = $this->request->getPost('backup');
@@ -252,16 +241,16 @@ class BackupController extends ApiControllerBase
                     return ['status' => 'failed', 'message' => gettext('Backup count must be greater than zero.')];
                 }
                 Config::getInstance()->save();
-                write_config('Changed backup revision count');
                 $result = ['status' => 'success'];
             }
         }
         return $result;
     }
 
-    public function downloadCurrentAction()
+    public function downloadThisAction()
     {
         if ($this->request->isGet()) {
+            require_once("rrd.inc");
             $config = Config::getInstance()->object();
             $hostname = "OPNsense";
             if (isset($config->system) && isset($config->system->hostname)) {
@@ -295,9 +284,13 @@ class BackupController extends ApiControllerBase
 
     public function restoreAction()
     {
-        $this->throwReadOnly();
-
         if ($this->request->isPost() && $this->request->hasFiles('conffile')) {
+            require_once("config.inc");
+            require_once("interfaces.inc");
+            require_once("rrd.inc");
+            require_once("filter.inc");
+            require_once("system.inc");
+
             $file = $this->request->getUploadedFiles()[0];
             $data = file_get_contents($file->getTempName());
 
@@ -384,6 +377,10 @@ class BackupController extends ApiControllerBase
                         configd_run('system flush config_history');
                         write_config('System restore flushed local history');
                     }
+                    if (is_interface_mismatch()) {
+                        $do_reboot = false;
+                        return ['status' => 'success', 'message' => gettext("The interface configuration was restored but physical interfaces could not be matched. No automatic reboot was performed."), 'reboot' => false];
+                    }
                     if ($do_reboot) {
                         configd_run('system reboot', true);
                     }
@@ -398,8 +395,9 @@ class BackupController extends ApiControllerBase
 
     public function setupProviderAction($providerName)
     {
-        $this->throwReadOnly();
         if ($this->request->isPost()) {
+            require_once("config.inc");
+            require_once("system.inc");
             $backupFactory = new \OPNsense\Backup\BackupFactory();
             $provider = $backupFactory->getProvider($providerName);
             if (!$provider) {
@@ -454,6 +452,7 @@ class BackupController extends ApiControllerBase
 
     private function restore_config_section($section_sets, $new_contents)
     {
+        require_once("config.inc");
         global $config;
 
         $tmpxml = '/tmp/tmpxml';

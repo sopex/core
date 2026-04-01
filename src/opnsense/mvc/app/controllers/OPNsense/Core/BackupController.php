@@ -28,9 +28,6 @@
 
 namespace OPNsense\Core;
 
-require_once("system.inc");
-require_once("plugins.inc");
-
 /**
  * Class BackupController
  * @package OPNsense\Core
@@ -39,6 +36,9 @@ class BackupController extends \OPNsense\Base\IndexController
 {
     public function indexAction()
     {
+        require_once("system.inc");
+        require_once("plugins.inc");
+
         $this->view->backupForm = $this->getForm("backup");
         $backupFactory = new \OPNsense\Backup\BackupFactory();
         $this->view->providers = $backupFactory->listProviders();
