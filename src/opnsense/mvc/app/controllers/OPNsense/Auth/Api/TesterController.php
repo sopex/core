@@ -81,11 +81,9 @@ class TesterController extends ApiControllerBase
                 return $result;
             }
 
-            $authcfg = $authServers[$authmode];
-            $authName = $authcfg['name'];
-            if ($authcfg['type'] == 'local') {
-                $authName = 'Local Database';
-            }
+            $authName = $authServers[$authmode]['type'] === 'local'
+                ? 'Local Database'
+                : $authServers[$authmode]['name'];
 
             /** @var \OPNsense\Auth\Base $authenticator */
             $authenticator = $authFactory->get($authName);
@@ -100,38 +98,25 @@ class TesterController extends ApiControllerBase
                 $result['groups'] = $this->getUserGroups($authenticator->getUserName($username));
                 $result['privileges'] = (new ACL())->userUrlMasks($username);
 
-                $attributes = [];
-                foreach ($authenticator->getLastAuthProperties() as $attr_name => $attr_value) {
-                    if (is_array($attr_value)) {
-                        $attr_value = implode(",", $attr_value);
-                    }
-                    $attributes[$attr_name] = htmlspecialchars($attr_value);
-                }
-                $result['attributes'] = $attributes;
+                // Format attributes instantly
+                $result['attributes'] = array_map(
+                    fn($v) => is_array($v) ? implode(",", $v) : $v,
+                    $authenticator->getLastAuthProperties()
+                );
             } else {
-                $errors = [];
-                foreach ($authenticator->getLastAuthErrors() as $err_name => $err_value) {
-                    if (is_array($err_value)) {
-                        $err_value = implode(",", $err_value);
-                    }
-                    $errors[$err_name] = $err_value;
-                }
-                // Fallback
-                if (empty($errors)) {
-                    $errors['authentication'] = gettext("Authentication failed.");
-                }
-                $result['errors'] = $errors;
+                $errors = array_map(
+                    fn($v) => is_array($v) ? implode(",", $v) : $v,
+                    $authenticator->getLastAuthErrors()
+                );
+
+                $result['errors'] = !empty($errors) ? $errors : [
+                    'authentication' => gettext("Authentication failed.")
+                ];
             }
         }
         return $result;
     }
 
-    /**
-     * Helper to statically extract groups specific to a user from config since legacy
-     * function local_user_get_groups() was left in auth.inc
-     * @param string $username internal username
-     * @return array
-    */
     private function getUserGroups(string $username): array
     {
         $member_groups = [];

@@ -27,8 +27,7 @@
 <script>
     $(document).ready(function () {
         var data_get_map = { 'frm_testerSettings': "/api/auth/tester/getSettings" };
-        mapDataToFormUI(data_get_map).done(function (data) {
-            formatTokenizersUI();
+        mapDataToFormUI(data_get_map).done(function () {
             $('.selectpicker').selectpicker('refresh');
         });
 
@@ -42,56 +41,37 @@
                     'frm_testerSettings',
                     function (data) {
                         $("#frm_testerSettings_progress").removeClass("fa fa-spinner fa-pulse");
-                        $("#test_results > tbody").empty();
+                        let tbody = $("#test_results > tbody");
+                        tbody.empty();
 
                         if (data.status === 'ok') {
-                            $("#test_results > tbody").append(
-                                $("<tr>").append($("<td colspan='2'>").html(data.message))
-                            );
+                            tbody.append(`<tr><td colspan="2">${data.message}</td></tr>`);
 
                             // Render groups
-                            if (data.groups && data.groups.length > 0) {
-                                $("#test_results > tbody").append(
-                                    $("<tr class='info'>").append($("<td colspan='2'>").html("<b>{{ lang._('Groups') }}</b>: " + data.groups.join(" ")))
-                                );
+                            if (data.groups?.length) {
+                                tbody.append(`<tr class="info"><td colspan="2"><b>{{ lang._('Groups') }}</b>: ${data.groups.join(" ")}</td></tr>`);
                             }
 
                             // Render privileges
-                            if (data.privileges && data.privileges.length > 0) {
-                                $("#test_results > tbody").append(
-                                    $("<tr class='info'>").append($("<td>").html("<b>{{ lang._('Uri') }}</b>")).append($("<td>").html("<b>{{ lang._('Networks') }}</b>"))
-                                );
-                                data.privileges.forEach(function (item) {
-                                    $("#test_results > tbody").append(
-                                        $("<tr>").append($("<td>").html(item[0])).append($("<td>").html(item[1].join(', ')))
-                                    );
+                            if (data.privileges?.length) {
+                                tbody.append(`<tr class="info"><td><b>{{ lang._('Uri') }}</b></td><td><b>{{ lang._('Networks') }}</b></td></tr>`);
+                                data.privileges.forEach(item => {
+                                    tbody.append(`<tr><td>${item[0]}</td><td>${item[1].join(', ')}</td></tr>`);
                                 });
                             }
 
                             // Render attributes
-                            if (data.attributes && Object.keys(data.attributes).length > 0) {
-                                $("#test_results > tbody").append(
-                                    $("<tr class='info'>").append($("<td colspan='2'>").html("<b>{{ lang._('Attributes received from server') }}</b>"))
-                                );
-                                $.each(data.attributes, function (attr_name, attr_value) {
-                                    $("#test_results > tbody").append(
-                                        $("<tr>").append($("<td>").html(attr_name)).append($("<td>").html(attr_value))
-                                    );
-                                });
+                            if (data.attributes && Object.keys(data.attributes).length) {
+                                tbody.append(`<tr class="info"><td colspan="2"><b>{{ lang._('Attributes received from server') }}</b></td></tr>`);
+                                $.each(data.attributes, (k, v) => tbody.append(`<tr><td>${k}</td><td>${v}</td></tr>`));
                             }
                         } else {
-                            $("#test_results > tbody").append(
-                                $("<tr>").append($("<td colspan='2'>").html("{{ lang._('Authentication failed.') }}"))
-                            );
-                            if (data.errors) {
-                                $.each(data.errors, function (err_name, err_value) {
-                                    $("#test_results > tbody").append(
-                                        $("<tr>").append($("<td>").html(err_name)).append($("<td>").html(err_value))
-                                    );
-                                });
-                            }
+                            tbody.append(`<tr><td colspan="2" class="text-danger">{{ lang._('Authentication failed.') }}</td></tr>`);
+                            $.each(data.errors || {}, (k, v) => tbody.append(`<tr><td>${k}</td><td class="text-danger">${v}</td></tr>`));
                         }
+
                         $("#test_results").show();
+                    },
                     },
                     true,
                     function () {
