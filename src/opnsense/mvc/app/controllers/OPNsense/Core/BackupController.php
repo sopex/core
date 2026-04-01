@@ -45,11 +45,14 @@ class BackupController extends \OPNsense\Base\IndexController
         $form = $this->getForm("backup");
 
         // Only expose pushtime when at least one provider plugin is installed
-        if (empty($this->view->providers)) {
-            $form['fields'] = array_values(array_filter(
-                $form['fields'],
-                fn($f) => ($f['id'] ?? '') !== 'backup.pushtime'
-            ));
+        if (empty($this->view->providers) && isset($form['tabs'])) {
+            foreach ($form['tabs'] as $tabId => $tab) {
+                foreach ($tab as $idx => $field) {
+                    if (($field['id'] ?? '') === 'backup.pushtime') {
+                        unset($form['tabs'][$tabId][$idx]);
+                    }
+                }
+            }
         }
         $this->view->backupForm = $form;
 
