@@ -1,0 +1,14 @@
+<form>
+    <field>
+        <id>backup.backupcount</id>
+        <label>Backup Count</label>
+        <type>text</type>
+        <help>Enter the number of older configurations to keep in the local backup cache. Be aware of how much space is consumed by backups before adjusting this value.</help>
+    </field>
+    <field>
+        <id>backup.pushtime</id>
+        <label>Push Time</label>
+        <type>text</type>
+        <help>This determines the backup time used for the main backup of the day. Additional backups can be set up on the cron page.</help>
+    </field>
+</form>
