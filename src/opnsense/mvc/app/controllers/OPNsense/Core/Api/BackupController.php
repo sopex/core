@@ -343,7 +343,7 @@ class BackupController extends ApiControllerBase
                         convert_config();
                     }
                     if ($do_reboot) {
-                        configd_run('system reboot', true);
+                        Backend::getInstance()->configdRun('system reboot', true);
                     }
                     return ['status' => 'success', 'message' => gettext("The configuration area has been restored."), 'reboot' => $do_reboot];
                 }
@@ -414,7 +414,6 @@ class BackupController extends ApiControllerBase
     {
         if ($this->request->isPost()) {
             require_once("config.inc");
-            require_once("system.inc");
             $backupFactory = new \OPNsense\Backup\BackupFactory();
             $provider = $backupFactory->getProvider($providerName);
             if (!$provider) {
@@ -454,11 +453,13 @@ class BackupController extends ApiControllerBase
                         foreach ($filesInBackup as $filename) {
                              $msg .= "<br>" . htmlspecialchars($filename);
                         }
-                        system_cron_configure();
+                        Backend::getInstance()->configdRun('template reload OPNsense/Cron');
+                        Backend::getInstance()->configdRun('cron restart');
                         return ['status' => 'success', 'message' => $msg];
                     }
                 }
-                system_cron_configure();
+                Backend::getInstance()->configdRun('template reload OPNsense/Cron');
+                Backend::getInstance()->configdRun('cron restart');
                 return ['status' => 'success', 'message' => gettext("Settings configured.")];
             } else {
                 return ['status' => 'failed', 'message' => implode(", ", $input_errors)];
