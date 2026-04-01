@@ -22,23 +22,23 @@
                 params.encrypt_password = $("#encrypt_password").val();
                 params.encrypt_passconf = $("#encrypt_passconf").val();
                 if (params.encrypt_password !== params.encrypt_passconf) {
-                    BootstrapDialog.alert({
-                        type: BootstrapDialog.TYPE_DANGER,
-                        title: "{{ lang._('Error') }}",
-                        message: "{{ lang._('The passwords do not match.') }}"
-                    });
+                    BootstrapDialog.alert({ type: BootstrapDialog.TYPE_DANGER, title: "{{ lang._('Error') }}", message: "{{ lang._('The passwords do not match.') }}" });
                     return;
                 }
                 if (!params.encrypt_password) {
-                     BootstrapDialog.alert({
-                        type: BootstrapDialog.TYPE_DANGER,
-                        title: "{{ lang._('Error') }}",
-                        message: "{{ lang._('You must supply and confirm the password for encryption.') }}"
-                    });
+                    BootstrapDialog.alert({ type: BootstrapDialog.TYPE_DANGER, title: "{{ lang._('Error') }}", message: "{{ lang._('You must supply and confirm the password for encryption.') }}" });
                     return;
                 }
             }
-            window.open("/api/core/backup/downloadThis?" + $.param(params), "_blank");
+            // POST via hidden form to keep password out of URL/logs
+            let form = $('<form method="POST" action="/api/core/backup/downloadThis" target="_blank" style="display:none"></form>');
+            form.append($('<input type="hidden" name="_csrf_token">').val($('meta[name="csrf-token"]').attr("content")));
+            $.each(params, function(key, val) {
+                form.append($('<input type="hidden">').attr('name', key).val(val));
+            });
+            $('body').append(form);
+            form.submit();
+            form.remove();
         });
 
         $("#encrypt").change(function(){
@@ -48,7 +48,7 @@
                 $("#encrypt_opts").addClass("hidden");
             }
         });
-        
+
         $("#decrypt").change(function(){
             if ($(this).is(':checked')) {
                 $("#decrypt_opts").removeClass("hidden");
@@ -89,12 +89,12 @@
              e.preventDefault();
              let providerId = $(this).data('provider');
              let formId = "frm_provider_" + providerId;
-             
+
              let formData = new FormData($("#"+formId)[0]);
              formData.append("_csrf_token", $('meta[name="csrf-token"]').attr("content"));
-             
+
              $("#"+formId+"_progress").addClass("fa fa-spinner fa-pulse");
-             
+
              $.ajax({
                  type: "POST",
                  url: "/api/core/backup/setupProvider/" + providerId,
@@ -122,7 +122,7 @@
                  }
              });
          });
-         
+
          // form submit for Restore configuration
          $("#frm_restore").submit(function(e){
                e.preventDefault();
@@ -130,11 +130,11 @@
                    BootstrapDialog.alert("{{ lang._('Please select a file to restore') }}");
                    return;
                }
-               
+
                let formData = new FormData(this);
                formData.append("_csrf_token", $('meta[name="csrf-token"]').attr("content"));
                $("#btn_restore_progress").addClass("fa fa-spinner fa-pulse");
-               
+
                $.ajax({
                    type: "POST",
                    url: "/api/core/backup/restore",
@@ -177,7 +177,7 @@
                });
          });
     });
-    
+
     function show_value(key) {
         $('#show-' + key + '-btn').html('');
         $('#show-' + key + '-val').show();
@@ -197,7 +197,7 @@
     <div id="settings" class="tab-pane fade in active">
         {{ partial("layout_partials/base_form",['fields':backupForm,'id':'frm_backupSettings', 'apply_btn_id':'btn_save', 'apply_btn_title': lang._('Save')])}}
     </div>
-    
+
     <div id="download" class="tab-pane fade in">
         <div class="table-responsive">
             <table class="table table-striped table-condensed">
@@ -238,7 +238,7 @@
             </table>
         </div>
     </div>
-    
+
     <div id="restore" class="tab-pane fade in">
         <form id="frm_restore" enctype="multipart/form-data">
         <div class="table-responsive">
@@ -263,7 +263,7 @@
                             {{ lang._('Exclude console settings from import.') }}<br/>
                             <input name="flush_history" type="checkbox" value="1" id="flush_history" checked="checked" />
                             {{ lang._('Flush (full) local configuration history.') }}<br/>
-                            
+
                             <input name="decrypt" type="checkbox" value="1" id="decrypt" />
                             {{ lang._('Configuration file is encrypted.') }}
                             <div class="hidden table-responsive __mt" id="decrypt_opts">
@@ -288,7 +288,7 @@
         </div>
         </form>
     </div>
-    
+
 {% for providerId, provider in providers %}
     <div id="setup_{{providerId}}" class="tab-pane fade in">
         <form id="frm_provider_{{providerId}}" enctype="multipart/form-data">

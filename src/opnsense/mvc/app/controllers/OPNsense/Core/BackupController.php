@@ -39,19 +39,29 @@ class BackupController extends \OPNsense\Base\IndexController
         require_once("system.inc");
         require_once("plugins.inc");
 
-        $this->view->backupForm = $this->getForm("backup");
         $backupFactory = new \OPNsense\Backup\BackupFactory();
         $this->view->providers = $backupFactory->listProviders();
 
+        $form = $this->getForm("backup");
+
+        // Only expose pushtime when at least one provider plugin is installed
+        if (empty($this->view->providers)) {
+            $form['fields'] = array_values(array_filter(
+                $form['fields'],
+                fn($f) => ($f['id'] ?? '') !== 'backup.pushtime'
+            ));
+        }
+        $this->view->backupForm = $form;
+
         $areas = [
-            'bridges' => gettext('Bridge Devices'),
-            'gifs' => gettext('GIF Devices'),
+            'bridges'   => gettext('Bridge Devices'),
+            'gifs'      => gettext('GIF Devices'),
             'interfaces' => gettext('Interfaces'),
-            'laggs' => gettext('LAGG Devices'),
-            'ppps' => gettext('Point-to-Point Devices'),
-            'rrddata' => gettext('RRD Data'),
-            'vlans' => gettext('VLAN Devices'),
-            'wireless' => gettext('Wireless Devices'),
+            'laggs'     => gettext('LAGG Devices'),
+            'ppps'      => gettext('Point-to-Point Devices'),
+            'rrddata'   => gettext('RRD Data'),
+            'vlans'     => gettext('VLAN Devices'),
+            'wireless'  => gettext('Wireless Devices'),
         ];
         foreach (plugins_xmlrpc_sync() as $area) {
             if (!empty($area['section'])) {

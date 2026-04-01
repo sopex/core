@@ -215,10 +215,13 @@ class BackupController extends ApiControllerBase
 
     public function getSettingsAction()
     {
-        $result = ['backup' => ['backupcount' => null]];
+        $result = ['backup' => ['backupcount' => null, 'pushtime' => null]];
         $config = Config::getInstance()->object();
         if (isset($config->system->backupcount)) {
             $result['backup']['backupcount'] = (string)$config->system->backupcount;
+        }
+        if (isset($config->system->backuppushtime)) {
+            $result['backup']['pushtime'] = (string)$config->system->backuppushtime;
         }
         return $result;
     }
@@ -228,58 +231,72 @@ class BackupController extends ApiControllerBase
         $result = ['status' => 'failed'];
         if ($this->request->isPost()) {
             $post = $this->request->getPost('backup');
+            $config = Config::getInstance()->object();
+
             if (isset($post['backupcount'])) {
                 $count = trim($post['backupcount']);
-                $config = Config::getInstance()->object();
-                if ($count === "") {
-                    if (isset($config->system->backupcount)) {
-                        unset($config->system->backupcount);
-                    }
+                if ($count === '') {
+                    unset($config->system->backupcount);
                 } elseif (is_numeric($count) && $count > 0) {
                     $config->system->backupcount = $count;
                 } else {
                     return ['status' => 'failed', 'message' => gettext('Backup count must be greater than zero.')];
                 }
-                Config::getInstance()->save();
-                $result = ['status' => 'success'];
             }
+
+            if (isset($post['pushtime'])) {
+                $pushtime = trim($post['pushtime']);
+                if ($pushtime === '') {
+                    unset($config->system->backuppushtime);
+                } else {
+                    // Basic HH:MM validation
+                    if (!preg_match('/^\d{1,2}:\d{2}$/', $pushtime)) {
+                        return ['status' => 'failed', 'message' => gettext('Push time must be in HH:MM format.')];
+                    }
+                    $config->system->backuppushtime = $pushtime;
+                }
+                require_once("system.inc");
+                system_cron_configure();
+            }
+
+            Config::getInstance()->save();
+            $result = ['status' => 'success'];
         }
         return $result;
     }
 
     public function downloadThisAction()
     {
-        if ($this->request->isGet()) {
-            require_once("rrd.inc");
-            $config = Config::getInstance()->object();
-            $hostname = "OPNsense";
-            if (isset($config->system) && isset($config->system->hostname)) {
-                $hostname = (string)$config->system->hostname . "." . (string)$config->system->domain;
-            }
-            $name = "config-" . $hostname . "-" . date("YmdHis") . ".xml";
-            $data = file_get_contents('/conf/config.xml');
-
-            if (empty($this->request->getQuery('donotbackuprrd'))) {
-                $rrd_data_xml = rrd_export();
-                $closing_tag = "</opnsense>";
-                $data = str_replace($closing_tag, $rrd_data_xml . $closing_tag, $data);
-            }
-
-            if (!empty($this->request->getQuery('encrypt'))) {
-                $password = $this->request->getQuery('encrypt_password');
-                $crypter = new Local();
-                $data = $crypter->encrypt($data, $password);
-            }
-
-            $size = strlen($data);
-            $this->response->setContentType('application/octet-stream');
-            $this->response->setRawHeader("Content-Disposition: attachment; filename={$name}");
-            $this->response->setRawHeader("Content-Length: $size");
-            $this->response->setRawHeader("Pragma: private");
-            $this->response->setRawHeader("Cache-Control: private, must-revalidate");
-            $this->response->setContent($data);
-            return $this->response;
+        if ($this->request->isPost()) {
+        require_once("rrd.inc");
+        $config = Config::getInstance()->object();
+        $hostname = "OPNsense";
+        if (isset($config->system->hostname)) {
+            $hostname = (string)$config->system->hostname . "." . (string)$config->system->domain;
         }
+        $name = "config-" . $hostname . "-" . date("YmdHis") . ".xml";
+        $data = file_get_contents('/conf/config.xml');
+
+        if (empty($this->request->getPost('donotbackuprrd'))) {
+            $rrd_data_xml = rrd_export();
+            $data = str_replace("</opnsense>", $rrd_data_xml . "</opnsense>", $data);
+        }
+
+        if (!empty($this->request->getPost('encrypt'))) {
+            $password = $this->request->getPost('encrypt_password');
+            $crypter = new Local();
+            $data = $crypter->encrypt($data, $password);
+        }
+
+        $size = strlen($data);
+        $this->response->setContentType('application/octet-stream');
+        $this->response->setRawHeader("Content-Disposition: attachment; filename={$name}");
+        $this->response->setRawHeader("Content-Length: $size");
+        $this->response->setRawHeader("Pragma: private");
+        $this->response->setRawHeader("Cache-Control: private, must-revalidate");
+        $this->response->setContent($data);
+        return $this->response;
+    }
     }
 
     public function restoreAction()
@@ -373,8 +390,8 @@ class BackupController extends ApiControllerBase
                         write_config();
                         convert_config();
                     }
-                    if (empty($input_errors) && !empty($post['flush_history'])) {
-                        configd_run('system flush config_history');
+                    if (!empty($post['flush_history'])) {
+                        (new Backend())->configdRun('system flush config_history');
                         write_config('System restore flushed local history');
                     }
                     if (is_interface_mismatch()) {
