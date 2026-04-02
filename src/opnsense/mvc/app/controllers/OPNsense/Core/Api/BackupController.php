@@ -312,6 +312,7 @@ class BackupController extends ApiControllerBase
     {
         if ($this->request->isPost() && !empty($_FILES['conffile']['tmp_name'])) {
             require_once("config.inc");
+            require_once("util.inc");
             require_once("interfaces.inc");
             require_once("rrd.inc");
             require_once("filter.inc");
