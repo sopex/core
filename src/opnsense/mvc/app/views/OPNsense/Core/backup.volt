@@ -26,15 +26,24 @@
 
 <script>
     $( document ).ready(function() {
-        var data_get_map = {'frm_backupSettings':"/api/core/backup/getSettings"};
+        var data_get_map = {
+            'frm_backupSettingsLocal': "/api/core/backup/getSettings",
+            'frm_backupSettingsRemote': "/api/core/backup/getSettings"
+        };
         mapDataToFormUI(data_get_map).done(function(){
             formatTokenizersUI();
             $('.selectpicker').selectpicker('refresh');
         });
 
         // link save button
-        $("#btn_save").click(function(){
-            saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettings', function(){
+        $("#btn_save_local").click(function(){
+            saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsLocal', function(){
+                // success
+            }, true);
+        });
+
+        $("#btn_save_remote").click(function(){
+            saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsRemote', function(){
                 // success
             }, true);
         });
@@ -238,19 +247,14 @@
 </script>
 
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
-    <li class="active"><a data-toggle="tab" href="#settings">{{ lang._('Settings') }}</a></li>
-    <li><a data-toggle="tab" href="#download">{{ lang._('Download') }}</a></li>
-    <li><a data-toggle="tab" href="#restore">{{ lang._('Restore') }}</a></li>
-{% if providers|length > 0 %}
+    <li class="active"><a data-toggle="tab" href="#localbackup">{{ lang._('Local Backup') }}</a></li>
     <li><a data-toggle="tab" href="#remotebackup">{{ lang._('Remote Backup') }}</a></li>
-{% endif %}
+    <li><a data-toggle="tab" href="#restore">{{ lang._('Restore') }}</a></li>
 </ul>
 <div class="tab-content content-box col-xs-12 __mb">
-    <div id="settings" class="tab-pane fade in active">
-        {{ partial("layout_partials/base_form",['fields':backupForm,'id':'frm_backupSettings', 'apply_btn_id':'btn_save', 'apply_btn_title': lang._('Save')])}}
-    </div>
-
-    <div id="download" class="tab-pane fade in">
+    <div id="localbackup" class="tab-pane fade in active">
+        {{ partial("layout_partials/base_form",['fields':backupLocalForm,'id':'frm_backupSettingsLocal', 'apply_btn_id':'btn_save_local', 'apply_btn_title': lang._('Save')])}}
+        <hr/>
         <div class="table-responsive">
             <table class="table table-striped table-condensed">
                 <tbody>
@@ -341,8 +345,11 @@
         </form>
     </div>
 
-{% if providers|length > 0 %}
     <div id="remotebackup" class="tab-pane fade in">
+        {{ partial("layout_partials/base_form",['fields':backupRemoteForm,'id':'frm_backupSettingsRemote', 'apply_btn_id':'btn_save_remote', 'apply_btn_title': lang._('Save')])}}
+
+{% if providers|length > 0 %}
+        <hr/>
 {% for providerId, provider in providers %}
         <form id="frm_provider_{{providerId}}" enctype="multipart/form-data">
         <div class="table-responsive {% if not loop.first %}__mt{% endif %}">
@@ -402,6 +409,6 @@
         </form>
     {% if not loop.last %}<hr/>{% endif %}
 {% endfor %}
-    </div>
 {% endif %}
+    </div>
 </div>

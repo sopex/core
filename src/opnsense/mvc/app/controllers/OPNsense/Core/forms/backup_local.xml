@@ -1,0 +1,8 @@
+<form>
+    <field>
+        <id>backup.backupcount</id>
+        <label>Backup Count</label>
+        <type>text</type>
+        <help>Enter the number of older configurations to keep in the local backup cache. Be aware of how much space is consumed by backups before adjusting this value.</help>
+    </field>
+</form>
