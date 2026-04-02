@@ -278,6 +278,7 @@ class BackupController extends ApiControllerBase
     public function downloadThisAction()
     {
         if ($this->request->isPost()) {
+            require_once("util.inc");
             require_once("rrd.inc");
             $config = Config::getInstance()->object();
             $hostname = "OPNsense";
@@ -317,6 +318,7 @@ class BackupController extends ApiControllerBase
             require_once("rrd.inc");
             require_once("filter.inc");
             require_once("system.inc");
+            require_once("console.inc");
 
             $data = file_get_contents($_FILES['conffile']['tmp_name']);
 
