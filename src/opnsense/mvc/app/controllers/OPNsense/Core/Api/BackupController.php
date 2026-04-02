@@ -29,6 +29,8 @@
 namespace OPNsense\Core\Api;
 
 use OPNsense\Base\ApiControllerBase;
+use OPNsense\Base\UserException;
+use OPNsense\Core\ACL;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
 use OPNsense\Core\Shell;
@@ -303,24 +305,22 @@ class BackupController extends ApiControllerBase
             $this->response->setRawHeader("Pragma: private");
             $this->response->setRawHeader("Cache-Control: private, must-revalidate");
             $this->response->setContent($data);
-            return $this->response;
         }
     }
 
     public function restoreAction()
     {
-        if ($this->request->isPost() && $this->request->hasFiles('conffile')) {
+        if ($this->request->isPost() && !empty($_FILES['conffile']['tmp_name'])) {
             require_once("config.inc");
             require_once("interfaces.inc");
             require_once("rrd.inc");
             require_once("filter.inc");
             require_once("system.inc");
 
-            $file = $this->request->getUploadedFiles()[0];
-            $data = file_get_contents($file->getTempName());
+            $data = file_get_contents($_FILES['conffile']['tmp_name']);
 
             if (empty($data)) {
-                return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $file->getName())];
+                return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $_FILES['conffile']['name'])];
             }
 
             if (!empty($this->request->getPost('decrypt'))) {
@@ -434,13 +434,8 @@ class BackupController extends ApiControllerBase
             $post = $this->request->getPost();
             foreach ($provider['handle']->getConfigurationFields() as $field) {
                 if ($field['type'] == 'file') {
-                    if ($this->request->hasFiles($field['name'])) {
-                        $files = $this->request->getUploadedFiles();
-                        foreach ($files as $f) {
-                            if ($f->getKey() == $field['name']) {
-                                $providerSet[$field['name']] = file_get_contents($f->getTempName());
-                            }
-                        }
+                    if (!empty($_FILES[$field['name']]['tmp_name'])) {
+                        $providerSet[$field['name']] = file_get_contents($_FILES[$field['name']]['tmp_name']);
                     } else {
                         $providerSet[$field['name']] = null;
                     }

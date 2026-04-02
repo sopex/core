@@ -58,7 +58,6 @@
             }
 
             $("#btn_download_progress").addClass("fa fa-spinner fa-pulse");
-            params['_csrf_token'] = $('meta[name="csrf-token"]').attr("content");
 
             $.ajax({
                 type: "POST",
@@ -146,7 +145,6 @@
              let formId = "frm_provider_" + providerId;
 
              let formData = new FormData($("#"+formId)[0]);
-             formData.append("_csrf_token", $('meta[name="csrf-token"]').attr("content"));
 
              $("#"+formId+"_progress").addClass("fa fa-spinner fa-pulse");
 
@@ -187,7 +185,6 @@
                }
 
                let formData = new FormData(this);
-               formData.append("_csrf_token", $('meta[name="csrf-token"]').attr("content"));
                $("#btn_restore_progress").addClass("fa fa-spinner fa-pulse");
 
                $.ajax({
@@ -406,5 +403,5 @@
     {% if not loop.last %}<hr/>{% endif %}
 {% endfor %}
     </div>
-+{% endif %}
+{% endif %}
 </div>
