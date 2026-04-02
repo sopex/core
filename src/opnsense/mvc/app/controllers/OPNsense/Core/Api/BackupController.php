@@ -267,8 +267,7 @@ class BackupController extends ApiControllerBase
                 (new Backend())->configdRun('cron restart');
             }
 
-            require_once("config.inc");
-            \write_config('Changed local backup settings');
+            Config::getInstance()->save(['description' => 'Changed local backup settings']);
 
             $result = ['status' => 'success'];
         }
