@@ -58,6 +58,7 @@
             }
 
             $("#btn_download_progress").addClass("fa fa-spinner fa-pulse");
+            params['_csrf_token'] = $('meta[name="csrf-token"]').attr("content");
 
             $.ajax({
                 type: "POST",
