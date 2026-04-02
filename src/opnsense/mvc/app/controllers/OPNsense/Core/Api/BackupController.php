@@ -359,7 +359,7 @@ class BackupController extends ApiControllerBase
             } else {
                 /* full config restore */
                 global $config;
-                $config = parse_config();
+                $config = \parse_config();
                 $cfieldnames = [
                     'usevirtualterminal',
                     'primaryconsole',
@@ -378,7 +378,7 @@ class BackupController extends ApiControllerBase
                 $cnf = Config::getInstance();
                 if ($cnf->restoreBackup($filename)) {
                     @unlink($filename);
-                    $config = parse_config();
+                    $config = \parse_config();
                     $flush = false;
                     if (!empty($post['keepconsole'])) {
                         foreach ($csettings as $fieldname => $fieldcontent) {
