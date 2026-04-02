@@ -268,7 +268,7 @@ class BackupController extends ApiControllerBase
             }
 
             require_once("config.inc");
-            write_config('Changed local backup settings');
+            \write_config('Changed local backup settings');
 
             $result = ['status' => 'success'];
         }
@@ -288,7 +288,7 @@ class BackupController extends ApiControllerBase
             $data = file_get_contents('/conf/config.xml');
 
             if (empty($this->request->getPost('donotbackuprrd'))) {
-                $rrd_data_xml = rrd_export();
+                $rrd_data_xml = \rrd_export();
                 $data = str_replace("</opnsense>", $rrd_data_xml . "</opnsense>", $data);
             }
 
@@ -346,10 +346,10 @@ class BackupController extends ApiControllerBase
                 } else {
                     global $config;
                     if (!empty($config['rrddata'])) {
-                        rrd_import();
+                        \rrd_import();
                         unset($config['rrddata']);
-                        write_config();
-                        convert_config();
+                        \write_config();
+                        \convert_config();
                     }
                     if ($do_reboot) {
                         (new Backend())->configdRun('system reboot', true);
@@ -391,19 +391,19 @@ class BackupController extends ApiControllerBase
                         $flush = true;
                     }
                     if (!empty($config['rrddata'])) {
-                        rrd_import();
+                        \rrd_import();
                         unset($config['rrddata']);
                         $flush = true;
                     }
                     if ($flush) {
-                        write_config();
-                        convert_config();
+                        \write_config();
+                        \convert_config();
                     }
                     if (!empty($post['flush_history'])) {
                         (new Backend())->configdRun('system flush config_history');
-                        write_config('System restore flushed local history');
+                        \write_config('System restore flushed local history');
                     }
-                    if (is_interface_mismatch()) {
+                    if (\is_interface_mismatch(false)) {
                         $do_reboot = false;
                         return ['status' => 'success', 'message' => gettext("The interface configuration was restored but physical interfaces could not be matched. No automatic reboot was performed."), 'reboot' => false];
                     }
@@ -459,12 +459,12 @@ class BackupController extends ApiControllerBase
                         foreach ($filesInBackup as $filename) {
                              $msg .= "<br>" . htmlspecialchars($filename);
                         }
-                        system_cron_configure();
+                        \system_cron_configure();
                         return ['status' => 'success', 'message' => $msg];
                     }
                 }
 
-                system_cron_configure();
+                \system_cron_configure();
                 return ['status' => 'success', 'message' => gettext("Settings configured.")];
             } else {
                 return ['status' => 'failed', 'message' => implode(", ", $input_errors)];
@@ -483,7 +483,7 @@ class BackupController extends ApiControllerBase
 
         try {
             file_put_contents($tmpxml, $new_contents);
-            $xml = load_config_from_file($tmpxml);
+            $xml = \load_config_from_file($tmpxml);
         } catch (\Exception $e) { }
 
         @unlink($tmpxml);
@@ -564,8 +564,8 @@ class BackupController extends ApiControllerBase
         }
 
         if (count($restored) && !count($failed)) {
-            write_config(sprintf('Restored sections (%s) of config file', join(',', $restored)));
-            convert_config();
+            \write_config(sprintf('Restored sections (%s) of config file', join(',', $restored)));
+            \convert_config();
         }
 
         return $failed;
