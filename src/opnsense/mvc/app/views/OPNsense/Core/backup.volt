@@ -56,15 +56,43 @@
                     return;
                 }
             }
-            // POST via hidden form to keep password out of URL/logs
-            let form = $('<form method="POST" action="/api/core/backup/downloadThis" target="_blank" style="display:none"></form>');
-            form.append($('<input type="hidden" name="_csrf_token">').val($('meta[name="csrf-token"]').attr("content")));
-            $.each(params, function(key, val) {
-                form.append($('<input type="hidden">').attr('name', key).val(val));
+
+            $("#btn_download_progress").addClass("fa fa-spinner fa-pulse");
+
+            $.ajax({
+                type: "POST",
+                url: "/api/core/backup/downloadThis",
+                data: params,
+                xhrFields: {
+                    responseType: 'blob' // Force jQuery to treat response as binary
+                },
+                success: function(data, status, xhr) {
+                    $("#btn_download_progress").removeClass("fa fa-spinner fa-pulse");
+
+                    // Extract filename from Content-Disposition header
+                    var filename = "config.xml";
+                    var disposition = xhr.getResponseHeader('Content-Disposition');
+                    if (disposition && disposition.indexOf('filename=') !== -1) {
+                        var matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+                        if (matches != null && matches[1]) {
+                            filename = matches[1].replace(/['"]/g, '');
+                        }
+                    }
+
+                    // Create a hidden link, attach the blob, and click it
+                    var blob = new Blob([data], { type: xhr.getResponseHeader('Content-Type') });
+                    var link = document.createElement('a');
+                    link.href = window.URL.createObjectURL(blob);
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                },
+                error: function() {
+                    $("#btn_download_progress").removeClass("fa fa-spinner fa-pulse");
+                    BootstrapDialog.alert({ type: BootstrapDialog.TYPE_DANGER, title: "{{ lang._('Error') }}", message: "{{ lang._('An error occurred during download.') }}" });
+                }
             });
-            $('body').append(form);
-            form.submit();
-            form.remove();
         });
 
         $("#encrypt").change(function(){
