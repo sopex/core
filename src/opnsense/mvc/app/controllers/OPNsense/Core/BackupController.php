@@ -42,19 +42,8 @@ class BackupController extends \OPNsense\Base\IndexController
         $backupFactory = new \OPNsense\Backup\BackupFactory();
         $this->view->providers = $backupFactory->listProviders();
 
-        $form = $this->getForm("backup");
-
-        // Only expose pushtime when at least one provider plugin is installed
-        if (empty($this->view->providers) && isset($form['tabs'])) {
-            foreach ($form['tabs'] as $tabId => $tab) {
-                foreach ($tab as $idx => $field) {
-                    if (($field['id'] ?? '') === 'backup.pushtime') {
-                        unset($form['tabs'][$tabId][$idx]);
-                    }
-                }
-            }
-        }
-        $this->view->backupForm = $form;
+        $this->view->backupLocalForm = $this->getForm("backup_local");
+        $this->view->backupRemoteForm = $this->getForm("backup_remote");
 
         $areas = [
             'bridges'   => gettext('Bridge Devices'),
