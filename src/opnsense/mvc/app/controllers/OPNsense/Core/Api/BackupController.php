@@ -31,6 +31,7 @@ namespace OPNsense\Core\Api;
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
+use OPNsense\Core\Shell;
 use OPNsense\Backup\Local;
 
 /**
@@ -260,8 +261,8 @@ class BackupController extends ApiControllerBase
                     }
                     $config->system->backuppushtime = $pushtime;
                 }
-                require_once("system.inc");
-                system_cron_configure();
+                (new Backend())->configdRun('template reload OPNsense/Cron');
+                (new Backend())->configdRun('cron restart');
             }
 
             require_once("config.inc");
