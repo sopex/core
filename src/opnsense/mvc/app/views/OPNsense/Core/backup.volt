@@ -254,7 +254,9 @@
 <div class="tab-content content-box col-xs-12 __mb">
     <div id="localbackup" class="tab-pane fade in active">
         {{ partial("layout_partials/base_form",['fields':backupLocalForm,'id':'frm_backupSettingsLocal', 'apply_btn_id':'btn_save_local', 'apply_btn_title': lang._('Save')])}}
-        <hr/>
+
+<div class="tab-content content-box __mb">
+    <div id="localbackup" class="tab-pane fade in active">
         <div class="table-responsive">
             <table class="table table-striped table-condensed">
                 <tbody>
@@ -263,7 +265,6 @@
                         <td style="width: 78%"></td>
                     </tr>
                     <tr>
-                        <td></td>
                         <td>
                             <input name="donotbackuprrd" type="checkbox" id="donotbackuprrd" checked="checked" />
                             {{ lang._('Do not backup RRD data.') }}<br/>
@@ -284,7 +285,6 @@
                         </td>
                     </tr>
                     <tr>
-                        <td></td>
                         <td>
                             <button class="btn btn-primary" id="btn_download">{{ lang._('Download configuration') }} <i id="btn_download_progress"></i></button>
                             <div class="text-muted __mt">{{ lang._('Click this button to download the system configuration in XML format.') }}</div>
