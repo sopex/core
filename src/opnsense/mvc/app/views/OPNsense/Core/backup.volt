@@ -402,11 +402,7 @@
 
     <div id="remotebackup" class="tab-pane fade in">
         <div class="content-box __mb">
-            {{ partial("layout_partials/base_form",['fields':backupLocalForm,'id':'frm_backupSettingsLocal', 'apply_btn_id':'btn_save_local', 'apply_btn_title': lang._('Save')]) }}
-            <div class="alert alert-info __mt" role="alert" style="margin: 15px;">
-                {{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}
-                <strong>{{ lang._('Current space used:') }} {{ backupSize | default('0 MB') }}</strong>
-            </div>
+            {{ partial("layout_partials/base_form",['fields':backupRemoteForm,'id':'frm_backupSettingsRemote', 'apply_btn_id':'btn_save_remote', 'apply_btn_title': lang._('Save')]) }}
         </div>
 
         {% if providers|length > 0 %}

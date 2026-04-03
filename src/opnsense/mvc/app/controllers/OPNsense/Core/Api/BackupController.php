@@ -254,8 +254,7 @@ class BackupController extends ApiControllerBase
                         $logMessages[] = "Changed local backup count to {$count}";
                     }
                 } else {
-                    'status' => 'failed',
-                    'validations' => ['backup.backupcount' => gettext('Backup count must be between 0 and 999.')]
+                    return ['status' => 'failed', 'message' => gettext('Backup count must be greater than zero.')];
                 }
             }
 
@@ -269,8 +268,7 @@ class BackupController extends ApiControllerBase
                     }
                 } else {
                     if (!preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $pushtime)) {
-                        'status' => 'failed',
-                        'validations' => ['backup.pushtime' => gettext('Push time must be in HH:MM format.')]
+                        return ['status' => 'failed', 'message' => gettext('Push time must be in HH:MM format.')];
                     }
                     if (!isset($config->system->backuppushtime) || (string)$config->system->backuppushtime !== $pushtime) {
                         $config->system->backuppushtime = $pushtime;
