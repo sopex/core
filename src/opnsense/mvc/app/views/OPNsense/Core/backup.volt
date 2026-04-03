@@ -281,12 +281,50 @@
 
         <div class="content-box __mb">
             {{ partial("layout_partials/base_form",['fields':backupLocalForm,'id':'frm_backupSettingsLocal', 'apply_btn_id':'btn_save_local', 'apply_btn_title': lang._('Save')]) }}
-
             <div class="alert alert-info __mt" role="alert" style="margin: 15px;">
                 {{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}
                 <strong>{{ lang._('Current space used:') }} {{ backupSize | default('0 MB') }}</strong>
             </div>
         </div>
+
+        <div class="content-box __mb">
+            <table class="table table-striped table-condensed">
+                <thead>
+                    <tr>
+                        <th>{{ lang._('Download') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <input name="donotbackuprrd" type="checkbox" id="donotbackuprrd" checked="checked" />
+                            {{ lang._('Do not backup RRD data.') }}<br/>
+                            <input name="encrypt" type="checkbox" id="encrypt" />
+                            {{ lang._('Encrypt this configuration file.') }}<br/>
+                            <div class="hidden __mt" id="encrypt_opts">
+                                <table class="table table-condensed">
+                                    <tr>
+                                        <td style="width:150px">{{ lang._('Password') }}</td>
+                                        <td><input id="encrypt_password" type="password" autocomplete="new-password"/></td>
+                                    </tr>
+                                    <tr>
+                                        <td>{{ lang._('Confirmation') }}</td>
+                                        <td><input id="encrypt_passconf" type="password" autocomplete="new-password"/></td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <button class="btn btn-primary" id="btn_download">{{ lang._('Download configuration') }} <i id="btn_download_progress"></i></button>
+                            <div class="text-muted __mt">{{ lang._('Click this button to download the system configuration in XML format.') }}</div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
         <div class="content-box __mb">
             <table class="table table-striped table-condensed">
