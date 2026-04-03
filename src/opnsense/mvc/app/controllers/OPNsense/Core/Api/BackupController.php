@@ -225,11 +225,8 @@ class BackupController extends ApiControllerBase
             $result['backup']['backupcount'] = (string)$config->system->backupcount;
         }
 
-        if (isset($config->system->backuppushtime)) {
-            $result['backup']['pushtime'] = (string)$config->system->backuppushtime;
-        } else {
-            $result['backup']['pushtime'] = '02:00';
-        }
+        $result['backup']['pushtime'] = (string)($config->system->backuppushtime ?? '02:00');
+        $result['backup']['backupcount'] = (string)($config->system->backupcount ?? null);
 
         return $result;
     }
@@ -263,8 +260,9 @@ class BackupController extends ApiControllerBase
                     }
                     $config->system->backuppushtime = $pushtime;
                 }
-                (new Backend())->configdRun('template reload OPNsense/Cron');
-                (new Backend())->configdRun('cron restart');
+                $backend = new Backend();
+                $backend->configdRun('template reload OPNsense/Cron');
+                $backend->configdRun('cron restart');
             }
 
             Config::getInstance()->save('Changed local backup settings');
@@ -310,7 +308,7 @@ class BackupController extends ApiControllerBase
 
     public function restoreAction()
     {
-        if ($this->request->isPost() && !empty($_FILES['conffile']['tmp_name'])) {
+        if ($this->request->isPost() && $this->request->hasFiles()) {
             require_once("config.inc");
             require_once("util.inc");
             require_once("interfaces.inc");
@@ -319,10 +317,22 @@ class BackupController extends ApiControllerBase
             require_once("system.inc");
             require_once("console.inc");
 
-            $data = file_get_contents($_FILES['conffile']['tmp_name']);
+            $conffile = null;
+            foreach ($this->request->getUploadedFiles() as $file) {
+                if ($file->getKey() === 'conffile') {
+                    $conffile = $file;
+                    break;
+                }
+            }
+
+            if (!$conffile || empty($conffile->getTempName())) {
+                return ['status' => 'failed', 'message' => 'No files uploaded'];
+            }
+
+            $data = file_get_contents($conffile->getTempName());
 
             if (empty($data)) {
-                return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $_FILES['conffile']['name'])];
+                return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $conffile->getName())];
             }
 
             if (!empty($this->request->getPost('decrypt'))) {
@@ -434,10 +444,18 @@ class BackupController extends ApiControllerBase
 
             $providerSet = array();
             $post = $this->request->getPost();
+
+            $uploadedFiles = [];
+            if ($this->request->hasFiles()) {
+                foreach ($this->request->getUploadedFiles() as $file) {
+                    $uploadedFiles[$file->getKey()] = $file;
+                }
+            }
+
             foreach ($provider['handle']->getConfigurationFields() as $field) {
                 if ($field['type'] == 'file') {
-                    if (!empty($_FILES[$field['name']]['tmp_name'])) {
-                        $providerSet[$field['name']] = file_get_contents($_FILES[$field['name']]['tmp_name']);
+                    if (isset($uploadedFiles[$field['name']]) && !empty($uploadedFiles[$field['name']]->getTempName())) {
+                        $providerSet[$field['name']] = file_get_contents($uploadedFiles[$field['name']]->getTempName());
                     } else {
                         $providerSet[$field['name']] = null;
                     }
@@ -490,7 +508,9 @@ class BackupController extends ApiControllerBase
         try {
             file_put_contents($tmpxml, $new_contents);
             $xml = \load_config_from_file($tmpxml);
-        } catch (\Exception $e) { }
+        } catch (\Exception $e) {
+            syslog(LOG_ERR, 'Backup restoration failed to parse XML: ' . $e->getMessage());
+        }
 
         @unlink($tmpxml);
 
