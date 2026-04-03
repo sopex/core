@@ -29,8 +29,11 @@
 namespace OPNsense\Core\Api;
 
 use OPNsense\Base\ApiControllerBase;
+use OPNsense\Base\UserException;
+use OPNsense\Core\ACL;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
+use OPNsense\Core\Shell;
 use OPNsense\Backup\Local;
 
 /**
