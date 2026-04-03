@@ -36,15 +36,25 @@
         });
 
         // link save button
-        $("#btn_save_local").click(function () {
+        $("#btn_save_local").click(function (e) {
+            e.preventDefault();
+            if ($(this).find("i").length === 0) { $(this).append(" <i></i>"); }
+            let btnIcon = $(this).find('i');
+            btnIcon.removeClass().addClass("fa fa-spinner fa-pulse");
             saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsLocal', function () {
-                // success
+                btnIcon.removeClass().addClass("fa fa-check");
+                setTimeout(function(){ btnIcon.removeClass(); }, 2000);
             }, true);
         });
 
-        $("#btn_save_remote").click(function () {
+        $("#btn_save_remote").click(function (e) {
+            e.preventDefault();
+            if ($(this).find("i").length === 0) { $(this).append(" <i></i>"); }
+            let btnIcon = $(this).find('i');
+            btnIcon.removeClass().addClass("fa fa-spinner fa-pulse");
             saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsRemote', function () {
-                // success
+                btnIcon.removeClass().addClass("fa fa-check");
+                setTimeout(function(){ btnIcon.removeClass(); }, 2000);
             }, true);
         });
 
@@ -270,180 +280,197 @@
     <div id="localbackup" class="tab-pane fade in active">
 
         <div class="content-box __mb">
-            {{ partial("layout_partials/base_form",['fields':backupLocalForm,'id':'frm_backupSettingsLocal', 'apply_btn_id':'btn_save_local', 'apply_btn_title': lang._('Save')]) }}
+            <form id="frm_backupSettingsLocal">
+                <table class="table table-striped table-condensed">
+                    <thead>
+                        <tr>
+                            <th>{{ lang._('Backup Count') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <input name="backup[backupcount]" type="text" id="backup.backupcount" class="form-control" placeholder="15" style="max-width: 300px;"/>
+                                <div class="text-muted __mt">{{ lang._('Enter the number of older configurations to keep in the local backup cache.') }}</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <button class="btn btn-primary" id="btn_save_local">{{ lang._('Save') }}</button>
+                                <span class="text-muted" style="margin-left: 15px;">
+                                    {{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}
+                                    <strong>{{ lang._('Current space used:') }} {{ backupSize }}</strong>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </form>
         </div>
 
         <div class="content-box __mb">
-            <div class="row">
-                <div class="col-xs-12">
-                    <table class="table table-striped table-condensed">
-                        <thead>
-                            <tr>
-                                <th>{{ lang._('Download') }}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>
-                                    <input name="donotbackuprrd" type="checkbox" id="donotbackuprrd" checked="checked" />
-                                    {{ lang._('Do not backup RRD data.') }}<br/>
-                                    <input name="encrypt" type="checkbox" id="encrypt" />
-                                    {{ lang._('Encrypt this configuration file.') }}<br/>
-                                    <div class="hidden __mt" id="encrypt_opts">
-                                        <table class="table table-condensed">
-                                            <tr>
-                                                <td>{{ lang._('Password') }}</td>
-                                                <td><input id="encrypt_password" type="password" autocomplete="new-password"/></td>
-                                            </tr>
-                                            <tr>
-                                                <td>{{ lang._('Confirmation') }}</td>
-                                                <td><input id="encrypt_passconf" type="password" autocomplete="new-password"/></td>
-                                            </tr>
-                                        </table>
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>
-                                    <button class="btn btn-primary" id="btn_download">{{ lang._('Download configuration') }} <i id="btn_download_progress"></i></button>
-                                    <div class="text-muted __mt">{{ lang._('Click this button to download the system configuration in XML format.') }}</div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-<div id="restore" class="tab-pane fade in">
-    <form id="frm_restore" enctype="multipart/form-data">
-        <div class="table-responsive">
             <table class="table table-striped table-condensed">
+                <thead>
+                    <tr>
+                        <th>{{ lang._('Download') }}</th>
+                    </tr>
+                </thead>
                 <tbody>
-                <tr>
-                    <td style="width: 22%"><strong>{{ lang._('Restore') }}</strong></td>
-                    <td style="width: 78%"></td>
-                </tr>
-                <tr>
-                    <td>{{ lang._('Restore areas:') }}</td>
-                    <td>
-                        <select name="restorearea[]" id="restorearea" class="selectpicker" multiple="multiple" size="5"
-                                title="{{ lang._('All (recommended)') }}" data-live-search="true" data-size="10">
-                            {% for areaId, areaDescription in areas %}
-                                <option value="{{ areaId }}">{{ areaDescription }}</option>
-                            {% endfor %}
-                        </select>
-                        <br/><input name="conffile" type="file" id="conffile"/><br/>
-                        <input name="rebootafterrestore" type="checkbox" value="1" id="rebootafterrestore"
-                               checked="checked"/>
-                        {{ lang._('Reboot after a successful restore.') }}<br/>
-                        <input name="keepconsole" type="checkbox" value="1" id="keepconsole" checked="checked"/>
-                        {{ lang._('Exclude console settings from import.') }}<br/>
-                        <input name="flush_history" type="checkbox" value="1" id="flush_history" checked="checked"/>
-                        {{ lang._('Flush (full) local configuration history.') }}<br/>
-
-                        <input name="decrypt" type="checkbox" value="1" id="decrypt"/>
-                        {{ lang._('Configuration file is encrypted.') }}
-                        <div class="hidden table-responsive __mt" id="decrypt_opts">
-                            <table class="table table-condensed">
-                                <tr>
-                                    <td>{{ lang._('Password') }}</td>
-                                    <td><input name="decrypt_password" type="password" autocomplete="new-password"/>
-                                    </td>
-                                </tr>
-                            </table>
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <td></td>
-                    <td>
-                        <button type="submit" class="btn btn-primary"
-                                id="btn_restore">{{ lang._('Restore configuration') }} <i id="btn_restore_progress"></i>
-                        </button>
-                        <div
-                            class="text-muted __mt">{{ lang._('Open a configuration XML file and click the button below to restore the configuration.') }}</div>
-                    </td>
-                </tr>
+                    <tr>
+                        <td>
+                            <input name="donotbackuprrd" type="checkbox" id="donotbackuprrd" checked="checked" />
+                            {{ lang._('Do not backup RRD data.') }}<br/>
+                            <input name="encrypt" type="checkbox" id="encrypt" />
+                            {{ lang._('Encrypt this configuration file.') }}<br/>
+                            <div class="hidden __mt" id="encrypt_opts">
+                                <table class="table table-condensed">
+                                    <tr>
+                                        <td style="width:150px">{{ lang._('Password') }}</td>
+                                        <td><input id="encrypt_password" type="password" autocomplete="new-password"/></td>
+                                    </tr>
+                                    <tr>
+                                        <td>{{ lang._('Confirmation') }}</td>
+                                        <td><input id="encrypt_passconf" type="password" autocomplete="new-password"/></td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <button class="btn btn-primary" id="btn_download">{{ lang._('Download configuration') }} <i id="btn_download_progress"></i></button>
+                            <div class="text-muted __mt">{{ lang._('Click this button to download the system configuration in XML format.') }}</div>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>
-    </form>
-</div>
+    </div>
 
-<div id="remotebackup" class="tab-pane fade in">
-    {{ partial("layout_partials/base_form",['fields':backupRemoteForm,'id':'frm_backupSettingsRemote', 'apply_btn_id':'btn_save_remote', 'apply_btn_title': lang._('Save')]) }}
+    <div id="restore" class="tab-pane fade in">
+        <form id="frm_restore" enctype="multipart/form-data">
+            <div class="content-box __mb">
+                <table class="table table-striped table-condensed">
+                    <thead>
+                        <tr>
+                            <th>{{ lang._('Restore') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>
+                            <div class="__mb">
+                                <strong>{{ lang._('Restore areas:') }}</strong>
+                            </div>
+                            <div class="__mb">
+                                <select name="restorearea[]" id="restorearea" class="selectpicker" multiple="multiple" size="5" title="{{ lang._('All (recommended)') }}" data-live-search="true" data-size="10">
+                                    {% for areaId, areaDescription in areas %}
+                                        <option value="{{ areaId }}">{{ areaDescription }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="__mb __mt">
+                                <input name="conffile" type="file" id="conffile"/>
+                            </div>
+                            <div class="__mb">
+                                <input name="rebootafterrestore" type="checkbox" value="1" id="rebootafterrestore" checked="checked"/>
+                                {{ lang._('Reboot after a successful restore.') }}<br/>
+                                <input name="keepconsole" type="checkbox" value="1" id="keepconsole" checked="checked"/>
+                                {{ lang._('Exclude console settings from import.') }}<br/>
+                                <input name="flush_history" type="checkbox" value="1" id="flush_history" checked="checked"/>
+                                {{ lang._('Flush (full) local configuration history.') }}<br/>
+                                <input name="decrypt" type="checkbox" value="1" id="decrypt"/>
+                                {{ lang._('Configuration file is encrypted.') }}
+                            </div>
+                            <div class="hidden __mt" id="decrypt_opts">
+                                <strong>{{ lang._('Encryption Password:') }}</strong><br/>
+                                <input name="decrypt_password" type="password" autocomplete="new-password" style="margin-top: 5px;"/>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <button type="submit" class="btn btn-primary" id="btn_restore">{{ lang._('Restore configuration') }} <i id="btn_restore_progress"></i></button>
+                            <div class="text-muted __mt">{{ lang._('Open a configuration XML file and click the button below to restore the configuration.') }}</div>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </form>
+    </div>
 
-    {% if providers|length > 0 %}
-        <hr/>
-        {% for providerId, provider in providers %}
-            <form id="frm_provider_{{ providerId }}" enctype="multipart/form-data">
-                <div class="table-responsive {% if not loop.first %}__mt{% endif %}">
-                    <table class="table table-striped table-condensed opnsense_standard_table_form">
-                        <tbody>
-                        <tr>
-                            <td style="width: 22%"><strong>{{ provider['handle'].getName() }}</strong></td>
-                            <td style="width: 78%"></td>
-                        </tr>
-                        {% for field in provider['handle'].getConfigurationFields() %}
-                            {% set fieldId = providerId ~ "_" ~ field['name'] %}
-                            <tr>
-                                <td>
-                                    {% if field['help'] is defined and field['help'] is not empty %}
-                                        <a id="help_for_{{ fieldId }}" href="#" class="showhelp"><i
-                                                class="fa fa-info-circle"></i></a>
-                                    {% else %}
-                                        <i class="fa fa-info-circle text-muted"></i>
-                                    {% endif %}
-                                    {{ field['label'] }}
-                                </td>
-                                <td>
-                                    {% if field['type'] == 'checkbox' %}
-                                        <input name="{{ field['name'] }}" type="checkbox"
-                                               {% if field['value'] %}checked="checked"{% endif %}>
-                                    {% elseif field['type'] == 'text' %}
-                                        <input name="{{ field['name'] }}" value="{{ field['value'] }}" type="text">
-                                    {% elseif field['type'] == 'file' %}
-                                        <input name="{{ field['name'] }}" type="file">
-                                    {% elseif field['type'] == 'password' %}
-                                        <input name="{{ field['name'] }}" type="password" autocomplete="new-password"
-                                               value="{{ field['value'] }}"/>
-                                    {% elseif field['type'] == 'textarea' %}
-                                        <textarea name="{{ field['name'] }}" rows="10">{{ field['value'] }}</textarea>
-                                    {% elseif field['type'] == 'passwordarea' %}
-                                        <div id="show-{{ fieldId }}-btn">
-                                            <button onclick="event.preventDefault();show_value('{{ fieldId }}');"
-                                                    class="btn btn-default">{{ lang._('Click to edit') }}</button>
-                                        </div>
-                                        <div id="show-{{ fieldId }}-val" style="display:none">
-                                            <textarea id="{{ fieldId }}" name="{{ field['name'] }}" rows="10"
-                                                      style="min-width: 348px;">{{ field['value'] }}</textarea>
-                                        </div>
-                                    {% endif %}
-                                    <div class="hidden" data-for="help_for_{{ fieldId }}">
-                                        {{ field['help'] }}
-                                    </div>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                        <tr>
-                            <td></td>
-                            <td>
-                                <button type="button" data-provider="{{ providerId }}"
-                                        class="btn btn-primary btn_setup_provider">
-                                    {{ lang._('Setup/Test %s') | format(provider['handle'].getName()) }} <i
-                                        id="frm_provider_{{ providerId }}_progress"></i>
-                                </button>
-                            </td>
-                        </tr>
-                        </tbody>
-                    </table>
+    <div id="remotebackup" class="tab-pane fade in">
+        <div class="content-box __mb">
+            {{ partial("layout_partials/base_form",['fields':backupRemoteForm,'id':'frm_backupSettingsRemote', 'apply_btn_id':'btn_save_remote', 'apply_btn_title': lang._('Save')]) }}
+        </div>
+
+        {% if providers|length > 0 %}
+            <div class="row">
+            {% for providerId, provider in providers %}
+                <div class="col-md-6 col-xs-12 __mb">
+                    <div class="content-box" style="height: 100%;">
+                        <form id="frm_provider_{{ providerId }}" enctype="multipart/form-data">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-condensed opnsense_standard_table_form">
+                                    <thead>
+                                        <tr>
+                                            <th colspan="2">{{ provider['handle'].getName() }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for field in provider['handle'].getConfigurationFields() %}
+                                        {% set fieldId = providerId ~ "_" ~ field['name'] %}
+                                        <tr>
+                                            <td style="width: 35%">
+                                                {% if field['help'] is defined and field['help'] is not empty %}
+                                                    <a id="help_for_{{ fieldId }}" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a>
+                                                {% else %}
+                                                    <i class="fa fa-info-circle text-muted"></i>
+                                                {% endif %}
+                                                {{ field['label'] }}
+                                            </td>
+                                            <td style="width: 65%">
+                                                {% if field['type'] == 'checkbox' %}
+                                                    <input name="{{ field['name'] }}" type="checkbox" {% if field['value'] %}checked="checked"{% endif %}>
+                                                {% elseif field['type'] == 'text' %}
+                                                    <input class="form-control" name="{{ field['name'] }}" value="{{ field['value'] }}" type="text">
+                                                {% elseif field['type'] == 'file' %}
+                                                    <input name="{{ field['name'] }}" type="file">
+                                                {% elseif field['type'] == 'password' %}
+                                                    <input class="form-control" name="{{ field['name'] }}" type="password" autocomplete="new-password" value="{{ field['value'] }}"/>
+                                                {% elseif field['type'] == 'textarea' %}
+                                                    <textarea class="form-control" name="{{ field['name'] }}" rows="5">{{ field['value'] }}</textarea>
+                                                {% elseif field['type'] == 'passwordarea' %}
+                                                    <div id="show-{{ fieldId }}-btn">
+                                                        <button onclick="event.preventDefault();show_value('{{ fieldId }}');" class="btn btn-default">{{ lang._('Click to edit') }}</button>
+                                                    </div>
+                                                    <div id="show-{{ fieldId }}-val" style="display:none">
+                                                        <textarea id="{{ fieldId }}" class="form-control" name="{{ field['name'] }}" rows="5">{{ field['value'] }}</textarea>
+                                                    </div>
+                                                {% endif %}
+                                                <div class="hidden" data-for="help_for_{{ fieldId }}">
+                                                    {{ field['help'] }}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    <tr>
+                                        <td></td>
+                                        <td>
+                                            <button type="button" data-provider="{{ providerId }}" class="btn btn-primary btn_setup_provider">
+                                                {{ lang._('Setup/Test %s') | format(provider['handle'].getName()) }} <i id="frm_provider_{{ providerId }}_progress"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-            </form>
-            {% if not loop.last %}
-                <hr/>{% endif %}
-        {% endfor %}
-    {% endif %}
-</div>
+            {% endfor %}
+            </div>
+        {% endif %}
+    </div>
 </div>
