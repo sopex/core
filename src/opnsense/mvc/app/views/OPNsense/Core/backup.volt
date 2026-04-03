@@ -37,26 +37,15 @@
 
         // link save button
         $("#btn_save_local").click(function () {
-            $("#frm_backupSettingsLocal_progress").addClass("fa fa-spinner fa-pulse");
             saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsLocal', function () {
-                $("#frm_backupSettingsLocal_progress").removeClass("fa fa-spinner fa-pulse").addClass("fa fa-check");
-                setTimeout(function () {
-                    $("#frm_backupSettingsLocal_progress").removeClass("fa fa-check");
-                }, 4000);
-            }, true, function() {
-                $("#frm_backupSettingsLocal_progress").removeClass("fa fa-spinner fa-pulse");
-            });
-        let space_info = $("#local_backup_space_info").html();
-        $("#btn_save_local").parent().append(space_info);
-            $("#frm_backupSettingsRemote_progress").addClass("fa fa-spinner fa-pulse");
+                // success
+            }, true);
+        });
+
+        $("#btn_save_remote").click(function () {
             saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsRemote', function () {
-                $("#frm_backupSettingsRemote_progress").removeClass("fa fa-spinner fa-pulse").addClass("fa fa-check");
-                setTimeout(function () {
-                    $("#frm_backupSettingsRemote_progress").removeClass("fa fa-check");
-                }, 4000);
-            }, true, function() {
-                $("#frm_backupSettingsRemote_progress").removeClass("fa fa-spinner fa-pulse");
-            });
+                // success
+            }, true);
         });
 
         $("#btn_download").click(function (e) {
@@ -271,15 +260,6 @@
     }
 </script>
 
-<div id="local_backup_space_info" style="display:none;">
-    <span class='text-muted' style='margin-left: 10px;'>
-        {{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}
-        {% if backupFootprint != '' %}
-        {{ backupFootprint }}
-        {% endif %}
-    </span>
-</div>
-
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
     <li class="active"><a data-toggle="tab" href="#localbackup">{{ lang._('Local Backup') }}</a></li>
     <li><a data-toggle="tab" href="#remotebackup">{{ lang._('Remote Backup') }}</a></li>
@@ -354,12 +334,7 @@
                                 <option value="{{ areaId }}">{{ areaDescription }}</option>
                             {% endfor %}
                         </select>
-                    </td>
-                </tr>
-                <tr>
-                    <td>{{ lang._('Configuration file:') }}</td>
-                    <td>
-                        <input name="conffile" type="file" id="conffile"/><br/>
+                        <br/><input name="conffile" type="file" id="conffile"/><br/>
                         <input name="rebootafterrestore" type="checkbox" value="1" id="rebootafterrestore"
                                checked="checked"/>
                         {{ lang._('Reboot after a successful restore.') }}<br/>
@@ -398,82 +373,77 @@
 </div>
 
 <div id="remotebackup" class="tab-pane fade in">
-    <div class="content-box __mb">
-        {{ partial("layout_partials/base_form",['fields':backupRemoteForm,'id':'frm_backupSettingsRemote', 'apply_btn_id':'btn_save_remote', 'apply_btn_title': lang._('Save')]) }}
-    </div>
+    {{ partial("layout_partials/base_form",['fields':backupRemoteForm,'id':'frm_backupSettingsRemote', 'apply_btn_id':'btn_save_remote', 'apply_btn_title': lang._('Save')]) }}
 
     {% if providers|length > 0 %}
-        <div class="row">
+        <hr/>
         {% for providerId, provider in providers %}
-            <div class="col-md-6">
-                <div class="content-box __mb">
-                    <form id="frm_provider_{{ providerId }}" enctype="multipart/form-data">
-                        <div class="table-responsive">
-                            <table class="table table-striped table-condensed opnsense_standard_table_form">
-                                <tbody>
-                                <tr>
-                                    <td style="width: 22%"><strong>{{ provider['handle'].getName() }}</strong></td>
-                                    <td style="width: 78%"></td>
-                                </tr>
-                                {% for field in provider['handle'].getConfigurationFields() %}
-                                    {% set fieldId = providerId ~ "_" ~ field['name'] %}
-                                    <tr>
-                                        <td>
-                                            {% if field['help'] is defined and field['help'] is not empty %}
-                                                <a id="help_for_{{ fieldId }}" href="#" class="showhelp"><i
-                                                        class="fa fa-info-circle"></i></a>
-                                            {% else %}
-                                                <i class="fa fa-info-circle text-muted"></i>
-                                            {% endif %}
-                                            {{ field['label'] }}
-                                        </td>
-                                        <td>
-                                            {% if field['type'] == 'checkbox' %}
-                                                <input name="{{ field['name'] }}" type="checkbox"
-                                                       {% if field['value'] %}checked="checked"{% endif %}>
-                                            {% elseif field['type'] == 'text' %}
-                                                <input name="{{ field['name'] }}" value="{{ field['value'] }}" type="text">
-                                            {% elseif field['type'] == 'file' %}
-                                                <input name="{{ field['name'] }}" type="file">
-                                            {% elseif field['type'] == 'password' %}
-                                                <input name="{{ field['name'] }}" type="password" autocomplete="new-password"
-                                                       value="{{ field['value'] }}"/>
-                                            {% elseif field['type'] == 'textarea' %}
-                                                <textarea name="{{ field['name'] }}" rows="10">{{ field['value'] }}</textarea>
-                                            {% elseif field['type'] == 'passwordarea' %}
-                                                <div id="show-{{ fieldId }}-btn">
-                                                    <button onclick="event.preventDefault();show_value('{{ fieldId }}');"
-                                                            class="btn btn-default">{{ lang._('Click to edit') }}</button>
-                                                </div>
-                                                <div id="show-{{ fieldId }}-val" style="display:none">
-                                                    <textarea id="{{ fieldId }}" name="{{ field['name'] }}" rows="10"
-                                                              style="min-width: 348px;">{{ field['value'] }}</textarea>
-                                                </div>
-                                            {% endif %}
-                                            <div class="hidden" data-for="help_for_{{ fieldId }}">
-                                                {{ field['help'] }}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                                <tr>
-                                    <td></td>
-                                    <td>
-                                        <button type="button" data-provider="{{ providerId }}"
-                                                class="btn btn-primary btn_setup_provider">
-                                            {{ lang._('Setup/Test %s') | format(provider['handle'].getName()) }} <i
-                                                id="frm_provider_{{ providerId }}_progress"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </form>
+            <form id="frm_provider_{{ providerId }}" enctype="multipart/form-data">
+                <div class="table-responsive {% if not loop.first %}__mt{% endif %}">
+                    <table class="table table-striped table-condensed opnsense_standard_table_form">
+                        <tbody>
+                        <tr>
+                            <td style="width: 22%"><strong>{{ provider['handle'].getName() }}</strong></td>
+                            <td style="width: 78%"></td>
+                        </tr>
+                        {% for field in provider['handle'].getConfigurationFields() %}
+                            {% set fieldId = providerId ~ "_" ~ field['name'] %}
+                            <tr>
+                                <td>
+                                    {% if field['help'] is defined and field['help'] is not empty %}
+                                        <a id="help_for_{{ fieldId }}" href="#" class="showhelp"><i
+                                                class="fa fa-info-circle"></i></a>
+                                    {% else %}
+                                        <i class="fa fa-info-circle text-muted"></i>
+                                    {% endif %}
+                                    {{ field['label'] }}
+                                </td>
+                                <td>
+                                    {% if field['type'] == 'checkbox' %}
+                                        <input name="{{ field['name'] }}" type="checkbox"
+                                               {% if field['value'] %}checked="checked"{% endif %}>
+                                    {% elseif field['type'] == 'text' %}
+                                        <input name="{{ field['name'] }}" value="{{ field['value'] }}" type="text">
+                                    {% elseif field['type'] == 'file' %}
+                                        <input name="{{ field['name'] }}" type="file">
+                                    {% elseif field['type'] == 'password' %}
+                                        <input name="{{ field['name'] }}" type="password" autocomplete="new-password"
+                                               value="{{ field['value'] }}"/>
+                                    {% elseif field['type'] == 'textarea' %}
+                                        <textarea name="{{ field['name'] }}" rows="10">{{ field['value'] }}</textarea>
+                                    {% elseif field['type'] == 'passwordarea' %}
+                                        <div id="show-{{ fieldId }}-btn">
+                                            <button onclick="event.preventDefault();show_value('{{ fieldId }}');"
+                                                    class="btn btn-default">{{ lang._('Click to edit') }}</button>
+                                        </div>
+                                        <div id="show-{{ fieldId }}-val" style="display:none">
+                                            <textarea id="{{ fieldId }}" name="{{ field['name'] }}" rows="10"
+                                                      style="min-width: 348px;">{{ field['value'] }}</textarea>
+                                        </div>
+                                    {% endif %}
+                                    <div class="hidden" data-for="help_for_{{ fieldId }}">
+                                        {{ field['help'] }}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        <tr>
+                            <td></td>
+                            <td>
+                                <button type="button" data-provider="{{ providerId }}"
+                                        class="btn btn-primary btn_setup_provider">
+                                    {{ lang._('Setup/Test %s') | format(provider['handle'].getName()) }} <i
+                                        id="frm_provider_{{ providerId }}_progress"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
                 </div>
-            </div>
+            </form>
+            {% if not loop.last %}
+                <hr/>{% endif %}
         {% endfor %}
-        </div>
     {% endif %}
 </div>
 </div>
