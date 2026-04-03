@@ -251,11 +251,13 @@
     <li><a data-toggle="tab" href="#remotebackup">{{ lang._('Remote Backup') }}</a></li>
     <li><a data-toggle="tab" href="#restore">{{ lang._('Restore') }}</a></li>
 </ul>
+
 <div class="tab-content content-box col-xs-12 __mb">
     <div id="localbackup" class="tab-pane fade in active">
         {{ partial("layout_partials/base_form",['fields':backupLocalForm,'id':'frm_backupSettingsLocal', 'apply_btn_id':'btn_save_local', 'apply_btn_title': lang._('Save')])}}
-
-<div class="tab-content content-box __mb">
+    </div>
+</div>
+<div class="tab-content content-box col-xs-12 ">
     <div id="localbackup" class="tab-pane fade in active">
         <div class="table-responsive">
             <table class="table table-striped table-condensed">
