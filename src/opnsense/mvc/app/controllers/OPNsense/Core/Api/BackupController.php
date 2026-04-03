@@ -236,12 +236,23 @@ class BackupController extends ApiControllerBase
             $post = $this->request->getPost('backup');
             $config = Config::getInstance()->object();
 
+            $configChanged = false;
+            $logMessages = [];
+
             if (isset($post['backupcount'])) {
                 $count = trim($post['backupcount']);
                 if ($count === '') {
-                    unset($config->system->backupcount);
+                    if (isset($config->system->backupcount)) {
+                        unset($config->system->backupcount);
+                        $configChanged = true;
+                        $logMessages[] = 'Removed local backup count limits';
+                    }
                 } elseif (is_numeric($count) && $count > 0) {
-                    $config->system->backupcount = $count;
+                    if (!isset($config->system->backupcount) || (string)$config->system->backupcount !== $count) {
+                        $config->system->backupcount = $count;
+                        $configChanged = true;
+                        $logMessages[] = "Changed local backup count to {$count}";
+                    }
                 } else {
                     return ['status' => 'failed', 'message' => gettext('Backup count must be greater than zero.')];
                 }
@@ -250,19 +261,31 @@ class BackupController extends ApiControllerBase
             if (isset($post['pushtime'])) {
                 $pushtime = trim($post['pushtime']);
                 if ($pushtime === '') {
-                    unset($config->system->backuppushtime);
+                    if (isset($config->system->backuppushtime)) {
+                        unset($config->system->backuppushtime);
+                        $configChanged = true;
+                        $logMessages[] = 'Removed remote backup push time';
+                    }
                 } else {
                     if (!preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $pushtime)) {
                         return ['status' => 'failed', 'message' => gettext('Push time must be in HH:MM format.')];
                     }
-                    $config->system->backuppushtime = $pushtime;
+                    if (!isset($config->system->backuppushtime) || (string)$config->system->backuppushtime !== $pushtime) {
+                        $config->system->backuppushtime = $pushtime;
+                        $configChanged = true;
+                        $logMessages[] = "Changed remote backup push time to {$pushtime}";
+                    }
                 }
+
                 $backend = new Backend();
                 $backend->configdRun('template reload OPNsense/Cron');
                 $backend->configdRun('cron restart');
             }
 
-            Config::getInstance()->save('Changed local backup settings');
+            // Only save to disk if something was actually modified
+            if ($configChanged) {
+                Config::getInstance()->save(implode(', ', $logMessages));
+            }
 
             $result = ['status' => 'success'];
         }
@@ -302,6 +325,7 @@ class BackupController extends ApiControllerBase
             $this->response->setContent($data);
             return $this->response;
         }
+        return ['status' => 'failed'];
     }
 
     public function restoreAction()
@@ -363,8 +387,7 @@ class BackupController extends ApiControllerBase
                     if (!empty($config['rrddata'])) {
                         \rrd_import();
                         unset($config['rrddata']);
-                        \write_config();
-                        \convert_config();
+                        Config::getInstance()->save('Restored configuration area (RRD data imported)');
                     }
                     if ($do_reboot) {
                         (new Backend())->configdRun('system reboot', true);
@@ -411,12 +434,11 @@ class BackupController extends ApiControllerBase
                         $flush = true;
                     }
                     if ($flush) {
-                        \write_config();
-                        \convert_config();
+                        Config::getInstance()->save('Restored full configuration');
                     }
                     if (!empty($post['flush_history'])) {
                         (new Backend())->configdRun('system flush config_history');
-                        \write_config('System restore flushed local history');
+                        Config::getInstance()->save('System restore flushed local history');
                     }
                     if (\is_interface_mismatch(false)) {
                         $do_reboot = false;
@@ -594,8 +616,7 @@ class BackupController extends ApiControllerBase
         }
 
         if (count($restored) && !count($failed)) {
-            \write_config(sprintf('Restored sections (%s) of config file', join(',', $restored)));
-            \convert_config();
+            \OPNsense\Core\Config::getInstance()->save(sprintf('Restored sections (%s) of config file', join(',', $restored)));
         }
 
         return $failed;
