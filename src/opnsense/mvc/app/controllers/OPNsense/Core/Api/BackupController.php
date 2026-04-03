@@ -255,8 +255,7 @@ class BackupController extends ApiControllerBase
                 if ($pushtime === '') {
                     unset($config->system->backuppushtime);
                 } else {
-                    // Basic HH:MM validation
-                    if (!preg_match('/^\d{1,2}:\d{2}$/', $pushtime)) {
+                    if (!preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $pushtime)) {
                         return ['status' => 'failed', 'message' => gettext('Push time must be in HH:MM format.')];
                     }
                     $config->system->backuppushtime = $pushtime;
@@ -304,6 +303,7 @@ class BackupController extends ApiControllerBase
             $this->response->setRawHeader("Pragma: private");
             $this->response->setRawHeader("Cache-Control: private, must-revalidate");
             $this->response->setContent($data);
+            return $this->response;
         }
     }
 
@@ -331,6 +331,12 @@ class BackupController extends ApiControllerBase
             }
 
             $data = file_get_contents($conffile->getTempName());
+
+            require_once("auth.inc");
+
+            if ((new \OPNsense\Core\ACL())->hasPrivilege($this->getUserName(), 'user-config-readonly')) {
+                return ['status' => 'failed', 'message' => gettext('You do not have the permission to perform this action.')];
+}
 
             if (empty($data)) {
                 return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $conffile->getName())];
@@ -503,7 +509,7 @@ class BackupController extends ApiControllerBase
         require_once("config.inc");
         global $config;
 
-        $tmpxml = '/tmp/tmpxml';
+        $tmpxml = tempnam(sys_get_temp_dir(), 'opn_backup_');
         $xml = null;
 
         try {
@@ -511,13 +517,13 @@ class BackupController extends ApiControllerBase
             $xml = \load_config_from_file($tmpxml);
         } catch (\Exception $e) {
             syslog(LOG_ERR, 'Backup restoration failed to parse XML: ' . $e->getMessage());
+        } finally {
+            @unlink($tmpxml);
         }
 
-        @unlink($tmpxml);
-
-        if (!is_array($xml)) {
-            return false;
-        }
+    if (!is_array($xml)) {
+        return false;
+    }
 
         $restored = [];
         $failed = [];

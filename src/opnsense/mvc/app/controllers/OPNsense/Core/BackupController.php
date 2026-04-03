@@ -47,8 +47,9 @@ class BackupController extends \OPNsense\Base\IndexController
 
         $baksz = '0B';
         if (is_dir('/conf/backup')) {
-            $bytes = array_sum(array_map('filesize', glob("/conf/backup/*")));
-            $baksz = round($bytes / 1024 / 1024, 2) . ' MB'; // Or format properly
+            $files = glob("/conf/backup/*.xml");
+            $bytes = $files ? array_sum(array_map('filesize', $files)) : 0;
+            $baksz = round($bytes / 1024 / 1024, 2) . ' MB';
         }
         $this->view->backupSize = $baksz;
 
