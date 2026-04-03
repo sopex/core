@@ -458,9 +458,7 @@ class BackupController extends ApiControllerBase
                     if (count($filesInBackup) == 0) {
                         return ['status' => 'success', 'message' => gettext('Saved settings, but remote backup returned no files.')];
                     } else {
-                        $msg = gettext("Backup successful, current file list:") . "<br>";
-                        foreach ($filesInBackup as $filename) {
-                             $msg .= "<br>" . htmlspecialchars($filename);
+                        $msg = gettext("Backup successful. Current file list: ") . implode(", ", $filesInBackup);
                         }
 
                         $backend = new \OPNsense\Core\Backend();
