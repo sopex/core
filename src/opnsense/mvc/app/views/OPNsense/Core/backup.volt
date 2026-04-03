@@ -299,7 +299,7 @@
                                 <button class="btn btn-primary" id="btn_save_local">{{ lang._('Save') }}</button>
                                 <span class="text-muted" style="margin-left: 15px;">
                                     {{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}
-                                    <strong>{{ lang._('Current space used:') }} {{ backupSize }}</strong>
+                                    <strong>{{ lang._('Current space used:') }} {{ backupSize | default('0 MB') }}</strong>
                                 </span>
                             </td>
                         </tr>
