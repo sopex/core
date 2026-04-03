@@ -219,17 +219,14 @@ class BackupController extends ApiControllerBase
 
     public function getSettingsAction()
     {
-        $result = ['backup' => ['backupcount' => null]];
         $config = Config::getInstance()->object();
 
-        if (isset($config->system->backupcount)) {
-            $result['backup']['backupcount'] = (string)$config->system->backupcount;
-        }
-
-        $result['backup']['pushtime'] = (string)($config->system->backuppushtime ?? '02:00');
-        $result['backup']['backupcount'] = (string)($config->system->backupcount ?? null);
-
-        return $result;
+        return [
+            'backup' => [
+                'pushtime' => (string)($config->system->backuppushtime ?? '02:00'),
+                'backupcount' => (string)($config->system->backupcount ?? '15'),
+            ]
+        ];
     }
 
     public function setSettingsAction()
@@ -330,13 +327,13 @@ class BackupController extends ApiControllerBase
                 return ['status' => 'failed', 'message' => 'No files uploaded'];
             }
 
-            $data = file_get_contents($conffile->getTempName());
-
             require_once("auth.inc");
 
             if ((new \OPNsense\Core\ACL())->hasPrivilege($this->getUserName(), 'user-config-readonly')) {
                 return ['status' => 'failed', 'message' => gettext('You do not have the permission to perform this action.')];
             }
+
+            $data = file_get_contents($conffile->getTempName());
 
             if (empty($data)) {
                 return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $conffile->getName())];
