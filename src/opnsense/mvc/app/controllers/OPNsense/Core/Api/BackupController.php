@@ -425,6 +425,8 @@ class BackupController extends ApiControllerBase
         if ($this->request->isPost()) {
             require_once("config.inc");
             require_once("system.inc");
+            require_once("util.inc");
+            require_once("services.inc");
 
             $backupFactory = new \OPNsense\Backup\BackupFactory();
             $provider = $backupFactory->getProvider($providerName);
