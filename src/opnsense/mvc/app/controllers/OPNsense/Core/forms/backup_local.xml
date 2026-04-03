@@ -5,6 +5,6 @@
         <type>text</type>
         <required>Y</required>
         <default>15</default>
-        <help>Enter the number of older configurations to keep in the local backup cache. Be aware of how much space is consumed by backups before adjusting this value.</help>
+        <help>Enter the number of older configurations to keep in the local backup cache.</help>
     </field>
 </form>

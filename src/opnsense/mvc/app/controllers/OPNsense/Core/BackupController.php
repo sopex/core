@@ -45,6 +45,10 @@ class BackupController extends \OPNsense\Base\IndexController
         $this->view->backupLocalForm = $this->getForm("backup_local");
         $this->view->backupRemoteForm = $this->getForm("backup_remote");
 
+        $baksz = [];
+        exec("/usr/bin/du -sh /conf/backup | /usr/bin/awk '{print $1;}'", $baksz);
+        $this->view->backupSize = !empty($baksz[0]) ? $baksz[0] : '0B';
+
         $areas = [
             'bridges'   => gettext('Bridge Devices'),
             'gifs'      => gettext('GIF Devices'),
