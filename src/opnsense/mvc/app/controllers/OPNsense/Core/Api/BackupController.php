@@ -336,7 +336,7 @@ class BackupController extends ApiControllerBase
 
             if ((new \OPNsense\Core\ACL())->hasPrivilege($this->getUserName(), 'user-config-readonly')) {
                 return ['status' => 'failed', 'message' => gettext('You do not have the permission to perform this action.')];
-}
+            }
 
             if (empty($data)) {
                 return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $conffile->getName())];
