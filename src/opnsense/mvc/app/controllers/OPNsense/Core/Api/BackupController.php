@@ -354,7 +354,7 @@ class BackupController extends ApiControllerBase
             require_once("auth.inc");
 
             if ((new \OPNsense\Core\ACL())->hasPrivilege($this->getUserName(), 'user-config-readonly')) {
-                return ['status' => 'failed', 'message' => gettext('You do not have the permission to perform this action.')];
+                return ['status' => 'failed', 'message' => gettext('You do not have sufficient privileges to restore the configuration.')];
             }
 
             $data = file_get_contents($conffile->getTempName());
