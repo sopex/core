@@ -29,11 +29,8 @@
 namespace OPNsense\Core\Api;
 
 use OPNsense\Base\ApiControllerBase;
-use OPNsense\Base\UserException;
-use OPNsense\Core\ACL;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
-use OPNsense\Core\Shell;
 use OPNsense\Backup\Local;
 
 /**
@@ -267,7 +264,7 @@ class BackupController extends ApiControllerBase
                 (new Backend())->configdRun('cron restart');
             }
 
-            Config::getInstance()->save(['description' => 'Changed local backup settings']);
+            Config::getInstance()->save('Changed local backup settings');
 
             $result = ['status' => 'success'];
         }
