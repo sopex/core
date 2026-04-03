@@ -63,6 +63,15 @@ class BackupController extends \OPNsense\Base\IndexController
         natcasesort($areas);
         $this->view->areas = $areas;
 
+        $this->view->backupFootprint = '';
+        if (count(\OPNsense\Core\Config::getInstance()->getBackups(true)) > 0) {
+            exec('/usr/bin/du -hs /conf/backup', $output);
+            if (!empty($output[0])) {
+                $space = preg_split('/\s+/', $output[0])[0];
+                $this->view->backupFootprint = sprintf(gettext('Current space used: %s'), $space);
+            }
+        }
+
         $this->view->pick('OPNsense/Core/backup');
     }
 
