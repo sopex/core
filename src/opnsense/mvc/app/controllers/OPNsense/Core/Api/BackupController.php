@@ -424,9 +424,7 @@ class BackupController extends ApiControllerBase
     {
         if ($this->request->isPost()) {
             require_once("config.inc");
-            require_once("system.inc");
             require_once("util.inc");
-            require_once("services.inc");
 
             $backupFactory = new \OPNsense\Backup\BackupFactory();
             $provider = $backupFactory->getProvider($providerName);
@@ -447,7 +445,9 @@ class BackupController extends ApiControllerBase
                     $providerSet[$field['name']] = isset($post[$field['name']]) ? $post[$field['name']] : '';
                 }
             }
+
             $input_errors = $provider['handle']->setConfiguration($providerSet);
+
             if (count($input_errors) == 0) {
                 if ($provider['handle']->isEnabled()) {
                     try {
@@ -462,12 +462,19 @@ class BackupController extends ApiControllerBase
                         foreach ($filesInBackup as $filename) {
                              $msg .= "<br>" . htmlspecialchars($filename);
                         }
-                        \system_cron_configure();
+
+                        $backend = new \OPNsense\Core\Backend();
+                        $backend->configdRun('template reload OPNsense/Cron');
+                        $backend->configdRun('cron restart');
+
                         return ['status' => 'success', 'message' => $msg];
                     }
                 }
 
-                \system_cron_configure();
+                $backend = new \OPNsense\Core\Backend();
+                $backend->configdRun('template reload OPNsense/Cron');
+                $backend->configdRun('cron restart');
+
                 return ['status' => 'success', 'message' => gettext("Settings configured.")];
             } else {
                 return ['status' => 'failed', 'message' => implode(", ", $input_errors)];
