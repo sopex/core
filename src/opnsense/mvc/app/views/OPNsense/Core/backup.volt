@@ -406,11 +406,11 @@
         </div>
 
         {% if providers|length > 0 %}
-            <div class="row">
+            <div class="row" style="display: flex; flex-wrap: wrap;">
             {% for providerId, provider in providers %}
-                <div class="col-md-6 col-xs-12 __mb">
-                    <div class="content-box" style="height: 100%;">
-                        <form id="frm_provider_{{ providerId }}" enctype="multipart/form-data">
+                <div class="col-md-6 col-xs-12 __mb" style="display: flex; flex-direction: column;">
+                    <div class="content-box" style="height: 100%; width: 100%;">
+                        <form id="frm_provider_{{ providerId }}" enctype="multipart/form-data" style="height: 100%;">
                             <div class="table-responsive">
                                 <table class="table table-striped table-condensed opnsense_standard_table_form">
                                     <thead>
