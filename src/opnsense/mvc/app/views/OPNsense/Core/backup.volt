@@ -258,7 +258,7 @@
     </div>
 </div>
 <div class="tab-content content-box col-xs-12 ">
-    <div id="localbackup" class="tab-pane fade in active">
+    <div id="localbackup" class="tab-pane fade in active row">
         <div class="table-responsive">
             <table class="table table-striped table-condensed">
                 <tbody>
