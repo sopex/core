@@ -323,7 +323,7 @@ class BackupController extends ApiControllerBase
             $this->response->setRawHeader("Pragma: private");
             $this->response->setRawHeader("Cache-Control: private, must-revalidate");
             $this->response->setContent($data);
-            return $null;
+            return null;
         }
         return ['status' => 'failed'];
     }
