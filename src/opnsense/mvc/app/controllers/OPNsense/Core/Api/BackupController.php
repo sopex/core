@@ -330,7 +330,7 @@ class BackupController extends ApiControllerBase
 
     public function restoreAction()
     {
-        if ($this->request->isPost() && $this->request->hasFiles()) {
+        if ($this->request->isPost() && isset($_FILES['conffile']) && is_uploaded_file($_FILES['conffile']['tmp_name'])) {
             require_once("config.inc");
             require_once("util.inc");
             require_once("interfaces.inc");
@@ -338,29 +338,16 @@ class BackupController extends ApiControllerBase
             require_once("filter.inc");
             require_once("system.inc");
             require_once("console.inc");
-
-            $conffile = null;
-            foreach ($this->request->getUploadedFiles() as $file) {
-                if ($file->getKey() === 'conffile') {
-                    $conffile = $file;
-                    break;
-                }
-            }
-
-            if (!$conffile || empty($conffile->getTempName())) {
-                return ['status' => 'failed', 'message' => 'No files uploaded'];
-            }
-
             require_once("auth.inc");
 
             if ((new \OPNsense\Core\ACL())->hasPrivilege($this->getUserName(), 'user-config-readonly')) {
                 return ['status' => 'failed', 'message' => gettext('You do not have sufficient privileges to restore the configuration.')];
             }
 
-            $data = file_get_contents($conffile->getTempName());
+            $data = file_get_contents($_FILES['conffile']['tmp_name']);
 
             if (empty($data)) {
-                return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $conffile->getName())];
+                return ['status' => 'failed', 'message' => sprintf(gettext("Warning, could not read file %s"), $_FILES['conffile']['name'])];
             }
 
             if (!empty($this->request->getPost('decrypt'))) {
@@ -471,17 +458,10 @@ class BackupController extends ApiControllerBase
             $providerSet = array();
             $post = $this->request->getPost();
 
-            $uploadedFiles = [];
-            if ($this->request->hasFiles()) {
-                foreach ($this->request->getUploadedFiles() as $file) {
-                    $uploadedFiles[$file->getKey()] = $file;
-                }
-            }
-
             foreach ($provider['handle']->getConfigurationFields() as $field) {
                 if ($field['type'] == 'file') {
-                    if (isset($uploadedFiles[$field['name']]) && !empty($uploadedFiles[$field['name']]->getTempName())) {
-                        $providerSet[$field['name']] = file_get_contents($uploadedFiles[$field['name']]->getTempName());
+                    if (isset($_FILES[$field['name']]) && is_uploaded_file($_FILES[$field['name']]['tmp_name'])) {
+                        $providerSet[$field['name']] = file_get_contents($_FILES[$field['name']]['tmp_name']);
                     } else {
                         $providerSet[$field['name']] = null;
                     }
