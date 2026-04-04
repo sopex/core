@@ -360,9 +360,6 @@
                     <tr>
                         <td>
                             <div class="__mb">
-                                <strong>{{ lang._('Restore areas:') }}</strong>
-                            </div>
-                            <div class="__mb">
                                 <select name="restorearea[]" id="restorearea" class="selectpicker" multiple="multiple" size="5" title="{{ lang._('All (recommended)') }}" data-live-search="true" data-size="10">
                                     {% for areaId, areaDescription in areas %}
                                         <option value="{{ areaId }}">{{ areaDescription }}</option>
