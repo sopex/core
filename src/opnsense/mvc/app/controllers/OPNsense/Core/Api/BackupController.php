@@ -276,15 +276,23 @@ class BackupController extends ApiControllerBase
                         $logMessages[] = "Changed remote backup push time to {$pushtime}";
                     }
                 }
-
-                $backend = new Backend();
-                $backend->configdRun('template reload OPNsense/Cron');
-                $backend->configdRun('cron restart');
             }
 
-            // Only save to disk if something was actually modified
             if ($configChanged) {
                 Config::getInstance()->save(implode(', ', $logMessages));
+            }
+
+            if (isset($post['pushtime'])) {
+                require_once("config.inc");
+                require_once("system.inc");
+                require_once("plugins.inc");
+
+                // Refresh global state so legacy hooks read the new config
+                global $config;
+                $config = \parse_config();
+
+                // Re-compile cron and restart the service
+                \system_cron_configure();
             }
 
             $result = ['status' => 'success'];
@@ -475,6 +483,13 @@ class BackupController extends ApiControllerBase
             $input_errors = $provider['handle']->setConfiguration($providerSet);
 
             if (count($input_errors) == 0) {
+
+                require_once("system.inc");
+                require_once("plugins.inc");
+                global $config;
+                $config = \parse_config();
+                \system_cron_configure();
+
                 if ($provider['handle']->isEnabled()) {
                     try {
                         $filesInBackup = $provider['handle']->backup();
@@ -485,17 +500,9 @@ class BackupController extends ApiControllerBase
                         return ['status' => 'success', 'message' => gettext('Saved settings, but remote backup returned no files.')];
                     } else {
                         $msg = gettext("Backup successful. Current file list: ") . implode(", ", $filesInBackup);
-                        $backend = new \OPNsense\Core\Backend();
-                        $backend->configdRun('template reload OPNsense/Cron');
-                        $backend->configdRun('cron restart');
-
                         return ['status' => 'success', 'message' => $msg];
                     }
                 }
-
-                $backend = new \OPNsense\Core\Backend();
-                $backend->configdRun('template reload OPNsense/Cron');
-                $backend->configdRun('cron restart');
 
                 return ['status' => 'success', 'message' => gettext("Settings configured.")];
             } else {
