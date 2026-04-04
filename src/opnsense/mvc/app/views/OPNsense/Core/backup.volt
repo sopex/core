@@ -471,7 +471,7 @@
         {% else %}
             <div class="alert alert-info" role="alert">
                 <strong>{{ lang._('No remote backup plugins installed.') }}</strong><br/>
-                {{ lang._('Remote backup functionality relies on provider plugins. To enable remote backups, please navigate to System > Firmware > Plugins and install a "-backup" plugin. }}
+                {{ lang._('Remote backup functionality relies on provider plugins. To enable remote backups, please navigate to System > Firmware > Plugins and install a "-backup" plugin.') }}
             </div>
         {% endif %}
     </div>
