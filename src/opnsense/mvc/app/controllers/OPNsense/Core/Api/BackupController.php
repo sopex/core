@@ -331,8 +331,6 @@ class BackupController extends ApiControllerBase
     public function restoreAction()
     {
         if ($this->request->isPost() && isset($_FILES['conffile']) && is_uploaded_file($_FILES['conffile']['tmp_name'])) {
-            global $config;
-            $config = \parse_config();
             require_once("config.inc");
             require_once("util.inc");
             require_once("interfaces.inc");
@@ -341,6 +339,8 @@ class BackupController extends ApiControllerBase
             require_once("system.inc");
             require_once("console.inc");
             require_once("auth.inc");
+            global $config;
+            $config = \parse_config();
 
             if ((new \OPNsense\Core\ACL())->hasPrivilege($this->getUserName(), 'user-config-readonly')) {
                 return ['status' => 'failed', 'message' => gettext('You do not have sufficient privileges to restore the configuration.')];
