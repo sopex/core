@@ -284,6 +284,7 @@ class BackupController extends ApiControllerBase
 
             if (isset($post['pushtime'])) {
                 require_once("config.inc");
+                require_once("util.inc");
                 require_once("system.inc");
                 require_once("plugins.inc");
 
