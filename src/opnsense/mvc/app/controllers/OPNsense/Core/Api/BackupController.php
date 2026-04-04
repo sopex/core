@@ -331,6 +331,8 @@ class BackupController extends ApiControllerBase
     public function restoreAction()
     {
         if ($this->request->isPost() && isset($_FILES['conffile']) && is_uploaded_file($_FILES['conffile']['tmp_name'])) {
+            global $config;
+            $config = \parse_config();
             require_once("config.inc");
             require_once("util.inc");
             require_once("interfaces.inc");
