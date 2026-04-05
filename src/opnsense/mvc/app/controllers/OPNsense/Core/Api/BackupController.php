@@ -485,7 +485,6 @@ class BackupController extends ApiControllerBase
 
             if (count($input_errors) == 0) {
 
-                Config::getInstance()->save("Updated backup provider settings for {$providerName}");
                 require_once("system.inc");
                 require_once("plugins.inc");
                 global $config;
