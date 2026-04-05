@@ -485,11 +485,10 @@ class BackupController extends ApiControllerBase
 
             if (count($input_errors) == 0) {
 
-                Config::getInstance()->save("Updated backup provider settings for {$providerName}");
+                write_config(sprintf("Updated backup provider settings for %s", $provider['handle']->getName()));
+
                 require_once("system.inc");
                 require_once("plugins.inc");
-                global $config;
-                $config = \parse_config();
                 \system_cron_configure();
 
                 if ($provider['handle']->isEnabled()) {
