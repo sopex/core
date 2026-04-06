@@ -231,31 +231,13 @@ class BackupController extends ApiControllerBase
 
     public function setSettingsAction()
     {
+        $result = ['status' => 'failed'];
         if ($this->request->isPost()) {
             $post = $this->request->getPost('backup');
             $config = Config::getInstance()->object();
 
             $configChanged = false;
             $logMessages = [];
-            $validations = [];
-
-            if (isset($post['backupcount'])) {
-                $count = trim($post['backupcount']);
-                if ($count !== '' && !preg_match('/^[1-9][0-9]{0,3}$/', (string)$count)) {
-                    $validations['backup.backupcount'] = gettext('Only numerical values in the range 1 to 9999 are allowed');
-                }
-            }
-
-            if (isset($post['pushtime'])) {
-                $pushtime = trim($post['pushtime']);
-                if ($pushtime !== '' && !preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $pushtime)) {
-                    $validations['backup.pushtime'] = gettext('Push time must be in valid HH:MM format.');
-                }
-            }
-
-            if (count($validations) > 0) {
-                return ['result' => 'failed', 'validations' => $validations];
-            }
 
             if (isset($post['backupcount'])) {
                 $count = trim($post['backupcount']);
@@ -265,17 +247,20 @@ class BackupController extends ApiControllerBase
                         $configChanged = true;
                         $logMessages[] = 'Removed local backup count limits';
                     }
-                } else {
+                } elseif (is_numeric($count) && $count > 0) {
                     if (!isset($config->system->backupcount) || (string)$config->system->backupcount !== $count) {
                         $config->system->backupcount = $count;
                         $configChanged = true;
                         $logMessages[] = "Changed local backup count to {$count}";
                     }
+                } else {
+                    return ['status' => 'failed', 'message' => gettext('Backup count must be greater than zero.')];
                 }
             }
 
             if (isset($post['pushtime'])) {
                 $pushtime = trim($post['pushtime']);
+
                 if ($pushtime === '') {
                     if (isset($config->system->backuppushtime)) {
                         unset($config->system->backuppushtime);
@@ -283,6 +268,9 @@ class BackupController extends ApiControllerBase
                         $logMessages[] = 'Removed remote backup push time';
                     }
                 } else {
+                    if (!preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $pushtime)) {
+                        return ['status' => 'failed', 'message' => gettext('Push time must be in HH:MM format.')];
+                    }
                     if (!isset($config->system->backuppushtime) || (string)$config->system->backuppushtime !== $pushtime) {
                         $config->system->backuppushtime = $pushtime;
                         $configChanged = true;
@@ -308,9 +296,9 @@ class BackupController extends ApiControllerBase
                 \system_cron_configure();
             }
 
-            return ['result' => 'saved'];
+            $result = ['status' => 'success'];
         }
-        return ['result' => 'failed'];
+        return $result;
     }
 
     public function downloadThisAction()

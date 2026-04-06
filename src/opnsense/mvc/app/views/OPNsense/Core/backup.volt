@@ -274,7 +274,32 @@
     <div id="localbackup" class="tab-pane fade in active">
 
         <div class="content-box __mb">
-            {{ partial("layout_partials/base_form",['fields':backupLocalForm,'id':'frm_backupSettingsLocal', 'apply_btn_id':'btn_save_local', 'apply_btn_title': lang._('Save')]) }}
+            <form id="frm_backupSettingsLocal">
+                <table class="table table-striped table-condensed">
+                    <thead>
+                        <tr>
+                            <th>{{ lang._('Backup Count') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <input name="backup[backupcount]" type="text" id="backup.backupcount" class="form-control" placeholder="15" style="max-width: 300px;"/>
+                                <div class="text-muted __mt">{{ lang._('Enter the number of older configurations to keep in the local backup cache.') }}</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <button class="btn btn-primary" id="btn_save_local">{{ lang._('Save') }}</button>
+                                <span class="text-muted" style="margin-left: 15px;">
+                                    {{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}
+                                    <strong>{{ lang._('Current space used:') }} {{ backupSize | default('0 MB') }}</strong>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </form>
         </div>
 
         <div class="content-box __mb">
