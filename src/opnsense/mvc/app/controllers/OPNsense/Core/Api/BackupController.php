@@ -260,7 +260,6 @@ class BackupController extends ApiControllerBase
 
             if (isset($post['pushtime'])) {
                 $pushtime = trim($post['pushtime']);
-                syslog(LOG_NOTICE, "BACKUP DEBUG: Received pushtime POST data: '{$pushtime}'");
 
                 if ($pushtime === '') {
                     if (isset($config->system->backuppushtime)) {
@@ -269,61 +268,22 @@ class BackupController extends ApiControllerBase
                         $logMessages[] = 'Removed remote backup push time';
                     }
                 } else {
-                    // 1. Verify the format is valid
                     if (!preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $pushtime)) {
-                        syslog(LOG_ERR, "BACKUP DEBUG: FAILURE. Regex did not match pushtime string.");
                         return ['status' => 'failed', 'message' => gettext('Push time must be in HH:MM format.')];
                     }
-
-                    // 2. Check if the time actually changed from what is currently saved
                     if (!isset($config->system->backuppushtime) || (string)$config->system->backuppushtime !== $pushtime) {
-
-                        // 3. Save the new time to the UI config
                         $config->system->backuppushtime = $pushtime;
                         $configChanged = true;
                         $logMessages[] = "Changed remote backup push time to {$pushtime}";
-
-                        // 4. Actively update the existing cron job
-                        if (preg_match('/^([0-9]{1,2}):([0-9]{1,2})$/', $pushtime, $matches)) {
-                            $cron_hour = (int)$matches[1];
-                            $cron_minute = (int)$matches[2];
-
-                            syslog(LOG_NOTICE, "BACKUP DEBUG: Regex passed. Target Time - Hour: {$cron_hour}, Minute: {$cron_minute}");
-
-                            if (isset($config->cron->item)) {
-                                $found_cron = false;
-                                foreach ($config->cron->item as $cronitem) {
-                                    syslog(LOG_NOTICE, "BACKUP DEBUG: Checking existing cron command: " . (string)$cronitem->command);
-
-                                    if (strpos((string)$cronitem->command, 'system remote backup') !== false) {
-                                        $found_cron = true;
-                                        $cronitem->hour = (string)$cron_hour;
-                                        $cronitem->minute = (string)$cron_minute;
-                                        $logMessages[] = "Updated remote backup cron schedule";
-                                        syslog(LOG_NOTICE, "BACKUP DEBUG: SUCCESS! Cron item updated.");
-                                        break;
-                                    }
-                                }
-
-                                if (!$found_cron) {
-                                    syslog(LOG_ERR, "BACKUP DEBUG: FAILURE. Could not find a cron item containing 'system remote backup'.");
-                                }
-                            } else {
-                                syslog(LOG_ERR, "BACKUP DEBUG: FAILURE. config->cron->item is not set.");
-                            }
-                        }
-                    } else {
-                        syslog(LOG_NOTICE, "BACKUP DEBUG: Push time did not change, skipping save and cron update.");
                     }
                 }
             }
 
-            // Write the changes to config.xml
             if ($configChanged) {
                 Config::getInstance()->save(implode(', ', $logMessages));
             }
 
-            // Restart cron with the fresh config
+            // CRON RESTART BLOCK
             if (isset($post['pushtime'])) {
                 require_once("config.inc");
                 require_once("util.inc");
@@ -331,7 +291,7 @@ class BackupController extends ApiControllerBase
                 require_once("plugins.inc");
 
                 global $config;
-                $config = \OPNsense\Core\Config::getInstance()->toArray(listtags());
+                $config = \parse_config(true);
 
                 \system_cron_configure();
             }
