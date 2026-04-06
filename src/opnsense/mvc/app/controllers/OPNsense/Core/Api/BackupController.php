@@ -283,7 +283,7 @@ class BackupController extends ApiControllerBase
                 Config::getInstance()->save(implode(', ', $logMessages));
             }
 
-            // CRON RESTART BLOCK
+            // CRON restart
             if (isset($post['pushtime'])) {
                 require_once("config.inc");
                 require_once("util.inc");

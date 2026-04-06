@@ -35,7 +35,6 @@
             $('.selectpicker').selectpicker('refresh');
         });
 
-        // link save button
         $("#btn_save_local").click(function (e) {
             e.preventDefault();
             if ($(this).find("i").length === 0) { $(this).append(" <i></i>"); }
@@ -91,12 +90,11 @@
                 url: "/api/core/backup/downloadThis",
                 data: params,
                 xhrFields: {
-                    responseType: 'blob' // Force jQuery to treat response as binary
+                    responseType: 'blob'
                 },
                 success: function (data, status, xhr) {
                     $("#btn_download_progress").removeClass("fa fa-spinner fa-pulse");
 
-                    // Extract filename from Content-Disposition header
                     var filename = "config.xml";
                     var disposition = xhr.getResponseHeader('Content-Disposition');
                     if (disposition && disposition.indexOf('filename=') !== -1) {
@@ -106,7 +104,6 @@
                         }
                     }
 
-                    // Create a hidden link, attach the blob, and click it
                     var blob = new Blob([data], {type: xhr.getResponseHeader('Content-Type')});
                     var link = document.createElement('a');
                     link.href = window.URL.createObjectURL(blob);
@@ -142,7 +139,6 @@
             }
         });
 
-        // restore area warn
         $('#restorearea').change(function () {
             $("#flush_history").prop('checked', false);
             if ($('#restorearea option:selected').text() == '') {
@@ -169,7 +165,6 @@
         });
         $.restorearea_warned = 0;
 
-        // Setup providers
         $(".btn_setup_provider").click(function (e) {
             e.preventDefault();
             let providerId = $(this).data('provider');
@@ -207,7 +202,6 @@
             });
         });
 
-        // form submit for Restore configuration
         $("#frm_restore").submit(function (e) {
             e.preventDefault();
             if (!$("#conffile").val()) {
