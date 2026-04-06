@@ -229,13 +229,27 @@ class BackupController extends ApiControllerBase
         ];
     }
 
-    public function setSettingsAction()
+        public function setSettingsAction()
     {
         $result = ['status' => 'failed'];
         if ($this->request->isPost()) {
             $post = $this->request->getPost('backup');
-            $config = Config::getInstance()->object();
 
+            $mdlBackup = new \OPNsense\Core\Backup();
+
+            if (isset($post['pushtime'])) {
+                $mdlBackup->backuppushtime = trim($post['pushtime']);
+            }
+            if (isset($post['backupcount'])) {
+                $mdlBackup->backupcount = trim($post['backupcount']) === '' ? null : trim($post['backupcount']);
+            }
+
+            $valMsgs = $mdlBackup->performValidation();
+            foreach ($valMsgs as $msg) {
+                return ['status' => 'failed', 'message' => $msg->getMessage()];
+            }
+
+            $config = Config::getInstance()->object();
             $configChanged = false;
             $logMessages = [];
 
@@ -247,20 +261,17 @@ class BackupController extends ApiControllerBase
                         $configChanged = true;
                         $logMessages[] = 'Removed local backup count limits';
                     }
-                } elseif (is_numeric($count) && $count > 0) {
+                } else {
                     if (!isset($config->system->backupcount) || (string)$config->system->backupcount !== $count) {
                         $config->system->backupcount = $count;
                         $configChanged = true;
                         $logMessages[] = "Changed local backup count to {$count}";
                     }
-                } else {
-                    return ['status' => 'failed', 'message' => gettext('Backup count must be greater than zero.')];
                 }
             }
 
             if (isset($post['pushtime'])) {
                 $pushtime = trim($post['pushtime']);
-
                 if ($pushtime === '') {
                     if (isset($config->system->backuppushtime)) {
                         unset($config->system->backuppushtime);
@@ -268,9 +279,6 @@ class BackupController extends ApiControllerBase
                         $logMessages[] = 'Removed remote backup push time';
                     }
                 } else {
-                    if (!preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $pushtime)) {
-                        return ['status' => 'failed', 'message' => gettext('Push time must be in HH:MM format.')];
-                    }
                     if (!isset($config->system->backuppushtime) || (string)$config->system->backuppushtime !== $pushtime) {
                         $config->system->backuppushtime = $pushtime;
                         $configChanged = true;

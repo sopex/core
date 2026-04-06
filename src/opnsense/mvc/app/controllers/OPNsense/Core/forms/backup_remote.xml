@@ -1,12 +1,8 @@
 <form>
     <field>
-        <id>backup.pushtime</id>
+        <id>backup.backuppushtime</id>
         <label>Push Time</label>
         <type>text</type>
-        <required>Y</required>
-        <default>02:00</default>
         <help>This determines the backup time used for the main backup of the day. Additional backups can be set up on the cron page.</help>
-        <Mask>/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/</Mask>
-        <ValidationMessage>Please enter a valid 24-hour time in HH:MM format (e.g., 14:30 or 08:15).</ValidationMessage>
     </field>
 </form>
