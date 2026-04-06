@@ -229,7 +229,7 @@ class BackupController extends ApiControllerBase
         ];
     }
 
-        public function setSettingsAction()
+    public function setSettingsAction()
     {
         $result = ['status' => 'failed'];
         if ($this->request->isPost()) {
@@ -245,8 +245,17 @@ class BackupController extends ApiControllerBase
             }
 
             $valMsgs = $mdlBackup->performValidation();
-            foreach ($valMsgs as $msg) {
-                return ['status' => 'failed', 'message' => $msg->getMessage()];
+            if (count($valMsgs) > 0) {
+                $validations = [];
+                foreach ($valMsgs as $msg) {
+                    $field = $msg->getField();
+                    if ($field === 'backuppushtime') {
+                        $validations['backup.pushtime'] = $msg->getMessage();
+                    } else {
+                        $validations['backup.' . $field] = $msg->getMessage();
+                    }
+                }
+                return ['status' => 'failed', 'validations' => $validations];
             }
 
             $config = Config::getInstance()->object();
