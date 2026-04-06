@@ -30,53 +30,41 @@
             'frm_backupSettingsLocal': "/api/core/backup/getSettings",
             'frm_backupSettingsRemote': "/api/core/backup/getSettings"
         };
-
         mapDataToFormUI(data_get_map).done(function () {
             formatTokenizersUI();
             $('.selectpicker').selectpicker('refresh');
-
-            let sizeText = "<br/><br/>{{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}<br/><strong>{{ lang._('Current space used:') }} {{ backupSize | default('0 MB') }}</strong>";
-            $("[data-for='help_for_backup.backupcount']").append(sizeText);
         });
 
         $("#btn_save_local").click(function (e) {
             e.preventDefault();
-            let btnIcon = $("#btn_save_local_progress");
-            btnIcon.removeClass("fa-check").addClass("fa fa-spinner fa-pulse");
+            let btn = $(this);
+            if (btn.find("i").length === 0) { btn.append(" <i class='fa'></i>"); }
+            let btnIcon = btn.find('i');
 
-            saveFormToEndpoint(
-                "/api/core/backup/setSettings",
-                'frm_backupSettingsLocal',
-                function () {
-                    // Success Callback
-                    btnIcon.removeClass("fa fa-spinner fa-pulse").addClass("fa fa-check");
-                    setTimeout(function(){ btnIcon.removeClass("fa fa-check"); }, 2000);
-                },
-                true,
-                function () {
-                    // Failure/Validation Callback - Kills the spinner
-                    btnIcon.removeClass("fa fa-spinner fa-pulse");
-                }
-            );
+            btnIcon.removeClass("fa-check").addClass("fa-spinner fa-pulse");
+
+            saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsLocal', function () {
+                btnIcon.addClass("fa-check");
+                setTimeout(function(){ btnIcon.removeClass("fa-check"); }, 2000);
+            }, true).always(function() {
+                btnIcon.removeClass("fa-spinner fa-pulse");
+            });
         });
 
         $("#btn_save_remote").click(function (e) {
             e.preventDefault();
-            let btnIcon = $("#btn_save_remote_progress");
-            btnIcon.removeClass("fa-check").addClass("fa fa-spinner fa-pulse");
+            let btn = $(this);
+            if (btn.find("i").length === 0) { btn.append(" <i class='fa'></i>"); }
+            let btnIcon = btn.find('i');
 
-            saveFormToEndpoint(
-                "/api/core/backup/setSettings",
-                'frm_backupSettingsRemote',
-                function () {
-                    btnIcon.removeClass("fa fa-spinner fa-pulse").addClass("fa fa-check");
-                    setTimeout(function(){ btnIcon.removeClass("fa fa-check"); }, 2000);
-                },
-                true,
-                function () {
-                    btnIcon.removeClass("fa fa-spinner fa-pulse");
-                }
-            );
+            btnIcon.removeClass("fa-check").addClass("fa-spinner fa-pulse");
+
+            saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsRemote', function () {
+                btnIcon.addClass("fa-check");
+                setTimeout(function(){ btnIcon.removeClass("fa-check"); }, 2000);
+            }, true).always(function() {
+                btnIcon.removeClass("fa-spinner fa-pulse");
+            });
         });
 
         $("#btn_download").click(function (e) {
@@ -298,6 +286,15 @@
         <div class="content-box __mb">
             {{ partial("layout_partials/base_form",['fields':backupLocalForm,'id':'frm_backupSettingsLocal', 'apply_btn_id':'btn_save_local', 'apply_btn_title': lang._('Save')]) }}
         </div>
+
+        <div class="alert alert-info" role="alert">
+            {{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}<br/>
+            <strong>{{ lang._('Current space used:') }} {{ backupSize | default('0 MB') }}</strong>
+        </div>
+
+        <div class="content-box __mb">
+            <table class="table table-striped table-condensed">
+                <thead>
 
         <div class="content-box __mb">
             <table class="table table-striped table-condensed">
