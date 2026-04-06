@@ -274,6 +274,22 @@ class BackupController extends ApiControllerBase
                         $config->system->backuppushtime = $pushtime;
                         $configChanged = true;
                         $logMessages[] = "Changed remote backup push time to {$pushtime}";
+
+                        if (preg_match('/^([0-9]{1,2}):([0-9]{1,2})$/', $pushtime, $matches)) {
+                            $cron_hour = (int)$matches[1];
+                            $cron_minute = (int)$matches[2];
+
+                            if (isset($config->cron->item)) {
+                                foreach ($config->cron->item as $cronitem) {
+                                    if (strpos((string)$cronitem->command, 'system remote backup 30') !== false) {
+                                        $cronitem->hour = (string)$cron_hour;
+                                        $cronitem->minute = (string)$cron_minute;
+                                        $logMessages[] = "Updated remote backup cron schedule";
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -288,9 +304,8 @@ class BackupController extends ApiControllerBase
                 require_once("system.inc");
                 require_once("plugins.inc");
 
-                // Refresh global state so legacy hooks read the new config
                 global $config;
-                $config = \parse_config();
+                $config = \OPNsense\Core\Config::getInstance()->toArray(listtags());
 
                 // Re-compile cron and restart the service
                 \system_cron_configure();
