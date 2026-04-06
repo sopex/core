@@ -34,6 +34,17 @@
             formatTokenizersUI();
             $('.selectpicker').selectpicker('refresh');
         });
+        if (window.location.hash !== "") {
+            $('a[href="' + window.location.hash + '"]').tab('show');
+        }
+
+        $('.nav-tabs a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+            if (history.replaceState) {
+                history.replaceState(null, null, e.target.hash);
+            } else {
+                window.location.hash = e.target.hash;
+            }
+        });
 
         $("#btn_save_local").click(function (e) {
             e.preventDefault();
