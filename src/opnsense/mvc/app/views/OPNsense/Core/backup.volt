@@ -40,10 +40,15 @@
             if ($(this).find("i").length === 0) { $(this).append(" <i></i>"); }
             let btnIcon = $(this).find('i');
             btnIcon.removeClass().addClass("fa fa-spinner fa-pulse");
+
             saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsLocal', function () {
                 btnIcon.removeClass().addClass("fa fa-check");
                 setTimeout(function(){ btnIcon.removeClass(); }, 2000);
-            }, true);
+            }, true).always(function() {
+                if (btnIcon.hasClass("fa-spinner")) {
+                    btnIcon.removeClass();
+                }
+            });
         });
 
         $("#btn_save_remote").click(function (e) {
@@ -51,10 +56,15 @@
             if ($(this).find("i").length === 0) { $(this).append(" <i></i>"); }
             let btnIcon = $(this).find('i');
             btnIcon.removeClass().addClass("fa fa-spinner fa-pulse");
+
             saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsRemote', function () {
                 btnIcon.removeClass().addClass("fa fa-check");
                 setTimeout(function(){ btnIcon.removeClass(); }, 2000);
-            }, true);
+            }, true).always(function() {
+                if (btnIcon.hasClass("fa-spinner")) {
+                    btnIcon.removeClass();
+                }
+            });
         });
 
         $("#btn_download").click(function (e) {
