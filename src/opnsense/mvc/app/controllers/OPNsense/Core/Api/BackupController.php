@@ -239,15 +239,18 @@ class BackupController extends ApiControllerBase
             $logMessages = [];
             $validations = [];
 
+            // 1. Validations
             if (isset($post['backupcount'])) {
                 $count = trim($post['backupcount']);
+                // Regex for numbers 1 to 9999
                 if ($count !== '' && !preg_match('/^[1-9][0-9]{0,3}$/', (string)$count)) {
-                    $validations['backup.backupcount'] = gettext('Only numerical values in the range 1 to 9999 are allowed');
+                    $validations['backup.backupcount'] = gettext('Only numerical values in the range 1 to 9999 are allowed.');
                 }
             }
 
             if (isset($post['pushtime'])) {
                 $pushtime = trim($post['pushtime']);
+                // Regex for HH:MM
                 if ($pushtime !== '' && !preg_match('/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/', $pushtime)) {
                     $validations['backup.pushtime'] = gettext('Push time must be in valid HH:MM format.');
                 }
@@ -257,6 +260,7 @@ class BackupController extends ApiControllerBase
                 return ['result' => 'failed', 'validations' => $validations];
             }
 
+            // 2. Process and Save
             if (isset($post['backupcount'])) {
                 $count = trim($post['backupcount']);
                 if ($count === '') {
@@ -303,11 +307,10 @@ class BackupController extends ApiControllerBase
                 require_once("plugins.inc");
 
                 global $config;
-                $config = \parse_config(true);
+                $config = \parse_config(true); // Bust cache
 
                 \system_cron_configure();
             }
-
             return ['result' => 'saved'];
         }
         return ['result' => 'failed'];
