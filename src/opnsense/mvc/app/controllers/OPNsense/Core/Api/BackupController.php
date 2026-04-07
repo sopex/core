@@ -309,7 +309,6 @@ class BackupController extends ApiControllerBase
 
                 global $config;
                 $config = \parse_config(true);
-
                 \system_cron_configure();
             }
 
@@ -318,7 +317,7 @@ class BackupController extends ApiControllerBase
         return $result;
     }
 
-    public function downloadThisAction()
+    public function downloadConfigAction()
     {
         if ($this->request->isPost()) {
             require_once("util.inc");
@@ -624,6 +623,7 @@ class BackupController extends ApiControllerBase
 
         if (count($restored) && !count($failed)) {
             \OPNsense\Core\Config::getInstance()->save(sprintf('Restored sections (%s) of config file', join(',', $restored)));
+            \convert_config();
         }
 
         return $failed;

@@ -50,7 +50,7 @@
             e.preventDefault();
             let btnIcon = $(this).find('i');
             if (btnIcon.length === 0) {
-                $(this).append(" <i></i>");
+                $$(this).append(" <i></i>");
                 btnIcon = $(this).find('i');
             }
             btnIcon.removeClass().addClass("fa fa-spinner fa-pulse");
@@ -67,7 +67,7 @@
             e.preventDefault();
             let btnIcon = $(this).find('i');
             if (btnIcon.length === 0) {
-                $(this).prepend("<i></i> ");
+                $(this).append(" <i></i>");
                 btnIcon = $(this).find('i');
             }
             btnIcon.removeClass().show().addClass("fa fa-spinner fa-pulse");
@@ -110,7 +110,7 @@
 
             $.ajax({
                 type: "POST",
-                url: "/api/core/backup/downloadThis",
+                url: "/api/core/backup/downloadConfig",
                 data: params,
                 xhrFields: {
                     responseType: 'blob'
