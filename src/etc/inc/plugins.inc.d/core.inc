@@ -284,7 +284,7 @@ function core_cron()
     $cron_minute = 0;
     $cron_hour = 2;
 
-    $push_time = $config['system']['backup']['pushtime'] ?? '';
+    $push_time = $config['system']['backup']['settings']['pushtime'] ?? '';
 
     if (!empty($push_time) && preg_match('/^([0-9]{1,2}):([0-9]{1,2})$/', $push_time, $matches)) {
         $cron_hour = (int)$matches[1];
@@ -293,7 +293,15 @@ function core_cron()
 
     foreach ((new OPNsense\Backup\BackupFactory())->listProviders() as $classname => $provider) {
         if ($provider['handle']->isEnabled()) {
-            $jobs[]['autocron'] = ['/usr/local/sbin/configctl -d system remote backup 30', $cron_minute, $cron_hour, '*', '*', '*', 'root'];
+            $jobs[]['autocron'] = [
+                'command' => '/usr/local/sbin/configctl -d system remote backup 30',
+                'minute'  => $cron_minute,
+                'hour'    => $cron_hour,
+                'mday'    => '*',
+                'month'   => '*',
+                'wday'    => '*',
+                'who'     => 'root'
+            ];
             break;
         }
     }

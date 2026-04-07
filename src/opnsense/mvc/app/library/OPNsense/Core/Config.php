@@ -705,10 +705,10 @@ class Config extends Singleton
     public function backupCount()
     {
         if (
-            $this->statusIsValid && isset($this->simplexml->system->backup->backupcount)
-            && intval($this->simplexml->system->backup->backupcount) >= 0
+            $this->statusIsValid && isset($this->simplexml->system->backup->settings->backupcount)
+            && intval($this->simplexml->system->backup->settings->backupcount) >= 0
         ) {
-            return intval($this->simplexml->system->backup->backupcount);
+            return intval($this->simplexml->system->backup->settings->backupcount);
         } elseif (
             $this->statusIsValid && isset($this->simplexml->system->backupcount)
             && intval($this->simplexml->system->backupcount) >= 0

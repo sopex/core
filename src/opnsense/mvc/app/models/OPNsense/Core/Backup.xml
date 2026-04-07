@@ -1,5 +1,5 @@
 <model>
-    <mount>//system/backup</mount>
+    <mount>//system/backup/settings</mount>
     <version>1.0.2</version>
     <description>System Backup Settings</description>
     <items>
