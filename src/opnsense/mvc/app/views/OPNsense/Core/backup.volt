@@ -302,7 +302,7 @@
             <div style="padding: 10px 15px; border-top: 1px solid #e5e5e5; background-color: #f9f9f9;">
                 <span class="text-muted">
                     {{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}
-                    <strong>{{ lang._('Current space used:') }} {{ backupFootprint | default('0 MB') }}</strong>
+                    <strong>{{ lang._('Current space used:') }} {{ backupSize | default('0 MB') }}</strong>
                 </span>
             </div>
         </div>
