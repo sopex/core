@@ -262,7 +262,9 @@ class BackupController extends ApiControllerBase
 
             // CRON restart
             if (isset($post['pushtime'])) {
-                (new Backend())->configdRun('template reload OPNsense/Cron');
+                $backend = new \OPNsense\Core\Backend();
+                $backend->configdRun('template reload OPNsense/Cron');
+                $backend->configdRun('cron restart');
             }
 
             $result = ['status' => 'success'];
