@@ -281,12 +281,13 @@ function core_cron()
         $jobs[]['autocron'] = ['/usr/local/etc/rc.syshook.d/backup/20-netflow', '0', '*/' . $config['system']['netflowbackup']];
     }
 
-    global $config;
-
     $cron_minute = 0;
     $cron_hour = 2;
 
-    $push_time = $config['system']['backuppushtime'] ?? $config['backuppushtime'] ?? '';
+    $push_time = config_read_array('system', 'pushtime');
+    if (empty($push_time)) {
+        $push_time = config_read_array('pushtime');
+    }
 
     if (!empty($push_time) && preg_match('/^([0-9]{1,2}):([0-9]{1,2})$/', $push_time, $matches)) {
         $cron_hour = (int)$matches[1];
