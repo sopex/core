@@ -2,6 +2,7 @@
 
 /*
  * Copyright (C) 2026 Konstantinos Spartalis <cspartalis@potatonetworks.com>
+ * Copyright (C) 2023 Deciso B.V.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,9 +37,6 @@ class BackupController extends \OPNsense\Base\IndexController
 {
     public function indexAction()
     {
-        require_once("system.inc");
-        require_once("plugins.inc");
-
         $backupFactory = new \OPNsense\Backup\BackupFactory();
         $this->view->providers = $backupFactory->listProviders();
 
@@ -46,26 +44,29 @@ class BackupController extends \OPNsense\Base\IndexController
         $this->view->backupRemoteForm = $this->getForm("backup_remote");
 
         $baksz = '0B';
-        if (is_dir('/conf/backup')) {
-            $files = glob("/conf/backup/*.xml");
-            $bytes = $files ? array_sum(array_map('filesize', $files)) : 0;
+        $files = \OPNsense\Core\Config::getInstance()->getBackups(false);
+        if ($files) {
+            $bytes = array_sum(array_map('filesize', $files));
             $baksz = round($bytes / 1024 / 1024, 2) . ' MB';
         }
         $this->view->backupSize = $baksz;
 
         $areas = [
-            'bridges'   => gettext('Bridge Devices'),
-            'gifs'      => gettext('GIF Devices'),
+            'bridges' => gettext('Bridge Devices'),
+            'gifs' => gettext('GIF Devices'),
             'interfaces' => gettext('Interfaces'),
-            'laggs'     => gettext('LAGG Devices'),
-            'ppps'      => gettext('Point-to-Point Devices'),
-            'rrddata'   => gettext('RRD Data'),
-            'vlans'     => gettext('VLAN Devices'),
-            'wireless'  => gettext('Wireless Devices'),
+            'laggs' => gettext('LAGG Devices'),
+            'ppps' => gettext('Point-to-Point Devices'),
+            'rrddata' => gettext('RRD Data'),
+            'vlans' => gettext('VLAN Devices'),
+            'wireless' => gettext('Wireless Devices'),
         ];
-        foreach (plugins_xmlrpc_sync() as $area) {
-            if (!empty($area['section'])) {
-                $areas[$area['section']] = $area['description'];
+        $xmlrpc_options = @json_decode((new \OPNsense\Core\Backend())->configdRun('system xmlrpc options'), true);
+        if (is_array($xmlrpc_options)) {
+            foreach ($xmlrpc_options as $area) {
+                if (!empty($area['section'])) {
+                    $areas[$area['section']] = $area['description'];
+                }
             }
         }
         natcasesort($areas);
