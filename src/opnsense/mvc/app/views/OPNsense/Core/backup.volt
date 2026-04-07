@@ -316,14 +316,12 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <td style="width: 22%"><strong>{{ lang._('Backup Data') }}</strong></td>
-                        <td style="width: 78%">
+                        <td>
                             <input name="donotbackuprrd" type="checkbox" id="donotbackuprrd" checked="checked" />
                             {{ lang._('Do not backup RRD data.') }}
                         </td>
                     </tr>
                     <tr>
-                        <td><strong>{{ lang._('Encryption') }}</strong></td>
                         <td>
                             <input name="encrypt" type="checkbox" id="encrypt" />
                             {{ lang._('Encrypt this configuration file.') }}
@@ -364,8 +362,7 @@
                     </thead>
                     <tbody>
                         <tr>
-                            <td style="width: 22%"><strong>{{ lang._('Restore area') }}</strong></td>
-                            <td style="width: 78%">
+                            <td>
                                 <select name="restorearea[]" id="restorearea" class="selectpicker" multiple="multiple" size="5" title="{{ lang._('All (recommended)') }}" data-live-search="true" data-size="10">
                                     {% for areaId, areaDescription in areas %}
                                         <option value="{{ areaId }}">{{ areaDescription }}</option>
@@ -374,13 +371,11 @@
                             </td>
                         </tr>
                         <tr>
-                            <td><strong>{{ lang._('Configuration file') }}</strong></td>
                             <td>
                                 <input name="conffile" type="file" id="conffile"/>
                             </td>
                         </tr>
                         <tr>
-                            <td><strong>{{ lang._('Options') }}</strong></td>
                             <td>
                                 <div class="__mb">
                                     <input name="rebootafterrestore" type="checkbox" value="1" id="rebootafterrestore" checked="checked"/>
