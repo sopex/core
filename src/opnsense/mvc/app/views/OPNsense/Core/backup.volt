@@ -340,7 +340,6 @@
                         </td>
                     </tr>
                     <tr>
-                        <td></td>
                         <td>
                             <button class="btn btn-primary" id="btn_download">{{ lang._('Download configuration') }} <i id="btn_download_progress"></i></button>
                             <div class="text-muted __mt">{{ lang._('Click this button to download the system configuration in XML format.') }}</div>
@@ -394,7 +393,6 @@
                             </td>
                         </tr>
                         <tr>
-                            <td></td>
                             <td>
                                 <button type="submit" class="btn btn-primary" id="btn_restore">{{ lang._('Restore configuration') }} <i id="btn_restore_progress"></i></button>
                                 <div class="text-muted __mt">{{ lang._('Open a configuration XML file and click the button below to restore the configuration.') }}</div>
