@@ -351,6 +351,7 @@
                 </tbody>
             </table>
         </div>
+    </div>
 
     <div id="restore" class="tab-pane fade in">
         <form id="frm_restore" enctype="multipart/form-data">
