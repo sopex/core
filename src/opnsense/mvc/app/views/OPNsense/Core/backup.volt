@@ -48,24 +48,36 @@
 
         $("#btn_save_local").click(function (e) {
             e.preventDefault();
-            if ($(this).find("i").length === 0) { $(this).append(" <i></i>"); }
             let btnIcon = $(this).find('i');
+            if (btnIcon.length === 0) {
+                $(this).append(" <i></i>");
+                btnIcon = $(this).find('i');
+            }
             btnIcon.removeClass().addClass("fa fa-spinner fa-pulse");
+
             saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsLocal', function () {
                 btnIcon.removeClass().addClass("fa fa-check");
                 setTimeout(function(){ btnIcon.removeClass(); }, 2000);
-            }, true);
+            }, true, function() {
+                btnIcon.removeClass();
+            });
         });
 
         $("#btn_save_remote").click(function (e) {
             e.preventDefault();
-            if ($(this).find("i").length === 0) { $(this).append(" <i></i>"); }
             let btnIcon = $(this).find('i');
-            btnIcon.removeClass().addClass("fa fa-spinner fa-pulse");
+            if (btnIcon.length === 0) {
+                $(this).prepend("<i></i> ");
+                btnIcon = $(this).find('i');
+            }
+            btnIcon.removeClass().show().addClass("fa fa-spinner fa-pulse");
+
             saveFormToEndpoint("/api/core/backup/setSettings", 'frm_backupSettingsRemote', function () {
                 btnIcon.removeClass().addClass("fa fa-check");
                 setTimeout(function(){ btnIcon.removeClass(); }, 2000);
-            }, true);
+            }, true, function() {
+                btnIcon.removeClass();
+            });
         });
 
         $("#btn_download").click(function (e) {
@@ -301,7 +313,7 @@
                         </tr>
                         <tr>
                             <td>
-                                <button class="btn btn-primary" id="btn_save_local">{{ lang._('Save') }}</button>
+                                <button type="button" class="btn btn-primary" id="btn_save_local">{{ lang._('Save') }}</button>
                                 <span class="text-muted" style="margin-left: 15px;">
                                     {{ lang._('Be aware of how much space is consumed by backups before adjusting this value.') }}
                                     <strong>{{ lang._('Current space used:') }} {{ backupSize | default('0 MB') }}</strong>
