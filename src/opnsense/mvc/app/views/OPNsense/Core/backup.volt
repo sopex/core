@@ -308,7 +308,7 @@
                         <tr>
                             <td>
                                 <input name="backup[backupcount]" type="text" id="backup.backupcount" class="form-control" placeholder="15" style="max-width: 300px;"/>
-                                <span class="help-block" data-for="backup.backupcount"></span>
+                                <span class="help-block" id="help_block_backup.backupcount"></span>
                                 <div class="text-muted __mt">{{ lang._('Enter the number of older configurations to keep in the local backup cache.') }}</div>
                             </td>
                         </tr>
