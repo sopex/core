@@ -1,5 +1,5 @@
 {#
-# Copyright (c) 2026 Konstantinos Spartalis (cspartalis@potatonetworks.com)
+# Copyright (c) 2026 Konstantinos Spartalis <cspartalis@potatonetworks.com>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without modification,
