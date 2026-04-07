@@ -308,34 +308,41 @@
         </div>
 
         <div class="content-box __mb">
-            <table class="table table-striped table-condensed">
+            <table class="table table-striped opnsense_standard_table_form">
                 <thead>
                     <tr>
-                        <th>{{ lang._('Download') }}</th>
+                        <th colspan="2">{{ lang._('Download') }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td>
+                        <td style="width: 22%"><strong>{{ lang._('Backup Data') }}</strong></td>
+                        <td style="width: 78%">
                             <input name="donotbackuprrd" type="checkbox" id="donotbackuprrd" checked="checked" />
-                            {{ lang._('Do not backup RRD data.') }}<br/>
+                            {{ lang._('Do not backup RRD data.') }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>{{ lang._('Encryption') }}</strong></td>
+                        <td>
                             <input name="encrypt" type="checkbox" id="encrypt" />
-                            {{ lang._('Encrypt this configuration file.') }}<br/>
+                            {{ lang._('Encrypt this configuration file.') }}
                             <div class="hidden __mt" id="encrypt_opts">
-                                <table class="table table-condensed">
+                                <table class="table table-condensed" style="background-color: transparent;">
                                     <tr>
-                                        <td style="width:150px">{{ lang._('Password') }}</td>
-                                        <td><input id="encrypt_password" type="password" autocomplete="new-password"/></td>
+                                        <td style="width:150px; border-top: none;">{{ lang._('Password') }}</td>
+                                        <td style="border-top: none;"><input class="form-control" id="encrypt_password" type="password" autocomplete="new-password"/></td>
                                     </tr>
                                     <tr>
-                                        <td>{{ lang._('Confirmation') }}</td>
-                                        <td><input id="encrypt_passconf" type="password" autocomplete="new-password"/></td>
+                                        <td style="border-top: none;">{{ lang._('Confirmation') }}</td>
+                                        <td style="border-top: none;"><input class="form-control" id="encrypt_passconf" type="password" autocomplete="new-password"/></td>
                                     </tr>
                                 </table>
                             </div>
                         </td>
                     </tr>
                     <tr>
+                        <td></td>
                         <td>
                             <button class="btn btn-primary" id="btn_download">{{ lang._('Download configuration') }} <i id="btn_download_progress"></i></button>
                             <div class="text-muted __mt">{{ lang._('Click this button to download the system configuration in XML format.') }}</div>
@@ -344,52 +351,59 @@
                 </tbody>
             </table>
         </div>
-    </div>
 
     <div id="restore" class="tab-pane fade in">
         <form id="frm_restore" enctype="multipart/form-data">
             <div class="content-box __mb">
-                <table class="table table-striped table-condensed">
+                <table class="table table-striped opnsense_standard_table_form">
                     <thead>
                         <tr>
-                            <th>{{ lang._('Restore') }}</th>
+                            <th colspan="2">{{ lang._('Restore') }}</th>
                         </tr>
                     </thead>
                     <tbody>
-                    <tr>
-                        <td>
-                            <div class="__mb">
+                        <tr>
+                            <td style="width: 22%"><strong>{{ lang._('Restore area') }}</strong></td>
+                            <td style="width: 78%">
                                 <select name="restorearea[]" id="restorearea" class="selectpicker" multiple="multiple" size="5" title="{{ lang._('All (recommended)') }}" data-live-search="true" data-size="10">
                                     {% for areaId, areaDescription in areas %}
                                         <option value="{{ areaId }}">{{ areaDescription }}</option>
                                     {% endfor %}
                                 </select>
-                            </div>
-                            <div class="__mb __mt">
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>{{ lang._('Configuration file') }}</strong></td>
+                            <td>
                                 <input name="conffile" type="file" id="conffile"/>
-                            </div>
-                            <div class="__mb">
-                                <input name="rebootafterrestore" type="checkbox" value="1" id="rebootafterrestore" checked="checked"/>
-                                {{ lang._('Reboot after a successful restore.') }}<br/>
-                                <input name="keepconsole" type="checkbox" value="1" id="keepconsole" checked="checked"/>
-                                {{ lang._('Exclude console settings from import.') }}<br/>
-                                <input name="flush_history" type="checkbox" value="1" id="flush_history" checked="checked"/>
-                                {{ lang._('Flush (full) local configuration history.') }}<br/>
-                                <input name="decrypt" type="checkbox" value="1" id="decrypt"/>
-                                {{ lang._('Configuration file is encrypted.') }}
-                            </div>
-                            <div class="hidden __mt" id="decrypt_opts">
-                                <strong>{{ lang._('Encryption Password:') }}</strong><br/>
-                                <input name="decrypt_password" type="password" autocomplete="new-password" style="margin-top: 5px;"/>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <button type="submit" class="btn btn-primary" id="btn_restore">{{ lang._('Restore configuration') }} <i id="btn_restore_progress"></i></button>
-                            <div class="text-muted __mt">{{ lang._('Open a configuration XML file and click the button below to restore the configuration.') }}</div>
-                        </td>
-                    </tr>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>{{ lang._('Options') }}</strong></td>
+                            <td>
+                                <div class="__mb">
+                                    <input name="rebootafterrestore" type="checkbox" value="1" id="rebootafterrestore" checked="checked"/>
+                                    {{ lang._('Reboot after a successful restore.') }}<br/>
+                                    <input name="keepconsole" type="checkbox" value="1" id="keepconsole" checked="checked"/>
+                                    {{ lang._('Exclude console settings from import.') }}<br/>
+                                    <input name="flush_history" type="checkbox" value="1" id="flush_history" checked="checked"/>
+                                    {{ lang._('Flush (full) local configuration history.') }}<br/>
+                                    <input name="decrypt" type="checkbox" value="1" id="decrypt"/>
+                                    {{ lang._('Configuration file is encrypted.') }}
+                                </div>
+                                <div class="hidden __mt" id="decrypt_opts">
+                                    <strong>{{ lang._('Encryption Password:') }}</strong><br/>
+                                    <input class="form-control" name="decrypt_password" type="password" autocomplete="new-password" style="margin-top: 5px; max-width: 350px;"/>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td>
+                                <button type="submit" class="btn btn-primary" id="btn_restore">{{ lang._('Restore configuration') }} <i id="btn_restore_progress"></i></button>
+                                <div class="text-muted __mt">{{ lang._('Open a configuration XML file and click the button below to restore the configuration.') }}</div>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
