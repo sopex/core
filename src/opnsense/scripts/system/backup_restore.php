@@ -28,6 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+require_once('script/load_phalcon.php');
 require_once("config.inc");
 global $config;
 $config = \parse_config();
@@ -224,7 +225,7 @@ if (!empty($restoreareas)) {
             \OPNsense\Core\Config::getInstance()->save('Restored full configuration');
         }
         if (!empty($params['flush_history'])) {
-            \OPNsense\Core\Shell::shell_safe('/usr/local/opnsense/scripts/system/flush_config_history', [], true);
+            mwexec('/usr/local/opnsense/scripts/system/flush_config_history');
             \OPNsense\Core\Config::getInstance()->save('System restore flushed local history');
         }
         if (\is_interface_mismatch(false)) {

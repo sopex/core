@@ -31,8 +31,7 @@
 require_once("config.inc");
 
 $filename = isset($argv[1]) ? $argv[1] : null;
-$include_rrd = isset($argv[2]) && $argv[2] == 'rrd';
-
+$include_rrd = isset($argv[2]) && $argv[2] === 'rrd';
 if (empty($filename)) {
     echo json_encode(["status" => "failed", "message" => "No target filename provided"]);
     exit(1);
@@ -42,7 +41,9 @@ $data = file_get_contents('/conf/config.xml');
 
 if ($include_rrd) {
     require_once("rrd.inc");
+    global $config;
     $rrd_data_xml = \rrd_export();
+    $config = \parse_config();
     $data = str_replace("</opnsense>", $rrd_data_xml . "</opnsense>", $data);
 }
 
