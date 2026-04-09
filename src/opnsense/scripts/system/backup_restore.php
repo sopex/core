@@ -182,9 +182,6 @@ if (!empty($restoreareas)) {
             \OPNsense\Core\Config::getInstance()->save('Restored configuration area (RRD data imported)');
         }
         if ($do_reboot) {
-            // Can't run Backend inside the script (since we are called by backend), but we can just tell the frontend to reboot!
-            // Wait, OPNsense scripts don't usually run `Backend` commands inside, they just let the caller handle it.
-            // Oh wait, in BackupController we had: `(new Backend())->configdRun('system reboot', true);` so the controller can still do it
         }
         echo json_encode(['status' => 'success', 'message' => gettext("The configuration area has been restored."), 'reboot' => $do_reboot]);
     }
