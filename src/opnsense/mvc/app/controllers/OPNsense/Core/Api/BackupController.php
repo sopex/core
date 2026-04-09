@@ -283,9 +283,8 @@ class BackupController extends ApiControllerBase
             $name = "config-" . $hostname . "-" . date("YmdHis") . ".xml";
             $tmpfile = tempnam(sys_get_temp_dir(), 'opn_bck_');
             $rrd_arg = empty($this->request->getPost('donotbackuprrd')) ? "rrd" : "norrd";
-            $command = "system config export " . escapeshellarg($tmpfile) . " " . escapeshellarg($rrd_arg);
             $backend = new Backend();
-            $response = json_decode(trim($backend->configdRun($command)), true);
+            $response = json_decode(trim($backend->configdpRun('system config export', [$tmpfile, $rrd_arg])), true);
 
             if ($response !== null && $response['status'] == 'success' && file_exists($tmpfile)) {
                 $data = file_get_contents($tmpfile);
@@ -351,7 +350,7 @@ class BackupController extends ApiControllerBase
             file_put_contents($paramfile, json_encode($params));
 
             $backend = new Backend();
-            $response = json_decode(trim($backend->configdRun("system config restore " . escapeshellarg($paramfile))), true);
+            $response = json_decode(trim($backend->configdpRun('system config restore', [$paramfile])), true);
 
             @unlink($tmpfile);
             @unlink($paramfile);
