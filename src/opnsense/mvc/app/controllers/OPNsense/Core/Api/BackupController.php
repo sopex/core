@@ -282,10 +282,8 @@ class BackupController extends ApiControllerBase
             }
             $name = "config-" . $hostname . "-" . date("YmdHis") . ".xml";
             $tmpfile = tempnam(sys_get_temp_dir(), 'opn_bck_');
-            $command = "system config export " . escapeshellarg($tmpfile);
-            if (empty($this->request->getPost('donotbackuprrd'))) {
-                $command .= " rrd";
-            }
+            $rrd_arg = empty($this->request->getPost('donotbackuprrd')) ? "rrd" : "norrd";
+            $command = "system config export " . escapeshellarg($tmpfile) . " " . escapeshellarg($rrd_arg);
             $backend = new Backend();
             $response = json_decode(trim($backend->configdRun($command)), true);
 

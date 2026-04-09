@@ -30,6 +30,9 @@
 
 require_once('script/load_phalcon.php');
 require_once("config.inc");
+ini_set('display_errors', '0');
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING & ~E_STRICT & ~E_DEPRECATED);
+
 global $config;
 $config = \parse_config();
 require_once("util.inc");
