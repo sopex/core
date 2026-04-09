@@ -28,28 +28,34 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-require_once("config.inc");
+try {
+    require_once("config.inc");
+    require_once("util.inc");
 
-$filename = isset($argv[1]) ? $argv[1] : null;
-$include_rrd = isset($argv[2]) && $argv[2] === 'rrd';
-if (empty($filename)) {
-    echo json_encode(["status" => "failed", "message" => "No target filename provided"]);
-    exit(1);
-}
+    $filename = isset($argv[1]) ? $argv[1] : null;
+    $include_rrd = isset($argv[2]) && $argv[2] === 'rrd';
+    if (empty($filename)) {
+        echo json_encode(["status" => "failed", "message" => "No target filename provided"]);
+        exit(1);
+    }
 
-$data = file_get_contents('/conf/config.xml');
+    $data = file_get_contents('/conf/config.xml');
 
-if ($include_rrd) {
-    require_once("rrd.inc");
-    global $config;
-    $rrd_data_xml = \rrd_export();
-    $config = \parse_config();
-    $data = str_replace("</opnsense>", $rrd_data_xml . "</opnsense>", $data);
-}
+    if ($include_rrd) {
+        require_once("rrd.inc");
+        global $config;
+        $rrd_data_xml = \rrd_export();
+        $config = \parse_config();
+        $data = str_replace("</opnsense>", $rrd_data_xml . "</opnsense>", $data);
+    }
 
-if (file_put_contents($filename, $data) !== false) {
-    chmod($filename, 0600);
-    echo json_encode(["status" => "success", "filename" => $filename]);
-} else {
-    echo json_encode(["status" => "failed", "message" => "Could not write to ".$filename]);
+    if (file_put_contents($filename, $data) !== false) {
+        chmod($filename, 0600);
+        echo json_encode(["status" => "success", "filename" => $filename]);
+    } else {
+        echo json_encode(["status" => "failed", "message" => "Could not write to ".$filename]);
+    }
+} catch (\Throwable $e) {
+    echo json_encode(["status" => "failed", "message" => "Fatal Error: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine()]);
+    exit(0);
 }

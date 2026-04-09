@@ -43,6 +43,8 @@ require_once("system.inc");
 require_once("console.inc");
 require_once("auth.inc");
 
+try {
+
 function restore_config_section($section_sets, $new_contents)
 {
     require_once("config.inc");
@@ -240,4 +242,8 @@ if (!empty($restoreareas)) {
     } else {
         echo json_encode(['status' => 'failed', 'message' => gettext("The configuration could not be restored.")]);
     }
+}
+} catch (\Throwable $e) {
+    echo json_encode(["status" => "failed", "message" => "Fatal Error: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine()]);
+    exit(0);
 }
