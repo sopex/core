@@ -377,7 +377,7 @@ let sessionThrottleTimer = null;
 let lastPingTime = Date.now();
 
 /**
- * Resets the shared local storage timestamp.
+ * Resets the shared local storage timestamp and calculates dynamic ping.
  */
 function resetSessionTimeout() {
     if (!sessionThrottleTimer) {
@@ -386,9 +386,12 @@ function resetSessionTimeout() {
             localStorage.setItem(ACTIVITY_KEY, now.toString());
             sessionThrottleTimer = null;
 
-            if ((now - lastPingTime) > 300000) {
+            let sessionTimeoutMs = window.sessionTimeout * 1000;
+            let pingInterval = Math.min(300000, Math.floor(sessionTimeoutMs / 3));
+
+            if (pingInterval > 0 && (now - lastPingTime) > pingInterval) {
                 lastPingTime = now;
-                $.post('/api/core/menu/search');
+                $.post('/api/core/system/keepalive');
             }
         }, 1000);
     }
@@ -423,6 +426,13 @@ function initSessionTimeout() {
 
     window.addEventListener('storage', function(e) {
         if (e.key === 'opnsense_logout' || (e.key === ACTIVITY_KEY && !e.newValue)) {
+            window.location.reload();
+        }
+    });
+
+    $(document).ajaxError(function(event, jqXHR, ajaxSettings, thrownError) {
+        if (jqXHR.status === 401) {
+            localStorage.removeItem(ACTIVITY_KEY);
             window.location.reload();
         }
     });

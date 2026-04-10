@@ -134,11 +134,13 @@ class ControllerRoot extends Controller
     public function doAuth()
     {
         $cnf = Config::getInstance()->object();
-        if (!empty($cnf->system->webgui->session_timeout)) {
-            $this->session_timeout = $cnf->system->webgui->session_timeout * 60;
+
+        if (isset($cnf->system->webgui->session_timeout) && is_numeric((string)$cnf->system->webgui->session_timeout)) {
+            $this->session_timeout = (int)$cnf->system->webgui->session_timeout * 60;
         } else {
             $this->session_timeout = 14400;
         }
+
         $redirect_uri = "/?url=" . $_SERVER['REQUEST_URI'];
         if ($this->session->has("Username") == false) {
             // user unknown

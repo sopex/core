@@ -205,4 +205,13 @@ class SystemController extends ApiControllerBase
 
         return ["status" => "failed"];
     }
+
+    /**
+    * Dedicated, zero-impact endpoint to keep the PHP session alive during active client-side use.
+    * @return array status
+    */
+    public function keepaliveAction()
+    {
+        return array("status" => "ok");
+    }
 }
