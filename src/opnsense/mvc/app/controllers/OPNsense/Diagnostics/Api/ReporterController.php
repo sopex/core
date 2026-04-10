@@ -31,8 +31,6 @@ namespace OPNsense\Diagnostics\Api;
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Core\Config;
 
-require_once 'guiconfig.inc';
-
 /**
  * Class CrashReporterController
  * @package OPNsense\Diagnostics\Api
@@ -46,7 +44,7 @@ class ReporterController extends ApiControllerBase
         $count = 0;
 
         if (file_exists($PHP_errors_log) && !is_link($PHP_errors_log)) {
-            if (intval(shell_safe('/bin/cat %s | /usr/bin/wc -l | /usr/bin/awk \'{ print $1 }\'', $PHP_errors_log))) {
+            if (filesize($PHP_errors_log) > 0) {
                 $count++;
             }
         }
@@ -65,9 +63,8 @@ class ReporterController extends ApiControllerBase
 
     private function get_crash_report_header()
     {
-        global $config;
-        $plugins = implode(' ', shell_safe('/usr/local/sbin/pkg-static info -g "os-*"', [], true));
-        // Use AppInfo if available, else product::getInstance()
+        $plugins = trim((string)shell_exec('/usr/local/sbin/pkg-static info -g "os-*"'));
+        $plugins = str_replace("\n", " ", $plugins);
         if (class_exists('\OPNsense\Core\AppInfo')) {
             $productName = \OPNsense\Core\AppInfo::name();
             $productVersion = \OPNsense\Core\AppInfo::version();
@@ -90,8 +87,8 @@ class ReporterController extends ApiControllerBase
             $productHash,
             empty($plugins) ? '' : "Plugins $plugins\n",
             date('r'),
-            shell_safe('/usr/local/bin/openssl version | cut -f -2 -d \' \''),
-            shell_safe('/usr/local/bin/python3 -V'),
+            trim((string)shell_exec('/usr/local/bin/openssl version | cut -f -2 -d \' \'')),
+            trim((string)shell_exec('/usr/local/bin/python3 -V 2>&1')),
             PHP_VERSION
         );
 
@@ -140,7 +137,7 @@ class ReporterController extends ApiControllerBase
 
     public function infoAction()
     {
-        global $config;
+        $config = Config::getInstance()->toArray();
 
         $has_crashed = $this->has_crash_report();
         $is_prod = empty($config['system']['deployment']) || $config['system']['deployment'] != 'development';
@@ -202,24 +199,26 @@ class ReporterController extends ApiControllerBase
     public function submitAction()
     {
         if ($this->request->isPost()) {
-            global $config;
-
-            $configObj = Config::getInstance();
-            $email = $this->request->getPost('reporter') && isset($this->request->getPost('reporter')['email']) ? trim($this->request->getPost('reporter')['email']) : '';
-            $desc = $this->request->getPost('reporter') && isset($this->request->getPost('reporter')['desc']) ? trim($this->request->getPost('reporter')['desc']) : '';
+            $configObj = Config::getInstance()->object();
+            $reporterData = $this->request->getPost('reporter');
+            $email = !empty($reporterData['email']) ? trim($reporterData['email']) : '';
+            $desc = !empty($reporterData['desc']) ? trim($reporterData['desc']) : '';
 
             $crash_report_header = $this->get_crash_report_header();
 
             if (!empty($email)) {
                 $crash_report_header .= "Email {$email}\n";
-                if (!isset($config['system']['contact_email']) ||
-                    $config['system']['contact_email'] !== $email) {
-                    $config['system']['contact_email'] = $email;
-                    write_config('Updated crash reporter contact email.');
+                if (!isset($configObj->system->contact_email) ||
+                    (string)$configObj->system->contact_email !== $email) {
+                    if (!isset($configObj->system)) {
+                        $configObj->addChild('system');
+                    }
+                    $configObj->system->contact_email = $email;
+                    Config::getInstance()->save();
                 }
-            } elseif (isset($config['system']['contact_email'])) {
-                unset($config['system']['contact_email']);
-                write_config('Removed crash reporter contact email.');
+            } elseif (isset($configObj->system->contact_email)) {
+                unset($configObj->system->contact_email);
+                Config::getInstance()->save();
             }
 
             if (!empty($desc)) {
@@ -242,11 +241,17 @@ class ReporterController extends ApiControllerBase
             file_put_contents('/var/crash/crashreport_header.txt', $crash_report_header);
 
             if (file_exists('/var/lib/php/tmp/PHP_errors.log')) {
-                shell_safe('/usr/bin/tail -c 1048576 /var/lib/php/tmp/PHP_errors.log > /var/crash/PHP_errors.log');
+                shell_exec('/usr/bin/tail -c 1048576 /var/lib/php/tmp/PHP_errors.log > /var/crash/PHP_errors.log');
                 @unlink('/var/lib/php/tmp/PHP_errors.log');
             }
             @copy('/var/run/dmesg.boot', '/var/crash/dmesg.boot');
-            shell_safe('/usr/bin/gzip /var/crash/*');
+            shell_exec('/usr/bin/gzip ' . escapeshellarg('/var/crash/*'));
+            $files_to_upload = glob('/var/crash/*');
+            foreach ($files_to_upload as $f) {
+                if (basename($f) !== 'minfree' && basename($f) !== 'bounds' && !preg_match("/\\.gz$/", $f)) {
+                    shell_exec('/usr/bin/gzip ' . escapeshellarg($f));
+                }
+            }
 
             $files_to_upload = glob('/var/crash/*');
 
