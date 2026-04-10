@@ -8,7 +8,7 @@
     <field>
         <id>reporter.desc</id>
         <label>Problem Description</label>
-        <type>textbox</type>
+        <type>text</type>
         <help>A short problem description or steps to reproduce.</help>
     </field>
 </form>
