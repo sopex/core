@@ -34,8 +34,8 @@
     <page-diagnostics-crash-reporter>
         <name>System: Crash Reporter</name>
         <patterns>
-            <pattern>ui/diagnostics/crashreporter*</pattern>
-            <pattern>api/diagnostics/crashreporter/*</pattern>
+            <pattern>ui/diagnostics/reporter*</pattern>
+            <pattern>api/diagnostics/reporter/*</pattern>
         </patterns>
     </page-diagnostics-crash-reporter>
     <page-system-status>
