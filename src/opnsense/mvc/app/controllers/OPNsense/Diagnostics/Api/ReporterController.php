@@ -31,7 +31,6 @@ namespace OPNsense\Diagnostics\Api;
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Core\Config;
 
-require_once 'guiconfig.inc';
 
 /**
  * Class CrashReporterController
@@ -73,11 +72,10 @@ class ReporterController extends ApiControllerBase
             $productArch = \OPNsense\Core\AppInfo::architecture();
             $productHash = \OPNsense\Core\AppInfo::hash();
         } else {
-            $product = \product::getInstance();
-            $productName = $product->name();
-            $productVersion = $product->version();
-            $productArch = $product->arch();
-            $productHash = $product->hash();
+            $productName = trim((string)shell_exec('opnsense-version -N'));
+            $productVersion = trim((string)shell_exec('opnsense-version -v'));
+            $productArch = trim((string)shell_exec('opnsense-version -a'));
+            $productHash = trim((string)shell_exec('opnsense-version -H'));
         }
 
         $crash_report_header = sprintf(
@@ -260,8 +258,9 @@ class ReporterController extends ApiControllerBase
             if (class_exists('\OPNsense\Core\AppInfo')) {
                 $user_agent = \OPNsense\Core\AppInfo::name() . "/" . \OPNsense\Core\AppInfo::version();
             } else {
-                $product = \product::getInstance();
-                $user_agent = $product->name() . "/" . $product->version();
+                $productName = trim((string)shell_exec('opnsense-version -N'));
+                $productVersion = trim((string)shell_exec('opnsense-version -v'));
+                $user_agent = $productName . "/" . $productVersion;
             }
 
             $this->upload_crash_report($files_to_upload, $user_agent);
