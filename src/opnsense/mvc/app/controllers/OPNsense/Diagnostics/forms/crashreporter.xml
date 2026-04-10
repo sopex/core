@@ -3,7 +3,7 @@
         <id>reporter.email</id>
         <label>Email Address</label>
         <type>text</type>
-        <help>Please note that providing your contact information greatly improves the chances of bugs being fixed.</help>
+        <help>your@email.com</help>
     </field>
     <field>
         <id>reporter.desc</id>
