@@ -32,8 +32,8 @@
             formatTokenizersUI();
             $('.selectpicker').selectpicker('refresh');
 
-            if (data.reporter.has_crashed) {
-                if (data.reporter.is_prod) {
+            if (response.reporter.has_crashed) {
+                if (response.reporter.is_prod) {
                     $("#btn_submit").show();
                     $("#submit_instructions").show();
                     $("#btn_dismiss").show();
@@ -43,7 +43,7 @@
                     $("#btn_dismiss").show();
                 }
 
-                var results = data.reporter.reports;
+                var results = response.reporter.reports;
                 var html = "";
                 for (var key in results) {
                     html += "<p><strong>" + $('<div/>').text(key).html() + "</strong>:<br/>";
@@ -54,11 +54,10 @@
                 $("#no_crash_msg").show();
                 $("#btn_new_issue").show();
             }
-            if (data.reporter.message !== "") {
-                $("#system_message").text(data.reporter.message).show();
+            if (response.reporter.message !== "") {
+                $("#system_message").text(response.reporter.message).show();
             }
-            if (data.reporter.submitted_message !== undefined) {
-                // To display post-action message if necessary, though reloading is standard
+            if (response.reporter.submitted_message !== undefined) {
             }
         });
 
