@@ -31,7 +31,8 @@ namespace OPNsense\Diagnostics\Api;
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Core\Config;
 
-require_once 'guiconfig.inc';
+require_once 'config.inc';
+require_once 'util.inc';
 
 /**
  * Class CrashReporterController
