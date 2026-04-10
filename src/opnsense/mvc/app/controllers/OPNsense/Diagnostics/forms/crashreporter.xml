@@ -1,0 +1,14 @@
+<form>
+    <field>
+        <id>reporter.email</id>
+        <label>Email Address</label>
+        <type>text</type>
+        <help>your@email.com</help>
+    </field>
+    <field>
+        <id>reporter.desc</id>
+        <label>Problem Description</label>
+        <type>text</type>
+        <help>A short problem description or steps to reproduce.</help>
+    </field>
+</form>

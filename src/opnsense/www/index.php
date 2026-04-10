@@ -84,5 +84,5 @@ try {
 } catch (\Error | \Exception $e) {
     error_log($e);
 
-    header('Location: /crash_reporter.php', true, 303);
+    header('Location: /ui/diagnostics/reporter', true, 303);
 }

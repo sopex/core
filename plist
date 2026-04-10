@@ -2520,7 +2520,6 @@
 /usr/local/share/man/man8/opnsense-shell.8.gz
 /usr/local/share/man/man8/opnsense-version.8.gz
 /usr/local/www/authgui.inc
-/usr/local/www/crash_reporter.php
 /usr/local/www/csrf.inc
 /usr/local/www/diag_authentication.php
 /usr/local/www/diag_backup.php
