@@ -37,7 +37,7 @@ require_once 'guiconfig.inc';
  * Class CrashReporterController
  * @package OPNsense\Diagnostics\Api
  */
-class CrashReporterController extends ApiControllerBase
+class ReporterController extends ApiControllerBase
 {
     private function has_crash_report()
     {
@@ -153,7 +153,7 @@ class CrashReporterController extends ApiControllerBase
                 $crash_files = [];
             }
             $reports['System Information'] = trim($this->get_crash_report_header());
-            
+
             if (file_exists('/var/lib/php/tmp/PHP_errors.log') && !is_link('/var/lib/php/tmp/PHP_errors.log')) {
                 $php_errors_size = @filesize('/var/lib/php/tmp/PHP_errors.log');
                 $max_php_errors_size = 1 * 1024 * 1024;
@@ -240,16 +240,16 @@ class CrashReporterController extends ApiControllerBase
                 }
             }
             file_put_contents('/var/crash/crashreport_header.txt', $crash_report_header);
-            
+
             if (file_exists('/var/lib/php/tmp/PHP_errors.log')) {
                 shell_safe('/usr/bin/tail -c 1048576 /var/lib/php/tmp/PHP_errors.log > /var/crash/PHP_errors.log');
                 @unlink('/var/lib/php/tmp/PHP_errors.log');
             }
             @copy('/var/run/dmesg.boot', '/var/crash/dmesg.boot');
             shell_safe('/usr/bin/gzip /var/crash/*');
-            
+
             $files_to_upload = glob('/var/crash/*');
-            
+
             if (class_exists('\OPNsense\Core\AppInfo')) {
                 $user_agent = \OPNsense\Core\AppInfo::name() . "/" . \OPNsense\Core\AppInfo::version();
             } else {

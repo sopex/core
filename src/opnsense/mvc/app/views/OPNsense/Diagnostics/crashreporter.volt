@@ -1,10 +1,10 @@
 <script>
     $( document ).ready(function() {
-        var data_get_map = {'frm_crashReporter':"/api/diagnostics/crashreporter/info"};
+        var data_get_map = {'frm_crashReporter':"/api/diagnostics/reporter/info"};
         mapDataToFormUI(data_get_map).done(function(data){
             formatTokenizersUI();
             $('.selectpicker').selectpicker('refresh');
-            
+
             if (data.reporter.has_crashed) {
                 if (data.reporter.is_prod) {
                     $("#btn_submit").show();
@@ -15,7 +15,7 @@
                     $("#development_msg").show();
                     $("#btn_dismiss").show();
                 }
-                
+
                 var results = data.reporter.reports;
                 var html = "";
                 for (var key in results) {
@@ -39,7 +39,7 @@
             if (!$("#btn_submit_progress").hasClass("fa-spinner")) {
                 $("#btn_submit_progress").addClass("fa fa-spinner fa-pulse");
                 saveFormToEndpoint(
-                    "/api/diagnostics/crashreporter/submit",
+                    "/api/diagnostics/reporter/submit",
                     'frm_crashReporter',
                     function(data) {
                         $("#btn_submit_progress").removeClass("fa fa-spinner fa-pulse");
@@ -54,13 +54,13 @@
         });
 
         $("#btn_dismiss").click(function () {
-            ajaxCall("/api/diagnostics/crashreporter/dismiss", {}, function(data,status) {
+            ajaxCall("/api/diagnostics/reporter/dismiss", {}, function(data,status) {
                 location.reload();
             });
         });
 
         $("#btn_new_issue").click(function () {
-            ajaxCall("/api/diagnostics/crashreporter/force", {}, function(data,status) {
+            ajaxCall("/api/diagnostics/reporter/force", {}, function(data,status) {
                 location.reload();
             });
         });

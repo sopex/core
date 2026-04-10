@@ -34,7 +34,7 @@ use OPNsense\Base\IndexController;
  * Class CrashReporterController
  * @package OPNsense\Diagnostics
  */
-class CrashReporterController extends IndexController
+class ReporterController extends IndexController
 {
     public function indexAction()
     {

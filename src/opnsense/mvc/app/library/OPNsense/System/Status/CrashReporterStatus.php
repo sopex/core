@@ -38,7 +38,7 @@ class CrashReporterStatus extends AbstractStatus
     {
         $this->internalPriority = 10;
         $this->internalTitle = gettext('Crash Reporter');
-        $this->internalLocation = '/ui/diagnostics/crashreporter';
+        $this->internalLocation = '/ui/diagnostics/reporter';
     }
 
     public function collectStatus()
