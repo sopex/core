@@ -194,7 +194,6 @@ class JsonKeyValueStoreField extends BaseListField
                         $this->internalOptionList[$subkey] = [
                             'optgroup' => gettext($key),
                             'value' => $subval,
-                            'order' => $order++,
                         ];
                     }
                 }
