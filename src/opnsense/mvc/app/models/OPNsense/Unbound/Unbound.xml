@@ -181,7 +181,7 @@
                     <Default>1</Default>
                     <Required>Y</Required>
                 </enabled>
-                <type type="OptionField">
+                <type type="JsonKeyValueStoreField">
                     <Multiple>Y</Multiple>
                     <ConfigdPopulateAct>unbound list_dnsbl_options</ConfigdPopulateAct>
                 </type>
