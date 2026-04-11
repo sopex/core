@@ -44,6 +44,7 @@ def get_blocklists():
             "hgz007": "ULTIMATE - Aggressive protection",
         },
         "Hagezi Targeted Lists": {
+            "hgz023": "Social Networks",
             "hgz009": "Fake - scams / fakes",
             "hgz010": "Pop-Up Ads",
             "hgz011": "Threat Intelligence Feeds",
@@ -53,7 +54,6 @@ def get_blocklists():
             "hgz017": "Badware Hoster blocking",
             "hgz018": "Anti Piracy",
             "hgz019": "Gambling",
-            "hgz023": "Social Networks"
         },
         "OISD Blocklists": {
             "oisd0": "Ads Blocklist",

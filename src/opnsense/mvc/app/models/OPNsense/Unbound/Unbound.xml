@@ -184,14 +184,6 @@
                 <type type="JsonKeyValueStoreField">
                     <Multiple>Y</Multiple>
                     <ConfigdPopulateAct>unbound list_dnsbl_options</ConfigdPopulateAct>
-                    <OptionValues>
-                        <optgroup1>General Blocklists</optgroup1>
-                        <optgroup2>Hagezi Multi - Clean the Internet</optgroup2>
-                        <optgroup3>Hagezi Targeted Lists</optgroup3>
-                        <optgroup4>OISD Blocklists</optgroup4>
-                        <optgroup5>Misc Blocklists</optgroup5>
-                        <optgroup6>Hagezi smaller versions of blocklists</optgroup6>
-                    </OptionValues>
                 </type>
                 <lists type="CSVListField"/>
                 <allowlists type="CSVListField"/>
