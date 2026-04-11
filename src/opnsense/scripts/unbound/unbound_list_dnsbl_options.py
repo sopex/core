@@ -30,20 +30,20 @@ import json
 
 def get_blocklists():
     return {
-        "     General Blocklists": {
+        "General Blocklists": {
             "atf": "Abuse.ch - ThreatFox IOC database",
             "ag": "AdGuard List",
             "el": "EasyList",
             "ep": "EasyPrivacy"
         },
-        "    Hagezi Multi - Clean the Internet": {
+        "Hagezi Multi - Clean the Internet": {
             "hgz001": "LIGHT - Basic protection",
             "hgz002": "NORMAL - All-round protection",
             "hgz003": "PRO - Extended protection",
             "hgz005": "PRO++ - Maximum protection",
             "hgz007": "ULTIMATE - Aggressive protection",
         },
-        "   Hagezi Targeted Lists": {
+        "Hagezi Targeted Lists": {
             "hgz009": "Fake - scams / fakes",
             "hgz010": "Pop-Up Ads",
             "hgz011": "Threat Intelligence Feeds",
@@ -55,16 +55,16 @@ def get_blocklists():
             "hgz019": "Gambling",
             "hgz023": "Social Networks"
         },
-        "  OISD Blocklists": {
+        "OISD Blocklists": {
             "oisd0": "Ads Blocklist",
             "oisd1": "Big Blocklist (incl. Ads)",
             "oisd2": "NSFW Blocklist"
         },
-        " Misc Blocklists": {
+        "Misc Blocklists": {
             "sb": "Steven Black List",
             "yy": "YoYo List"
         },
-        "Hagezi smaller verions of lists": {
+        "Smaller versions of blocklists": {
             "hgz004": "Multi PRO mini ",
             "hgz006": "Multi PRO++ mini",
             "hgz008": "Multi ULTIMATE mini",
