@@ -65,9 +65,9 @@ def get_blocklists():
             "yy": "YoYo List"
         },
         "Smaller versions of blocklists": {
-            "hgz004": "Multi PRO mini ",
-            "hgz006": "Multi PRO++ mini",
-            "hgz008": "Multi ULTIMATE mini",
+            "hgz004": "Multi PRO - Mini ",
+            "hgz006": "Multi PRO++ - Mini",
+            "hgz008": "Multi ULTIMATE - Mini",
             "hgz012": "Threat Intelligence Feeds - Medium",
             "hgz013": "Threat Intelligence Feeds - Mini",
             "hgz020": "Gambling - Medium",
