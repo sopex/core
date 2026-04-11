@@ -1430,6 +1430,7 @@
 /usr/local/opnsense/scripts/unbound/restore_db.py
 /usr/local/opnsense/scripts/unbound/start.sh
 /usr/local/opnsense/scripts/unbound/stats.py
+/usr/local/opnsense/scripts/unbound/unbound_list_dnsbl_options.py
 /usr/local/opnsense/scripts/unbound/unbound_watcher.py
 /usr/local/opnsense/scripts/unbound/wrapper.py
 /usr/local/opnsense/scripts/wireguard/gen_keypair.py
