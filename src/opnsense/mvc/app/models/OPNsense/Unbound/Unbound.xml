@@ -183,7 +183,7 @@
                 </enabled>
                 <type type="JsonKeyValueStoreField">
                     <Multiple>Y</Multiple>
-                    <ConfigdPopulateAct>unbound dnsbl options</ConfigdPopulateAct>
+                    <ConfigdPopulateAct>unbound dnsbl_options</ConfigdPopulateAct>
                     <SortByValue>Y</SortByValue>
                 </type>
                 <lists type="CSVListField"/>
