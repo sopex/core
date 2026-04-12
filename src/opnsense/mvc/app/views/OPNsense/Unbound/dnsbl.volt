@@ -62,6 +62,7 @@
             ajaxCall('/api/unbound/diagnostics/testBlocklist', {
                 'domain': $("#tester_domain").val(),
                 'src': $("#tester_src").val(),
+                'bl': $("#tester_bl").val(),
             }, function(data, status) {
                 $("#blocklist_tester_result").empty();
                 $("#blocklist_tester_result").append($("<span/>")).text("{{lang._('Result')}}");

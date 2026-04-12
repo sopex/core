@@ -53,7 +53,7 @@ def get_blocklists():
             "hgz017": "Badware Hoster blocking",
             "hgz018": "Anti Piracy",
             "hgz019": "Gambling",
-            "hgz023": "Social Networks"
+            "hgz022": "Social Networks"
         },
         "OISD Blocklists": {
             "oisd0": "Ads Blocklist",
@@ -64,7 +64,7 @@ def get_blocklists():
             "sb": "Steven Black List",
             "yy": "YoYo List"
         },
-        "Smaller versions of blocklists": {
+        " Smaller versions of blocklists": {
             "hgz004": "Multi PRO - Mini ",
             "hgz006": "Multi PRO++ - Mini",
             "hgz008": "Multi ULTIMATE - Mini",

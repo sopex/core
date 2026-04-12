@@ -117,9 +117,10 @@ class DiagnosticsController extends ApiControllerBase
     {
         if ($this->request->isPost() && $this->request->hasPost('domain')) {
             $src = $this->request->getPost('src', null, '127.0.0.1');
+            $bl = $this->request->getPost('bl', null, '');
             $backend = new Backend();
             $response = json_decode($backend->configdpRun('unbound domain test', [
-                $this->request->getPost('domain'), $src
+                $this->request->getPost('domain'), $src, $bl
             ]), true);
 
             if (!empty($response)) {
