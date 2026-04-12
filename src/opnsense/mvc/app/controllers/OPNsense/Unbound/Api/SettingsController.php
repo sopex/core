@@ -328,7 +328,35 @@ class SettingsController extends ApiMutableModelControllerBase
 
     public function searchDnsblAction()
     {
-        return $this->searchBase('dnsbl.blocklist', ['enabled', 'list', 'source_net', 'description']);
+        $grid = $this->searchBase('dnsbl.blocklist', ['enabled', 'type', 'list', 'source_net', 'description']);
+
+        $mdl = $this->getModel();
+        $tmpNode = $mdl->dnsbl->blocklist->Add();
+        $allOptions = $mdl->dnsbl->blocklist->type->getNodeData();
+        $flatOptions = [];
+        foreach ($allOptions as $group) {
+            if (is_array($group)) {
+                foreach ($group as $key => $value) {
+                    $flatOptions[$key] = is_array($value) ? $value['value'] : $value;
+                }
+            }
+        }
+
+        if (isset($grid['rows'])) {
+            foreach ($grid['rows'] as &$row) {
+                if (!empty($row['type'])) {
+                    $keys = explode(',', $row['type']);
+                    $translated = [];
+                    foreach ($keys as $key) {
+                        $key = trim($key);
+                        $translated[] = isset($flatOptions[$key]) ? $flatOptions[$key] : $key;
+                    }
+                    $row['type'] = implode(', ', $translated);
+                }
+            }
+        }
+
+        return $grid;
     }
 
     public function getDnsblAction($uuid = null)
