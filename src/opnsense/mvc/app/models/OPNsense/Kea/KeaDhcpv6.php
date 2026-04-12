@@ -87,7 +87,7 @@ class KeaDhcpv6 extends BaseModel
                 continue;
             }
             $key = $pool->__reference;
-            if ($pool->prefix_len->getValue() >= $pool->delegated_len->getValue()) {
+            if ($pool->prefix_len->getValue() > $pool->delegated_len->getValue()) {
                 $messages->appendMessage(new Message(gettext("Delegated length must be longer than or equal to prefix length"), $key . ".delegated_len"));
             }
             $subnet = $pool->prefix->getValue() . "/" . $pool->prefix_len->getValue();
