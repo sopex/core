@@ -85,8 +85,8 @@
 <div class="tab-content content-box __mb">
     <div id="blocklists" class="tab-pane fade in active">
         {{ partial('layout_partials/base_bootgrid_table', formGridDnsbl)}}
-        {{ partial('layout_partials/base_apply_button', {'data_endpoint': '/api/unbound/service/dnsbl'}) }}
     </div>
+    {{ partial('layout_partials/base_apply_button', {'data_endpoint': '/api/unbound/service/dnsbl'}) }}
 
     <div id="blocklist_tester" class="tab-pane fade in">
         <table class="table table-condensed table-striped">
