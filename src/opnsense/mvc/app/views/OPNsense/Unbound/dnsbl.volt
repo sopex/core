@@ -29,7 +29,7 @@
    $(document).ready(function() {
         let gridLoaded = false;
         $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-            $('#reconfigureAct').closest('content-box').show();
+            $('#reconfigureAct').closest('.content-box').show();
             if (e.target.id === 'blocklists_tab' && !gridLoaded) {
                 $("#{{formGridDnsbl['table_id']}}").UIBootgrid({
                     search:'/api/unbound/settings/searchDnsbl/',
@@ -41,7 +41,7 @@
                 });
                 gridLoaded = true;
             } else if (e.target.id === 'blocklist_tester_tab') {
-                $('#reconfigureAct').closest('content-box').hide();
+                $('#reconfigureAct').closest('.content-box').hide();
             }
         });
 
