@@ -97,8 +97,6 @@ if __name__ == '__main__':
             src_nets[i] = str(src_nets[i])
         match['source_nets'] = src_nets
         del match['pass_regex']
-        bl_code = match.get('bl') or inputargs.bl
-        bl_name = _blocklists.get(bl_code, bl_code)
         msg = {'status': 'OK','action': 'Block','bl': inputargs.bl,'policy': match}
         print(json.dumps(msg))
     else:
