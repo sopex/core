@@ -64,7 +64,7 @@ def get_blocklists():
             "sb": "Steven Black List",
             "yy": "YoYo List"
         },
-        "Smaller versions of blocklists": {
+        " Smaller versions of blocklists": {
             "hgz004": "Multi PRO - Mini ",
             "hgz006": "Multi PRO++ - Mini",
             "hgz008": "Multi ULTIMATE - Mini",

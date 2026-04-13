@@ -90,7 +90,8 @@ if __name__ == '__main__':
             client=inputargs.src,
             family='ip6' if inputargs.src.count(':') else 'ip4',
             type=inputargs.type,
-            domain=inputargs.domain
+            domain=inputargs.domain,
+            bl=inputargs.bl if inputargs.bl else None
         )
     )
     if match:
@@ -101,7 +102,7 @@ if __name__ == '__main__':
         del match['pass_regex']
         bl_code = match.get('bl') or inputargs.bl
         bl_name = _blocklists.get(bl_code, bl_code)
-        msg = {'status': 'OK','action': 'Block','bl': bl_name,'policy': match}
+        msg = {'status': 'OK','action': 'Block','bl': inputargs.bl,'policy': match}
         print(json.dumps(msg))
     else:
         print(json.dumps({'status': 'OK','action': 'Pass'}))
