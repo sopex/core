@@ -51,9 +51,9 @@ def get_blocklists():
             "oisd2": "NSFW Blocklist"
         },
         "Hagezi Targeted Lists": {
+            "hgz011": "Threat Intelligence Feeds",
             "hgz009": "Fake - scams / fakes",
             "hgz010": "Pop-Up Ads",
-            "hgz011": "Threat Intelligence Feeds",
             "hgz014": "DoH/VPN/TOR/Proxy Bypass",
             "hgz015": "Safesearch not supported",
             "hgz016": "Dynamic DNS blocking",
@@ -62,7 +62,7 @@ def get_blocklists():
             "hgz019": "Gambling",
             "hgz022": "Social Networks"
         },
-        "Smaller versions of blocklists": {
+        "Smaller versions of blocklists for underpowered systems": {
             "hgz004": "Multi PRO - Mini ",
             "hgz006": "Multi PRO++ - Mini",
             "hgz008": "Multi ULTIMATE - Mini",
