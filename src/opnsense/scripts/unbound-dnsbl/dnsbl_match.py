@@ -26,9 +26,15 @@
 """
 import argparse
 import json
+import sys
+import os
 
 from lib import Query, ModuleContext
 from lib.dnsbl import DNSBL
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../unbound'))
+sys.path.insert(0, '/usr/local/opnsense/scripts/unbound')
+import unbound_dnsbl_options
 
 def arg_parse_is_json_file(filename):
     try:
@@ -88,6 +94,14 @@ if __name__ == '__main__':
             src_nets[i] = str(src_nets[i])
         match['source_nets'] = src_nets
         del match['pass_regex']
+        try:
+            bl_map = {}
+            for category in unbound_dnsbl_options.get_blocklists().values():
+                bl_map.update(category)
+            if 'bl' in match and match['bl'] in bl_map:
+                match['bl'] = bl_map[match['bl']]
+        except Exception:
+            pass
         msg = {'status': 'OK','action': 'Block','policy': match}
         print(json.dumps(msg))
     else:
