@@ -726,7 +726,15 @@
                             },
                             "domain": function (column, row) {
                                 return row.domain;
-                            }
+                            },
+                            blocklist: function(column, row) {
+                                if (!row.blocklist) return '';
+                                // Support multiple blocklist types separated by comma
+                                return row.blocklist.split(',').map(function(key) {
+                                    key = key.trim();
+                                    return blocklistTypeMap[key] || key;
+                                }).join(', ');
+                            },
                         },
                         statusMapping: {
                             0: "query-success",
@@ -970,3 +978,39 @@
         </div>
     </div>
 </div>
+<script type="text/javascript">
+    // Blocklist type mapping (key: descriptive name)
+    const blocklistTypeMap = {
+        'atf': 'Abuse.ch - ThreatFox IOC database',
+        'ag': 'AdGuard List',
+        'el': 'EasyList',
+        'ep': 'EasyPrivacy',
+        'sb': 'Steven Black List',
+        'yy': 'YoYo List',
+        'hgz001': 'LIGHT - Relaxed Blocking',
+        'hgz002': 'NORMAL - Relaxed/Balanced Blocking',
+        'hgz003': 'PRO - Balanced Blocking',
+        'hgz005': 'PRO++ - Balanced/Aggressive Blocking',
+        'hgz007': 'ULTIMATE - Aggressive Blocking',
+        'oisd0': 'Ads Blocklist',
+        'oisd1': 'Big Blocklist (incl. Ads)',
+        'oisd2': 'NSFW Blocklist',
+        'hgz009': 'Fake - scams / fakes',
+        'hgz010': 'Pop-Up Ads',
+        'hgz011': 'Threat Intelligence Feeds',
+        'hgz014': 'DoH/VPN/TOR/Proxy Bypass',
+        'hgz015': 'Safesearch not supported',
+        'hgz016': 'Dynamic DNS blocking',
+        'hgz017': 'Badware Hoster blocking',
+        'hgz018': 'Anti Piracy',
+        'hgz019': 'Gambling',
+        'hgz022': 'Social Networks',
+        'hgz004': 'Multi PRO mini',
+        'hgz006': 'Multi PRO++ mini',
+        'hgz008': 'Multi ULTIMATE mini',
+        'hgz012': 'Threat Intelligence Feeds - Medium',
+        'hgz013': 'Threat Intelligence Feeds - Mini',
+        'hgz020': 'Gambling - Medium',
+        'hgz021': 'Gambling - Mini'
+    };
+</script>
