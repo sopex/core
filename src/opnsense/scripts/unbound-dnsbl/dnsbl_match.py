@@ -26,12 +26,9 @@
 """
 import argparse
 import json
-import sys
 
 from lib import Query, ModuleContext
 from lib.dnsbl import DNSBL
-
-sys.path.insert(0, '/usr/local/opnsense/scripts/unbound')
 from unbound_dnsbl_options import get_blocklists
 
 def arg_parse_is_json_file(filename):
