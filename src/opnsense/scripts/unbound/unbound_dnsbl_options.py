@@ -34,14 +34,21 @@ def get_blocklists():
             "atf": "Abuse.ch - ThreatFox IOC database",
             "ag": "AdGuard List",
             "el": "EasyList",
-            "ep": "EasyPrivacy"
+            "ep": "EasyPrivacy",
+            "sb": "Steven Black List",
+            "yy": "YoYo List"
         },
         "Hagezi Multi - Clean the Internet": {
-            "hgz001": "LIGHT - Basic protection",
-            "hgz002": "NORMAL - All-round protection",
-            "hgz003": "PRO - Extended protection",
-            "hgz005": "PRO++ - Maximum protection",
-            "hgz007": "ULTIMATE - Aggressive protection",
+            "hgz001": "LIGHT - Relaxed Blocking",
+            "hgz002": "NORMAL - Relaxed/Balanced Blocking",
+            "hgz003": "PRO - Balanced Blocking",
+            "hgz005": "PRO++ - Balanced/Aggressive Blocking",
+            "hgz007": "ULTIMATE - Aggressive Blocking",
+        },
+        "OISD Blocklists": {
+            "oisd0": "Ads Blocklist",
+            "oisd1": "Big Blocklist (incl. Ads)",
+            "oisd2": "NSFW Blocklist"
         },
         "Hagezi Targeted Lists": {
             "hgz009": "Fake - scams / fakes",
@@ -53,16 +60,7 @@ def get_blocklists():
             "hgz017": "Badware Hoster blocking",
             "hgz018": "Anti Piracy",
             "hgz019": "Gambling",
-            "hgz023": "Social Networks"
-        },
-        "OISD Blocklists": {
-            "oisd0": "Ads Blocklist",
-            "oisd1": "Big Blocklist (incl. Ads)",
-            "oisd2": "NSFW Blocklist"
-        },
-        "Misc Blocklists": {
-            "sb": "Steven Black List",
-            "yy": "YoYo List"
+            "hgz022": "Social Networks"
         },
         "Smaller versions of blocklists": {
             "hgz004": "Multi PRO - Mini ",
