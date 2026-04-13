@@ -121,24 +121,8 @@ class DiagnosticsController extends ApiControllerBase
             $response = json_decode($backend->configdpRun('unbound domain test', [
                 $this->request->getPost('domain'), $src
             ]), true);
+
             if (!empty($response)) {
-                if (isset($response['bl'])) {
-                    $mdl = new \OPNsense\Unbound\Unbound();
-                    $tmpNode = $mdl->dnsbl->blocklist->Add();
-                    $allOptions = $mdl->dnsbl->blocklist->type->getNodeData();
-                    $flatOptions = [];
-                    foreach ($allOptions as $group) {
-                        if (is_array($group)) {
-                            foreach ($group as $key => $value) {
-                                $flatOptions[$key] = is_array($value) ? $value['value'] : $value;
-                            }
-                        }
-                    }
-                    $raw_key = $response['bl'];
-                    if (isset($flatOptions[$raw_key])) {
-                        $response['bl'] = $flatOptions[$raw_key];
-                    }
-                }
                 return $response;
             }
         }
