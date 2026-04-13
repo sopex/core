@@ -29,7 +29,6 @@ import json
 
 from lib import Query, ModuleContext
 from lib.dnsbl import DNSBL
-from unbound_dnsbl_options import get_blocklists
 
 def arg_parse_is_json_file(filename):
     try:
@@ -67,13 +66,6 @@ if __name__ == '__main__':
         default='/var/unbound/data/dnsbl.json',
         type=arg_parse_is_json_file
     )
-    _blocklists = {k: v for d in get_blocklists().values() for k, v in d.items()}
-    parser.add_argument(
-        '--bl',
-        help='blocklist key to test against',
-        default='',
-        choices=list(_blocklists.keys())
-    )
 
     inputargs = parser.parse_args()
 
@@ -87,8 +79,7 @@ if __name__ == '__main__':
             client=inputargs.src,
             family='ip6' if inputargs.src.count(':') else 'ip4',
             type=inputargs.type,
-            domain=inputargs.domain,
-            bl=inputargs.bl if inputargs.bl else None
+            domain=inputargs.domain
         )
     )
     if match:
@@ -97,7 +88,7 @@ if __name__ == '__main__':
             src_nets[i] = str(src_nets[i])
         match['source_nets'] = src_nets
         del match['pass_regex']
-        msg = {'status': 'OK','action': 'Block','bl': inputargs.bl,'policy': match}
+        msg = {'status': 'OK','action': 'Block','policy': match}
         print(json.dumps(msg))
     else:
         print(json.dumps({'status': 'OK','action': 'Pass'}))
