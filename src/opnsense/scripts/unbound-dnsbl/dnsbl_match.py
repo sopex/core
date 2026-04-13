@@ -75,7 +75,7 @@ if __name__ == '__main__':
         '--bl',
         help='blocklist key to test against',
         default='',
-        choices=list(_blocklists.keys()) + ['']
+        choices=list(_blocklists.keys())
     )
 
     inputargs = parser.parse_args()
@@ -90,8 +90,7 @@ if __name__ == '__main__':
             client=inputargs.src,
             family='ip6' if inputargs.src.count(':') else 'ip4',
             type=inputargs.type,
-            domain=inputargs.domain,
-            bl=inputargs.bl if inputargs.bl else None
+            domain=inputargs.domain
         )
     )
     if match:
