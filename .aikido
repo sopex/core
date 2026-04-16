@@ -1,0 +1,11 @@
+exclude:
+  paths:
+    - src/www/diag_authentication.php
+    - src/www/diag_backup.php
+    - src/www/firewall_rules.php
+    - src/www/firewall_rules_edit.php
+    - src/www/interfaces_assign.php
+    - src/www/reporting_settings.php
+    - src/www/services_opendns.php
+    - src/www/system_gateway_groups.php
+    - src/www/system_gateway_groups_edit.php
