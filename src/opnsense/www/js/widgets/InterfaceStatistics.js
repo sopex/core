@@ -81,10 +81,25 @@ export default class InterfaceStatistics extends BaseTableWidget {
 
     async onWidgetTick() {
         const data = await this.ajaxCall('/api/diagnostics/traffic/interface');
+        const if_info = await this.ajaxCall('/api/interfaces/overview/interfaces_info');
 
         $('.if-tooltip').tooltip('hide');
 
+        let sorted_interfaces = [];
+        if (if_info && if_info.rows) {
+            if_info.rows.forEach(row => {
+                if (data.interfaces[row.identifier]) {
+                    sorted_interfaces.push([row.identifier, data.interfaces[row.identifier]]);
+                }
+            });
+        }
         for (const [id, obj] of Object.entries(data.interfaces)) {
+            if (!sorted_interfaces.find(s => s[0] === id)) {
+                sorted_interfaces.push([id, obj]);
+            }
+        }
+
+        for (const [id, obj] of sorted_interfaces) {
             super.updateTable('interface-statistics-table', [
                 [
                     `<span class="if-tooltip" style="cursor: pointer" data-toggle="tooltip" title="${obj.name}">
@@ -106,8 +121,7 @@ export default class InterfaceStatistics extends BaseTableWidget {
         let sortedSet = {};
         let i = 0;
         let colors = Chart.colorschemes.tableau.Classic10;
-        for (const intf in data.interfaces) {
-            const obj = data.interfaces[intf];
+        for (const [intf, obj] of sorted_interfaces) {
             this.labels.indexOf(obj.name) === -1 && this.labels.push(obj.name);
             obj.data = parseInt(obj["packets received"]) + parseInt(obj["packets transmitted"]);
             obj.color = colors[i % colors.length]
@@ -119,7 +133,7 @@ export default class InterfaceStatistics extends BaseTableWidget {
 
         this.sortedLabels = [];
         this.sortedData = [];
-        Object.values(sortedSet).sort((a, b) => b.data - a.data).forEach(item => {
+        Object.values(sortedSet).forEach(item => {
             this.sortedLabels.push(item.name);
             this.sortedData.push(item.data);
         });
