@@ -424,9 +424,9 @@ class ACL
             if (
                 $parts === false ||
                 !empty($parts['scheme']) ||
+                !empty($parts['host']) ||
                 strpos($decoded, '\\') !== false ||
                 strpos($decoded, '//') !== false ||
-                preg_match('/^[\s\x00-\x1f]/', $decoded)
                 preg_match('/^[\s\x00-\x1f]/', $decoded)
             ) {
                 return "index.php";
