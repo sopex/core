@@ -175,11 +175,15 @@ class NetworkinsightController extends ApiControllerBase
                 $filter_values = explode(',', $this->request->get("filter_value"));
                 $data_filter = "";
                 foreach ($filter_fields as $field_indx => $filter_field) {
-                    if ($data_filter != '') {
-                        $data_filter .= ',';
-                    }
                     if (isset($filter_values[$field_indx])) {
-                        $data_filter .= $filter_field . '=' . $filter_values[$field_indx];
+                        $safe_filter_field = $filter->sanitize($filter_field, "alnum");
+                        $safe_filter_value = trim($filter_values[$field_indx]);
+                        if (!empty($safe_filter_field) && preg_match('/^[a-zA-Z0-9._:\/-]+$/', $safe_filter_value)) {
+                            if ($data_filter != '') {
+                                $data_filter .= ',';
+                            }
+                            $data_filter .= $safe_filter_field . '=' . $safe_filter_value;
+                        }
                     }
                 }
             } else {
@@ -307,9 +311,13 @@ class NetworkinsightController extends ApiControllerBase
         $from_date = $filter->sanitize($from_date, "int");
         $to_date = $filter->sanitize($to_date, "int");
         $resolution = $filter->sanitize($resolution, "int");
+        $filename = preg_replace('/[^a-zA-Z0-9_.-]/', '', (string)$provider);
+        if (empty($filename)) {
+            $filename = 'export';
+        }
 
         $this->response->setRawHeader("Content-Type: application/octet-stream");
-        $this->response->setRawHeader("Content-Disposition: attachment; filename=" . $provider . ".csv");
+        $this->response->setRawHeader("Content-Disposition: attachment; filename=" . $filename . ".csv");
         if ($this->request->isGet() && $provider != null && $resolution != null) {
             $backend = new Backend();
             $response = $backend->configdpRun(
