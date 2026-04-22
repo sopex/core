@@ -178,7 +178,11 @@ class NetworkinsightController extends ApiControllerBase
                     if (isset($filter_values[$field_indx])) {
                         $safe_filter_field = $sanitizeFilter->sanitize($filter_field, "alnum");
                         $safe_filter_value = trim($filter_values[$field_indx]);
-                        if (!empty($safe_filter_field) && preg_match('/^[a-zA-Z0-9._-]+$/', $safe_filter_value)) {
+                        if (
+                            !empty($safe_filter_field) &&
+                            preg_match('/^[a-zA-Z0-9._-]+$/', $safe_filter_value) &&
+                            strpos($safe_filter_value, '..') === false
+                        ) {
                             if ($data_filter != '') {
                                 $data_filter .= ',';
                             }
@@ -317,7 +321,7 @@ class NetworkinsightController extends ApiControllerBase
         }
 
         $this->response->setRawHeader("Content-Type: application/octet-stream");
-        $this->response->setRawHeader("Content-Disposition: attachment; filename=" . $filename . ".csv");
+        $this->response->setRawHeader('Content-Disposition: attachment; filename="' . $filename . '.csv"');
         if ($this->request->isGet() && $provider != null && $resolution != null) {
             $backend = new Backend();
             $response = $backend->configdpRun(
