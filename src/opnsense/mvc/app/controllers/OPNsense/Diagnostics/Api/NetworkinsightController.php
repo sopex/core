@@ -319,9 +319,10 @@ class NetworkinsightController extends ApiControllerBase
         if (empty($filename)) {
             $filename = 'export';
         }
+        $headerFilename = str_replace(['\\', '"'], ['\\\\', '\"'], $filename);
 
         $this->response->setRawHeader("Content-Type: application/octet-stream");
-        $this->response->setRawHeader('Content-Disposition: attachment; filename="' . $filename . '.csv"');
+        $this->response->setRawHeader('Content-Disposition: attachment; filename="' . $headerFilename . '.csv"');
         if ($this->request->isGet() && $provider != null && $resolution != null) {
             $backend = new Backend();
             $response = $backend->configdpRun(
