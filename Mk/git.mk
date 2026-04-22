@@ -135,8 +135,8 @@ push:
 	@${GIT} checkout ${CORE_MAIN}
 
 merge: ${CORE_MAIN}
-	@${GIT} fetch community
-	@${GIT} merge community/${CORE_MAIN}
+	@${GIT} fetch ${CORE_UPSTREAM}
+	@${GIT} merge ${CORE_UPSTREAM}/${CORE_MAIN}
 
 checkout:
 .for DIR in ${.CURDIR}/src
@@ -157,7 +157,6 @@ vim:
 	if [ -n "$${FOUND}" ]; then \
 		MATCH="$$(echo "$${FOUND}" | grep -i "/$$(basename '${vim_ARG}')$$")"; \
 		if [ -n "$${MATCH}" ]; then \
-			echo $${MATCH}; \
 			FOUND="$${MATCH}"; \
 		fi; \
 		if [ "$$(echo "$${FOUND}" | wc -l | awk '{ print $$1 }')" = "1" ]; then \

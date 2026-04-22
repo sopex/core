@@ -33,12 +33,18 @@ use OPNsense\Core\File;
 
 class KeaDdns extends BaseModel
 {
+    public function isEnabled()
+    {
+        return $this->general->enabled->isEqual('1');
+    }
+
     public function generateConfig($target = '/usr/local/etc/kea/kea-dhcp-ddns.conf')
     {
         if ($this->general->enabled->isEmpty()) {
             return;
         }
         $domains = [];
+        $reverse_domains = [];
         $keys = [];
         foreach ([(new KeaDhcpv4())->subnets->subnet4, (new KeaDhcpv6())->subnets->subnet6] as $subnets) {
             foreach ($subnets->iterateItems() as $subnet) {
@@ -47,6 +53,7 @@ class KeaDdns extends BaseModel
                 }
                 $forward_zone = $subnet->ddns_forward_zone->getValue();
                 $server = $subnet->ddns_dns_server->getValue();
+                $port = !$subnet->ddns_dns_port->isEmpty() ? $subnet->ddns_dns_port->asInt() : 53;
                 $keyname = $subnet->ddns_domain_key_name->getValue();
                 if ($keyname && !isset($keys[$keyname])) {
                     $keys[$keyname] = [
@@ -64,10 +71,27 @@ class KeaDdns extends BaseModel
                 }
                 $server_entry = [
                     'ip-address' => $server,
-                    'port' => 53,
+                    'port' => $port,
                 ];
                 if (!in_array($server_entry, $domains[$forward_zone]['dns-servers'], true)) {
                     $domains[$forward_zone]['dns-servers'][] = $server_entry;
+                }
+                $reverse_zone = $subnet->ddns_reverse_zone->getValue();
+                if (!empty($reverse_zone)) {
+                    if (!isset($reverse_domains[$reverse_zone])) {
+                        $reverse_domains[$reverse_zone] = ['name' => $reverse_zone];
+                        if ($keyname) {
+                            $reverse_domains[$reverse_zone]['key-name'] = $keyname;
+                        }
+                        $reverse_domains[$reverse_zone]['dns-servers'] = [];
+                    }
+                    $server_entry = [
+                        'ip-address' => $server,
+                        'port' => $port,
+                    ];
+                    if (!in_array($server_entry, $reverse_domains[$reverse_zone]['dns-servers'], true)) {
+                        $reverse_domains[$reverse_zone]['dns-servers'][] = $server_entry;
+                    }
                 }
             }
         }
@@ -78,6 +102,9 @@ class KeaDdns extends BaseModel
                 'tsig-keys' => array_values($keys),
                 'forward-ddns' => [
                     'ddns-domains' => array_values($domains)
+                ],
+                'reverse-ddns' => [
+                    'ddns-domains' => array_values($reverse_domains)
                 ],
                 'loggers' => [[
                     'name' => 'kea-dhcp-ddns',

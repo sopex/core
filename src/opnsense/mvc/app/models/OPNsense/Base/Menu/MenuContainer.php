@@ -1,8 +1,7 @@
-#!/usr/local/bin/php
 <?php
 
 /*
- * Copyright (C) 2025 Deciso B.V.
+ * Copyright (C) 2026 Deciso B.V.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,26 +26,24 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-require_once 'config.inc';
-require_once 'interfaces.inc';
-require_once 'util.inc';
-require_once 'system.inc';
+namespace OPNsense\Base\Menu;
 
-$ifconfig_details = legacy_interfaces_details();
+abstract class MenuContainer
+{
+    private ?MenuSystem $menusystem = null;
 
-/* collect all bridge devices */
-$current_bridgeifs = [];
-foreach (config_read_array('bridges', 'bridged', false) as $bridge) {
-    $current_bridgeifs[$bridge['bridgeif']] = $bridge;
-}
-
-/* delete before update */
-foreach (array_keys($ifconfig_details) as $ifname) {
-    if (str_starts_with($ifname, 'bridge') && !isset($current_bridgeifs[$ifname])) {
-        legacy_interface_destroy($ifname);
+    public function __construct(MenuSystem $menusystem)
+    {
+        $this->menusystem = $menusystem;
     }
-}
-/* update and create new */
-foreach ($current_bridgeifs as $bridge) {
-    _interfaces_bridge_configure($bridge, $ifconfig_details);
+
+    public function appendItem($root, $id, $properties)
+    {
+        return $this->menusystem->appendItem($root, $id, $properties);
+    }
+
+    public function collect()
+    {
+        return;
+    }
 }

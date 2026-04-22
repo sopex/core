@@ -158,6 +158,9 @@
                         </check001>
                     </Constraints>
                 </ddns_forward_zone>
+                <ddns_reverse_zone type="HostnameField">
+                    <IpAllowed>N</IpAllowed>
+                </ddns_reverse_zone>
                 <ddns_qualifying_suffix type="HostnameField"/>
                 <ddns_dns_server type="NetworkField">
                     <NetMaskAllowed>N</NetMaskAllowed>
@@ -171,6 +174,7 @@
                         </check001>
                     </Constraints>
                 </ddns_dns_server>
+                <ddns_dns_port type="PortField"/>
                 <ddns_domain_key_name type="TextField">
                     <Constraints>
                         <check001>
@@ -212,6 +216,9 @@
                         </check001>
                     </Constraints>
                 </ddns_domain_key_algorithm>
+                <ddns_override_no_update type="BooleanField"/>
+                <ddns_override_client_update type="BooleanField"/>
+                <ddns_update_on_renew type="BooleanField"/>
                 <description type="DescriptionField"/>
             </subnet4>
         </subnets>
