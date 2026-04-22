@@ -76,8 +76,9 @@ class NetworkinsightController extends ApiControllerBase
         if ($this->request->isGet()) {
             $backend = new Backend();
             // request current data
-            $response = $backend->configdRun(
-                "netflow aggregate fetch {$provider} {$from_date} {$to_date} {$resolution} {$field}"
+            $response = $backend->configdpRun(
+                "netflow aggregate fetch",
+                [$provider, $from_date, $to_date, $resolution, $field]
             );
             $graph_data = json_decode($response, true);
             if ($graph_data != null) {
@@ -181,15 +182,15 @@ class NetworkinsightController extends ApiControllerBase
                         $data_filter .= $filter_field . '=' . $filter_values[$field_indx];
                     }
                 }
-                $data_filter = "'{$data_filter}'";
             } else {
                 // no filter, empty parameter
-                $data_filter = "''";
+                $data_filter = '';
             }
             $backend = new Backend();
-            $configd_cmd = "netflow aggregate top {$provider} {$from_date} {$to_date} {$field}";
-            $configd_cmd .= " {$measure} {$data_filter} {$max_hits}";
-            $response = $backend->configdRun($configd_cmd);
+            $response = $backend->configdpRun(
+                "netflow aggregate top",
+                [$provider, $from_date, $to_date, $field, $measure, $data_filter, $max_hits]
+            );
             $graph_data = json_decode($response, true);
             if (is_array($graph_data)) {
                 foreach ($graph_data as &$record) {
@@ -301,12 +302,20 @@ class NetworkinsightController extends ApiControllerBase
         $to_date = null,
         $resolution = null
     ) {
+        $filter = new SanitizeFilter();
+        $provider = $filter->sanitize($provider, "alnum");
+        $from_date = $filter->sanitize($from_date, "int");
+        $to_date = $filter->sanitize($to_date, "int");
+        $resolution = $filter->sanitize($resolution, "int");
+
         $this->response->setRawHeader("Content-Type: application/octet-stream");
         $this->response->setRawHeader("Content-Disposition: attachment; filename=" . $provider . ".csv");
         if ($this->request->isGet() && $provider != null && $resolution != null) {
             $backend = new Backend();
-            $configd_cmd = "netflow aggregate export {$provider} {$from_date} {$to_date} {$resolution}";
-            $response = $backend->configdRun($configd_cmd);
+            $response = $backend->configdpRun(
+                "netflow aggregate export",
+                [$provider, $from_date, $to_date, $resolution]
+            );
             return $response;
         } else {
             return "";
