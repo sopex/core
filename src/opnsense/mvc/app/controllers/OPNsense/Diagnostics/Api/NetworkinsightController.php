@@ -159,13 +159,13 @@ class NetworkinsightController extends ApiControllerBase
         $max_hits = null
     ) {
         // cleanse input
-        $filter = new SanitizeFilter();
-        $provider = $filter->sanitize($provider, "alnum");
-        $from_date = $filter->sanitize($from_date, "int");
-        $to_date = $filter->sanitize($to_date, "int");
-        $field = $filter->sanitize($field, "string");
-        $measure = $filter->sanitize($measure, "string");
-        $max_hits = $filter->sanitize($max_hits, "int");
+        $sanitizeFilter = new SanitizeFilter();
+        $provider = $sanitizeFilter->sanitize($provider, "alnum");
+        $from_date = $sanitizeFilter->sanitize($from_date, "int");
+        $to_date = $sanitizeFilter->sanitize($to_date, "int");
+        $field = $sanitizeFilter->sanitize($field, "string");
+        $measure = $sanitizeFilter->sanitize($measure, "string");
+        $max_hits = $sanitizeFilter->sanitize($max_hits, "int");
 
         if ($this->request->isGet()) {
             $protocols = $this->getProtocolsAction();
@@ -176,9 +176,9 @@ class NetworkinsightController extends ApiControllerBase
                 $data_filter = "";
                 foreach ($filter_fields as $field_indx => $filter_field) {
                     if (isset($filter_values[$field_indx])) {
-                        $safe_filter_field = $filter->sanitize($filter_field, "alnum");
+                        $safe_filter_field = $sanitizeFilter->sanitize($filter_field, "alnum");
                         $safe_filter_value = trim($filter_values[$field_indx]);
-                        if (!empty($safe_filter_field) && preg_match('/^[a-zA-Z0-9._:\/-]+$/', $safe_filter_value)) {
+                        if (!empty($safe_filter_field) && preg_match('/^[a-zA-Z0-9._-]+$/', $safe_filter_value)) {
                             if ($data_filter != '') {
                                 $data_filter .= ',';
                             }
@@ -306,12 +306,12 @@ class NetworkinsightController extends ApiControllerBase
         $to_date = null,
         $resolution = null
     ) {
-        $filter = new SanitizeFilter();
-        $provider = $filter->sanitize($provider, "alnum");
-        $from_date = $filter->sanitize($from_date, "int");
-        $to_date = $filter->sanitize($to_date, "int");
-        $resolution = $filter->sanitize($resolution, "int");
-        $filename = preg_replace('/[^a-zA-Z0-9_.-]/', '', (string)$provider);
+        $sanitizeFilter = new SanitizeFilter();
+        $provider = $sanitizeFilter->sanitize($provider, "alnum");
+        $from_date = $sanitizeFilter->sanitize($from_date, "int");
+        $to_date = $sanitizeFilter->sanitize($to_date, "int");
+        $resolution = $sanitizeFilter->sanitize($resolution, "int");
+        $filename = (string)$provider;
         if (empty($filename)) {
             $filename = 'export';
         }
