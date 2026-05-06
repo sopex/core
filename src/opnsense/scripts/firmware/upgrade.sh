@@ -43,8 +43,7 @@ if output_cmd opnsense-update -u; then
 		if output_cmd opnsense-update -K -c; then
 			output_cmd opnsense-update -K
 		fi
-		output_restart_action keep-log ${PREFER_SHUTDOWN}
-	fi
+		output_restart_action ${PREFER_SHUTDOWN} keep-log
 
 	output_txt "The upgrade was aborted due to an error."
 	output_cmd opnsense-update -es

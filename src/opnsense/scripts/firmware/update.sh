@@ -79,13 +79,13 @@ fi
 # if we can update base, we'll do that as well
 if opnsense-update ${FORCE} -bk -c; then
 	if output_cmd opnsense-update ${FORCE} -bk; then
-		output_restart_action keep-log ${PREFER_SHUTDOWN}
+		output_restart_action ${PREFER_SHUTDOWN} keep-log
 	fi
 fi
 
 if [ "${ALWAYS_REBOOT}" = "1" ]; then
 	if [ "${PKGS_HASH}" != "$(${PKG} query %n-%v 2> /dev/null | sha256)" ]; then
-		output_restart_action keep-log ${PREFER_SHUTDOWN}
+		output_restart_action ${PREFER_SHUTDOWN} keep-log
 	fi
 fi
 
