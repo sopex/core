@@ -124,26 +124,41 @@ class FilterRule extends Rule
      */
     protected function convertReplyTo(&$rule)
     {
-        if (!empty($rule['reply-to'])) {
+        // Check for both the legacy 'reply-to' and the new MVC 'replyto' keys
+        $reply_to = $rule['reply-to'] ?? $rule['replyto'] ?? null;
+
+        if (!empty($reply_to)) {
             // reply-to gateway set, when found map to reply attribute, otherwise skip keyword
-            if (!empty($this->gatewayMapping[$rule['reply-to']])) {
-                $if = $this->gatewayMapping[$rule['reply-to']]['interface'];
-                if (!empty($this->gatewayMapping[$rule['reply-to']]['gateway'])) {
-                    $gw = $this->gatewayMapping[$rule['reply-to']]['gateway'];
+            if (!empty($this->gatewayMapping[$reply_to])) {
+                $if = $this->gatewayMapping[$reply_to]['interface'];
+                if (!empty($this->gatewayMapping[$reply_to]['gateway'])) {
+                    $gw = $this->gatewayMapping[$reply_to]['gateway'];
                     $rule['reply'] = "reply-to ( {$if} {$gw} ) ";
                 } else {
                     $rule['reply'] = "reply-to {$if} ";
                 }
             }
         } elseif (empty($rule['disablereplyto']) && ($rule['direction'] ?? "") != 'any' && empty($rule['interfacenot'])) {
-            $proto = $rule['ipprotocol'];
+            // Respect the global "Disable reply-to" configuration
+            if (!empty((string)\OPNsense\Core\Config::getInstance()->object()->system->disablereplyto)) {
+                return;
+            }
+
+            $proto = $rule['ipprotocol'] ?? 'inet';
+
+            // pf syntax does not allow specifying an IPv4 reply-to gateway for an IPv6 stream.
+            // Combined rules must skip automatic reply-to.
+            if ($proto === 'inet46') {
+                return;
+            }
+
             if (!empty($this->interfaceMapping[$rule['interface']]['if']) && empty($rule['gateway'])) {
                 $if = $this->interfaceMapping[$rule['interface']]['if'];
                 switch ($proto) {
                     case "inet6":
                         if (
                             !empty($this->interfaceMapping[$rule['interface']]['gatewayv6'])
-                            && Util::isIpAddress($this->interfaceMapping[$rule['interface']]['gatewayv6'])
+                            && \OPNsense\Firewall\Util::isIpAddress($this->interfaceMapping[$rule['interface']]['gatewayv6'])
                         ) {
                             $gw = $this->interfaceMapping[$rule['interface']]['gatewayv6'];
                             $rule['reply'] = "reply-to ( {$if} {$gw} ) ";
@@ -152,7 +167,7 @@ class FilterRule extends Rule
                     default:
                         if (
                             !empty($this->interfaceMapping[$rule['interface']]['gateway'])
-                            && Util::isIpAddress($this->interfaceMapping[$rule['interface']]['gateway'])
+                            && \OPNsense\Firewall\Util::isIpAddress($this->interfaceMapping[$rule['interface']]['gateway'])
                         ) {
                             $gw = $this->interfaceMapping[$rule['interface']]['gateway'];
                             $rule['reply'] = "reply-to ( {$if} {$gw} ) ";
@@ -162,7 +177,6 @@ class FilterRule extends Rule
             }
         }
     }
-
 
     /**
      * preprocess internal rule data to detail level of actual ruleset
