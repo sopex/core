@@ -49,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $pconfig['disablereplyto'] = isset($config['system']['disablereplyto']);
     $pconfig['bogonsinterval'] = !empty($config['system']['bogons']['interval']) ? $config['system']['bogons']['interval'] : null;
     $pconfig['schedule_states'] = isset($config['system']['schedule_states']);
+    $pconfig['rematch_states'] = isset($config['system']['rematch_states']);
     $pconfig['skip_rules_gw_down'] = isset($config['system']['skip_rules_gw_down']);
     $pconfig['lb_use_sticky'] = isset($config['system']['lb_use_sticky']);
     $pconfig['pf_share_forward'] = isset($config['system']['pf_share_forward']);
@@ -254,6 +255,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $config['system']['schedule_states'] = true;
         } elseif (isset($config['system']['schedule_states'])) {
             unset($config['system']['schedule_states']);
+        }
+
+        if (!empty($pconfig['rematch_states'])) {
+            $config['system']['rematch_states'] = true;
+        } elseif (isset($config['system']['rematch_states'])) {
+            unset($config['system']['rematch_states']);
         }
 
         if (!empty($pconfig['skip_rules_gw_down'])) {
@@ -624,6 +631,18 @@ include("head.inc");
                   <div class="hidden" data-for="help_for_state-policy">
                     <?= gettext('Set behaviour for keeping states, by default states are floating, but when this option is set they should match the interface.') ?><br />
                     <?= gettext('The default option (unchecked) matches states regardless of the interface, which is in most setups the best choice.') ?><br />
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td><a id="help_for_rematch_states" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a> <?=gettext("Rematch states");?></td>
+                <td>
+                  <input name="rematch_states" type="checkbox" value="yes" <?= !empty($pconfig['rematch_states']) ? "checked=\"checked\"" : "";?>/>
+                  <div class="hidden" data-for="help_for_rematch_states">
+                    <?= gettext('When enabled, after applying filter changes all existing states are re-evaluated against the current ruleset. '.
+                                'States that no longer match a pass rule are terminated, so traffic immediately follows the updated ruleset instead '.
+                                'of persisting on stale states until they expire. The re-evaluation runs asynchronously after the filter reload.') ?><br />
+                    <?= gettext('Note: this only re-evaluates states created by automation (MVC) filter rules.') ?>
                   </div>
                 </td>
               </tr>

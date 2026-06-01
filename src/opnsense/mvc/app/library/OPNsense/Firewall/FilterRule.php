@@ -307,6 +307,70 @@ class FilterRule extends Rule
     }
 
     /**
+     * Emit normalized match criteria for this rule, one entry per expanded sub-rule.
+     *
+     * This reuses the exact same normalization (parseFilterRules / reader) used to generate the
+     * pf(4) ruleset, but instead of returning pf text it returns a compact, machine-readable
+     * description of what each rule matches on. It is consumed by the state re-evaluation
+     * ("rematch states") layer so it can decide, in userspace, whether an existing state would
+     * still be passed by the current ruleset.
+     *
+     * Address/port tokens are already resolved to the form pf uses: interface names become
+     * "(<if>:network)" / "(<if>)", aliases become "$<name>", negation is prefixed with "!",
+     * and "any" means match-all. Interface is resolved to the physical interface name so it can
+     * be compared against the interface reported for a live state.
+     *
+     * @return array list of criteria dictionaries
+     */
+    public function toCriteria()
+    {
+        $result = [];
+        foreach ($this->parseFilterRules() as $rule) {
+            if (!empty($rule['disabled'])) {
+                continue;
+            }
+            switch ($rule['type'] ?? '') {
+                case 'block':
+                    $action = 'block';
+                    break;
+                case 'reject':
+                    $action = 'block';
+                    break;
+                case '':
+                case 'pass':
+                    $action = 'pass';
+                    break;
+                default:
+                    $action = $rule['type'];
+            }
+            $direction = $rule['direction'] ?? '';
+            if ($direction === '' || $direction === null) {
+                $direction = 'in';
+            }
+            $interface = $rule['interface'] ?? '';
+            $physif = !empty($interface) && !empty($this->interfaceMapping[$interface]['if'])
+                ? $this->interfaceMapping[$interface]['if'] : null;
+            $result[] = [
+                'label' => $rule['label'] ?? '',
+                'origin' => $this->ruleOrigin(),
+                'action' => $action,
+                'quick' => !empty($rule['quick']),
+                'interface' => $physif,
+                'interfacenot' => !empty($rule['interfacenot']),
+                'direction' => $direction,
+                'ipprotocol' => $rule['ipprotocol'] ?? null,
+                'protocol' => isset($rule['protocol']) ? strtolower($rule['protocol']) : null,
+                'from' => empty($rule['from']) ? 'any' : $rule['from'],
+                'from_port' => isset($rule['from_port']) && $rule['from_port'] !== '' ? $rule['from_port'] : null,
+                'to' => empty($rule['to']) ? 'any' : $rule['to'],
+                'to_port' => isset($rule['to_port']) && $rule['to_port'] !== '' ? $rule['to_port'] : null,
+                'keepstate' => !(isset($rule['state']) && is_array($rule['state']) && $rule['state']['type'] === 'no'),
+            ];
+        }
+        return $result;
+    }
+
+    /**
      * init FilterRule
      * @param array $interfaceMapping internal interface mapping
      * @param array $gatewayMapping internal gateway mapping

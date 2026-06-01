@@ -479,6 +479,26 @@ function filter_configure_sync($verbose = false, $load_aliases = true)
         configd_run('filter refresh_aliases', true);
     }
 
+    /*
+     * Rematch states: when enabled, re-evaluate existing states against the ruleset we just
+     * loaded and terminate the ones that no longer match a pass rule. We export a normalized,
+     * machine-readable view of the (whole) ruleset here, while we still hold the parsed $fw
+     * object, and hand off the actual evaluation/killing to a detached configd action so it
+     * never delays the filter reload itself.
+     */
+    if (!empty($config['system']['rematch_states'])) {
+        $rematch_rules = [];
+        foreach ($fw->iterateFilterRules() as $rule) {
+            if (method_exists($rule, 'toCriteria')) {
+                foreach ($rule->toCriteria() as $criteria) {
+                    $rematch_rules[] = $criteria;
+                }
+            }
+        }
+        @file_put_contents('/tmp/rematch_ruleset.json', json_encode($rematch_rules));
+        configd_run('filter rematch states', true);
+    }
+
     unset($fobj);
 
     reopenlog();
