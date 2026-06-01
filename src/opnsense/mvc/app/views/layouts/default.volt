@@ -33,10 +33,6 @@
       .typeahead {
         overflow: hidden;
       }
-      .page-foot {
-        border-top: none !important;
-        margin-top: -1px !important;
-      }
     </style>
 
     <!-- script imports -->
