@@ -7,13 +7,14 @@ import rematch
 
 class FakeResolver:
     """Deterministic resolver for the evaluator unit tests."""
-    def __init__(self, aliases=None, ifnets=None, ifaddrs=None, selfaddr=None):
+    def __init__(self, aliases=None, ifnets=None, ifaddrs=None, selfaddr=None, ifgroups=None):
         import ipaddress
         self._ipn = ipaddress.ip_network
         self.aliases = aliases or {}
         self.ifnets = ifnets or {}
         self.ifaddrs = ifaddrs or {}
         self.selfaddr = selfaddr or []
+        self.ifgroups = ifgroups or {}
 
     def _nets(self, items):
         return [self._ipn(i, strict=False) for i in items]
@@ -26,6 +27,9 @@ class FakeResolver:
 
     def iface_addr(self, ifn):
         return self._nets(self.ifaddrs[ifn]) if ifn in self.ifaddrs else None
+
+    def iface_groups(self, ifn):
+        return self.ifgroups.get(ifn, [])
 
     def self_addr(self):
         return self._nets(self.selfaddr)
@@ -48,6 +52,7 @@ def state(over=None):
         'iface': 'em0', 'direction': 'in', 'proto': 'tcp', 'ipproto': 'ipv4',
         'src_addr': '192.168.1.50', 'src_port': '40000',
         'dst_addr': '10.0.0.10', 'dst_port': '443',
+        'nat_addr': None, 'nat_port': None,
     }
     if over:
         base.update(over)
@@ -61,6 +66,7 @@ class TestRematchEvaluator(unittest.TestCase):
             ifnets={'em0': ['192.168.1.0/24']},
             ifaddrs={'em0': ['192.168.1.1/32']},
             selfaddr=['192.168.1.1/32', '10.0.0.1/32'],
+            ifgroups={'em0': ['IOTGROUP'], 'em1': []},
         )
 
     def test_iot_allow_removed_falls_to_block(self):
@@ -142,6 +148,48 @@ class TestRematchEvaluator(unittest.TestCase):
         rules = [rule({'action': 'pass', 'to_port': '1000:2000'}), rule({'action': 'block'})]
         self.assertEqual(rematch.evaluate(rules, state({'dst_port': '1500'}), self.r), 'pass')
         self.assertEqual(rematch.evaluate(rules, state({'dst_port': '3000'}), self.r), 'block')
+
+    # --- NAT awareness (#1) ---
+    def test_snat_outbound_matches_pre_nat_source(self):
+        # WAN outbound SNAT: src_addr is the pre-NAT internal address, nat_addr the public one.
+        rules = [rule({'action': 'pass', 'direction': 'out', 'interface': 'wan',
+                       'from': '192.168.1.0/24'}), rule({'action': 'block'})]
+        st = state({'iface': 'wan', 'direction': 'out', 'src_addr': '192.168.1.50',
+                    'nat_addr': '198.51.100.5', 'nat_port': '23456'})
+        self.assertEqual(rematch.evaluate(rules, st, self.r), 'pass')
+
+    def test_snat_outbound_matches_post_nat_source(self):
+        # a rule written against the public address still keeps the flow (match on either tuple)
+        rules = [rule({'action': 'pass', 'direction': 'out', 'interface': 'wan',
+                       'from': '198.51.100.0/24'}), rule({'action': 'block'})]
+        st = state({'iface': 'wan', 'direction': 'out', 'src_addr': '192.168.1.50',
+                    'nat_addr': '198.51.100.5'})
+        self.assertEqual(rematch.evaluate(rules, st, self.r), 'pass')
+
+    # --- interface groups (#4) ---
+    def test_group_rule_matches_member_interface(self):
+        rules = [rule({'action': 'pass', 'interface': 'IOTGROUP', 'from': 'any'}),
+                 rule({'action': 'block'})]
+        # em0 is a member of IOTGROUP -> group rule matches -> pass
+        self.assertEqual(rematch.evaluate(rules, state({'iface': 'em0'}), self.r), 'pass')
+        # em1 is not a member -> group rule does not match -> block
+        self.assertEqual(rematch.evaluate(rules, state({'iface': 'em1'}), self.r), 'block')
+
+    # --- compiled ruleset index (#2) ---
+    def test_compiled_ruleset_equivalence(self):
+        rules = [
+            rule({'action': 'pass', 'protocol': 'udp'}),
+            rule({'action': 'pass', 'ipprotocol': 'inet6'}),
+            rule({'action': 'pass', 'protocol': 'tcp', 'from': '192.168.1.0/24'}),
+            rule({'action': 'block'}),
+        ]
+        compiled = rematch.CompiledRuleset(rules)
+        st = state({'proto': 'tcp', 'ipproto': 'ipv4', 'src_addr': '192.168.1.50'})
+        # compiled result must equal a full unindexed walk
+        self.assertEqual(rematch.evaluate(compiled, st, self.r), rematch.evaluate(rules, st, self.r))
+        self.assertEqual(rematch.evaluate(compiled, st, self.r), 'pass')
+        # candidates() must have pruned the udp / inet6 rules for this tcp/ipv4 state
+        self.assertEqual(len(compiled.candidates(st)), 2)
 
 
 if __name__ == '__main__':

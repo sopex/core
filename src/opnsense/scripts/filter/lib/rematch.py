@@ -35,6 +35,17 @@
     alias table it cannot read) it returns "uncertain" for that state, which the caller treats
     as "keep" so we never drop traffic we are not sure about. The only states that get killed
     are ones that the ruleset would *definitely* block / no longer match.
+
+    NAT awareness: lib.states reports the *pre-NAT* address in src_addr/dst_addr and the
+    translated address separately in nat_addr. OPNsense filter rules are written against
+    pre-NAT addresses, so we match on src_addr/dst_addr, but additionally accept a match on
+    the translated address (for the relevant direction). This only ever *adds* matches, so it
+    can never cause a false eviction of a translated flow.
+
+    Interface groups: OPNsense interface groups are native pf groups, so a state's interface is
+    a physical member (e.g. em0) while a group rule says "on <group>". interface_matches()
+    consults the resolver for the physical interface's group memberships so group rules match
+    their members instead of being treated as a hard mismatch.
 """
 import ipaddress
 
@@ -68,11 +79,21 @@ def direction_matches(rule_dir, state_dir):
     return rule_dir == state_dir
 
 
-def interface_matches(rule_if, rule_ifnot, state_if):
-    """rule_if None means floating (matches any interface)."""
+def interface_matches(rule_if, rule_ifnot, state_if, resolver=None):
+    """
+    rule_if None means floating (matches any interface). A rule interface may also be an
+    interface *group*; in that case the physical state interface matches if it is a member of
+    that group, which we discover via the resolver.
+    """
     if not rule_if:
         return True
     matched = (rule_if == state_if)
+    if not matched and resolver is not None:
+        try:
+            groups = resolver.iface_groups(state_if) or []
+        except AttributeError:
+            groups = []
+        matched = rule_if in groups
     return (not matched) if rule_ifnot else matched
 
 
@@ -99,8 +120,8 @@ def _resolve_atom(atom, resolver):
         return 'UNKNOWN'
 
 
-def addr_matches(token, addr, resolver):
-    """Tri-state address match: True / False / None (cannot determine)."""
+def _addr_in_token(token, addr, resolver):
+    """Tri-state: does a single address match this (possibly negated, comma-joined) token?"""
     if token is None:
         return True
     token = token.strip()
@@ -139,6 +160,27 @@ def addr_matches(token, addr, resolver):
     return (not base) if neg else base
 
 
+def addr_matches(token, addrs, resolver):
+    """
+    Tri-state address match against one or more candidate addresses (pre- and, where relevant,
+    post-NAT). A match on *any* candidate counts, which biases towards keeping translated flows.
+    """
+    if isinstance(addrs, (list, tuple)):
+        candidates = [a for a in addrs if a]
+    else:
+        candidates = [addrs] if addrs else []
+    if not candidates:
+        return _addr_in_token(token, None, resolver)
+    saw_unknown = False
+    for addr in candidates:
+        res = _addr_in_token(token, addr, resolver)
+        if res is True:
+            return True
+        if res is None:
+            saw_unknown = True
+    return None if saw_unknown else False
+
+
 def port_matches(token, port):
     """Tri-state port match. Port aliases ($name) are not resolvable here -> None."""
     if token is None or token == '' or token == ANY:
@@ -163,11 +205,25 @@ def port_matches(token, port):
         return None
 
 
+def _source_candidates(state):
+    addrs = [state.get('src_addr')]
+    if state.get('nat_addr') and state.get('direction') == 'out':
+        addrs.append(state.get('nat_addr'))
+    return addrs
+
+
+def _dest_candidates(state):
+    addrs = [state.get('dst_addr')]
+    if state.get('nat_addr') and state.get('direction') == 'in':
+        addrs.append(state.get('nat_addr'))
+    return addrs
+
+
 def rule_matches(rule, state, resolver):
     """Tri-state: does this single rule match this state? True / False / None."""
     if not direction_matches(rule.get('direction'), state.get('direction')):
         return False
-    if not interface_matches(rule.get('interface'), rule.get('interfacenot'), state.get('iface')):
+    if not interface_matches(rule.get('interface'), rule.get('interfacenot'), state.get('iface'), resolver):
         return False
     if not af_matches(rule.get('ipprotocol'), state.get('ipproto')):
         return False
@@ -175,8 +231,8 @@ def rule_matches(rule, state, resolver):
         return False
 
     tri = [
-        addr_matches(rule.get('from'), state.get('src_addr'), resolver),
-        addr_matches(rule.get('to'), state.get('dst_addr'), resolver),
+        addr_matches(rule.get('from'), _source_candidates(state), resolver),
+        addr_matches(rule.get('to'), _dest_candidates(state), resolver),
         port_matches(rule.get('from_port'), state.get('src_port')),
         port_matches(rule.get('to_port'), state.get('dst_port')),
     ]
@@ -187,13 +243,44 @@ def rule_matches(rule, state, resolver):
     return True
 
 
+class CompiledRuleset:
+    """
+    Pre-indexes the ruleset by address-family and protocol so each state only walks the rules
+    that could possibly match it, instead of the whole ruleset. Rules excluded by the index
+    would return False from rule_matches() anyway, so the verdict is identical to a full walk
+    while avoiding the O(states x rules) blow-up on large systems.
+
+    Original rule order is preserved within each bucket, which is required for pf's
+    last-match / quick semantics.
+    """
+
+    def __init__(self, rules):
+        self.rules = list(rules)
+        self._cache = {}
+
+    def candidates(self, state):
+        key = (state.get('ipproto'), (state.get('proto') or '').lower())
+        cached = self._cache.get(key)
+        if cached is None:
+            af, proto = key
+            cached = [
+                r for r in self.rules
+                if af_matches(r.get('ipprotocol'), af) and proto_matches(r.get('protocol'), proto)
+            ]
+            self._cache[key] = cached
+        return cached
+
+
 def evaluate(rules, state, resolver):
     """
     Walk the ruleset in order applying pf last-match / quick semantics.
 
-    Returns one of: 'pass', 'block', 'uncertain'. The caller should only kill the state
-    when the result is 'block'.
+    `rules` may be a plain list or a CompiledRuleset. Returns one of: 'pass', 'block',
+    'uncertain'. The caller should only kill the state when the result is 'block'.
     """
+    if isinstance(rules, CompiledRuleset):
+        rules = rules.candidates(state)
+
     last_action = 'block'  # pf default policy is deny
     for rule in rules:
         match = rule_matches(rule, state, resolver)

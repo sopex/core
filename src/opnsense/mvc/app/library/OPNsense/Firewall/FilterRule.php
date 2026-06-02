@@ -317,8 +317,7 @@ class FilterRule extends Rule
      *
      * Address/port tokens are already resolved to the form pf uses: interface names become
      * "(<if>:network)" / "(<if>)", aliases become "$<name>", negation is prefixed with "!",
-     * and "any" means match-all. Interface is resolved to the physical interface name so it can
-     * be compared against the interface reported for a live state.
+     * and "any" means match-all.
      *
      * @return array list of criteria dictionaries
      */
@@ -347,9 +346,21 @@ class FilterRule extends Rule
             if ($direction === '' || $direction === null) {
                 $direction = 'in';
             }
+            /*
+             * Resolve the interface to the name pf actually matches on. For a normal interface
+             * that is the physical device. For an interface group there is no entry in
+             * interfaceMapping, so we keep the group name as-is: pf treats it as a native
+             * interface group and the rematch evaluator expands group membership at evaluation
+             * time. Only a genuinely empty interface (floating) maps to null (= match any).
+             */
             $interface = $rule['interface'] ?? '';
-            $physif = !empty($interface) && !empty($this->interfaceMapping[$interface]['if'])
-                ? $this->interfaceMapping[$interface]['if'] : null;
+            if (empty($interface)) {
+                $physif = null;
+            } elseif (!empty($this->interfaceMapping[$interface]['if'])) {
+                $physif = $this->interfaceMapping[$interface]['if'];
+            } else {
+                $physif = $interface;
+            }
             $result[] = [
                 'label' => $rule['label'] ?? '',
                 'origin' => $this->ruleOrigin(),
