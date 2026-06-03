@@ -825,3 +825,23 @@ ul.jqtree-tree .jqtree-title {
 .diff_record_default {
   color: #fff !important;
 }
+
+.tokenize > .tokens-container {
+    background-color: $input-bg !important;
+    border: 1px solid $input-border !important;
+}
+.tokenize > .tokens-container.disabled {
+    background-color: $input-bg-disabled !important;
+    border-color: $input-border !important;
+}
+.tokenize > .tokens-container > .token,
+.tokenize.single > .tokens-container > .token {
+    background-color: lighten($panel-bg, 10%) !important;
+    color: $text-color !important;
+    border: 1px solid $table-border-color !important;
+}
+.tokenize > .tokens-container > .token-search > input {
+    background-color: transparent !important;
+    color: $text-color !important;
+    border-color: transparent !important;
+}
