@@ -7375,21 +7375,21 @@ ul.jqtree-tree .jqtree-title {
 }
 
 .tokenize > .tokens-container {
-    background-color: $input-bg !important;
-    border: 1px solid $input-border !important;
+    background-color: #101218 !important;
+    border: 1px solid #2b3040 !important;
 }
 .tokenize > .tokens-container.disabled {
-    background-color: $input-bg-disabled !important;
-    border-color: $input-border !important;
+    background-color: #1a1d27 !important;
+    border-color: #2b3040 !important;
 }
 .tokenize > .tokens-container > .token,
 .tokenize.single > .tokens-container > .token {
-    background-color: lighten($panel-bg, 10%) !important;
-    color: $text-color !important;
-    border: 1px solid $table-border-color !important;
+    background-color: #2b3040 !important;
+    color: #ececec !important;
+    border: 1px solid #1a1d27 !important;
 }
 .tokenize > .tokens-container > .token-search > input {
     background-color: transparent !important;
-    color: $text-color !important;
+    color: #ececec !important;
     border-color: transparent !important;
 }
