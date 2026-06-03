@@ -834,7 +834,8 @@ ul.jqtree-tree .jqtree-title {
     background-color: $input-bg-disabled !important;
     border-color: $input-border !important;
 }
-.tokenize > .tokens-container > .token {
+.tokenize > .tokens-container > .token,
+.tokenize.single > .tokens-container > .token {
     background-color: lighten($panel-bg, 10%) !important;
     color: $text-color !important;
     border: 1px solid $table-border-color !important;
@@ -842,4 +843,5 @@ ul.jqtree-tree .jqtree-title {
 .tokenize > .tokens-container > .token-search > input {
     background-color: transparent !important;
     color: $text-color !important;
+    border-color: transparent !important;
 }
