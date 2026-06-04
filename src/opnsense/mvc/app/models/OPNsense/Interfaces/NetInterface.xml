@@ -9,7 +9,7 @@
             <!-- backref from if field -->
             <icon type="TextField" volatile="true"/>
             <optgroup type="TextField" volatile="true"/>
-            <if type=".\AssignmentInterfaceField">
+            <if type=".\NetInterfaceField">
                 <Required>Y</Required>
                 <Constraints>
                     <check001>
