@@ -1436,6 +1436,7 @@
 /usr/local/opnsense/scripts/system/swapinfo.py
 /usr/local/opnsense/scripts/system/sysctl.py
 /usr/local/opnsense/scripts/system/sysctl_defaults.php
+/usr/local/opnsense/scripts/system/temperature.py
 /usr/local/opnsense/scripts/system/tls_groups.py
 /usr/local/opnsense/scripts/system/trigger_config_changed_events.py
 /usr/local/opnsense/scripts/system/update-crl-fetch.py

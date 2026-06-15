@@ -234,30 +234,61 @@ class SystemController extends ApiControllerBase
         $sensors = explode("\n", $backend->configdRun('system sensors'));
         $temps = json_decode($backend->configdpRun('system sysctl values', join(',', $sensors)), true);
 
-        foreach ($temps as $name => $value) {
-            $tempItem = [];
-            $tempItem['device'] = $name;
-            $tempItem['device_seq'] = (int)filter_var($tempItem['device'], FILTER_SANITIZE_NUMBER_INT);
-            $tempItem['temperature'] = trim(str_replace('C', '', $value));
-            $tempItem['type_translated'] = gettext('Other');
-            $tempItem['type'] = 'other';
+        if (is_array($temps)) {
+            foreach ($temps as $name => $value) {
+                $tempItem = [];
+                $tempItem['device'] = $name;
+                $tempItem['device_seq'] = (string)filter_var($tempItem['device'], FILTER_SANITIZE_NUMBER_INT);
+                $tempItem['temperature'] = trim(str_replace('C', '', $value));
+                $tempItem['type_translated'] = gettext('Other');
+                $tempItem['type'] = 'other';
 
-            /* try to categorize a few of the readings just for labels */
-            if (str_starts_with($tempItem['device'], 'hw.acpi.')) {
-                $tempItem['type_translated'] = gettext('Zone');
-                $tempItem['type'] = 'zone';
-            } elseif (str_starts_with($tempItem['device'], 'dev.amdtemp.')) {
-                $tempItem['type_translated'] = gettext('AMD');
-                $tempItem['type'] = 'amd';
-            } elseif (str_starts_with($tempItem['device'], 'dev.pchtherm.')) {
-                $tempItem['type_translated'] = gettext('Platform');
-                $tempItem['type'] = 'platform';
-            } elseif (str_starts_with($tempItem['device'], 'dev.cpu.')) {
-                $tempItem['type_translated'] = gettext('CPU');
-                $tempItem['type'] = 'cpu';
+                /* try to categorize a few of the readings just for labels */
+                if (str_starts_with($tempItem['device'], 'hw.acpi.')) {
+                    $tempItem['type_translated'] = gettext('Zone');
+                    $tempItem['type'] = 'zone';
+                } elseif (str_starts_with($tempItem['device'], 'dev.amdtemp.')) {
+                    $tempItem['type_translated'] = gettext('AMD');
+                    $tempItem['type'] = 'amd';
+                } elseif (str_starts_with($tempItem['device'], 'dev.pchtherm.')) {
+                    $tempItem['type_translated'] = gettext('Platform');
+                    $tempItem['type'] = 'platform';
+                } elseif (str_starts_with($tempItem['device'], 'dev.cpu.')) {
+                    $tempItem['type_translated'] = gettext('CPU');
+                    $tempItem['type'] = 'cpu';
+                }
+
+                $result[] = $tempItem;
             }
+        }
 
-            $result[] = $tempItem;
+        /* read extra temperatures (Disks, SFP) */
+        $extra_temps = json_decode($backend->configdRun('system extra_temperatures'), true);
+        if (is_array($extra_temps)) {
+            foreach ($extra_temps as $item) {
+                if (isset($item['device']) && isset($item['temperature']) && isset($item['type'])) {
+                    $tempItem = [];
+                    $tempItem['device'] = $item['device'];
+                    $tempItem['temperature'] = $item['temperature'];
+                    $tempItem['type'] = $item['type'];
+
+                    if ($item['type'] === 'nvme') {
+                        $tempItem['type_translated'] = gettext('NVMe');
+                        $tempItem['device_seq'] = (string)str_replace('nvme', '', $item['device']);
+                    } elseif ($item['type'] === 'sfp') {
+                        $tempItem['type_translated'] = gettext('SFP');
+                        $tempItem['device_seq'] = (string)$item['device'];
+                    } elseif ($item['type'] === 'disk') {
+                        $tempItem['type_translated'] = gettext('Disk');
+                        $tempItem['device_seq'] = (string)$item['device'];
+                    } else {
+                        $tempItem['type_translated'] = gettext('Other');
+                        $tempItem['device_seq'] = (string)$item['device'];
+                    }
+
+                    $result[] = $tempItem;
+                }
+            }
         }
 
         return $result;

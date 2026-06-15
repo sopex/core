@@ -147,7 +147,7 @@ export default class ThermalSensors extends BaseWidget {
                                     return;
                                 }
                                 let meta = tooltipItem.dataset.metadata[idx];
-                                return `${meta.device}: ${meta.temperature}°C / ${meta.temperature_fahrenheit}°F`;
+                                return `${meta.device}: ${meta.temperature}°C`;
                             }
                         }
                     }
@@ -259,11 +259,6 @@ export default class ThermalSensors extends BaseWidget {
     }
 
     _parseSensors(data) {
-        const toFahrenheit = (celsius) => (celsius * 9 / 5) + 32;
-        data.forEach(item => {
-            item.temperature_fahrenheit = toFahrenheit(parseFloat(item.temperature)).toFixed(1);
-        });
-
         return data;
     }
 
