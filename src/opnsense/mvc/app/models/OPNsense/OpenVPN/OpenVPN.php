@@ -753,9 +753,24 @@ class OpenVPN extends BaseModel
                 $options['up'] = '/usr/local/etc/inc/plugins.inc.d/openvpn/ovpn-linkup';
                 $options['down'] = '/usr/local/etc/inc/plugins.inc.d/openvpn/ovpn-linkdown';
 
-                foreach (['reneg-sec', 'port', 'local', 'data-ciphers', 'data-ciphers-fallback', 'auth'] as $opt) {
+                foreach (['reneg-sec', 'port', 'data-ciphers', 'data-ciphers-fallback', 'auth'] as $opt) {
                     if ((string)$node->$opt != '') {
                         $options[$opt] = str_replace(',', ':', (string)$node->$opt);
+                    }
+                }
+                if (!$node->local->isEmpty()) {
+                    /* multi-socket support, bind to one or more "local <host> [port]" combinations */
+                    $options['local'] = [];
+                    foreach (explode(',', (string)$node->local) as $this_local) {
+                        $parts = [];
+                        if (substr_count($this_local, ':') > 1) {
+                            foreach (explode(']', $this_local) as $part) {
+                                $parts[] = ltrim($part, '[:');
+                            }
+                        } else {
+                            $parts = explode(':', $this_local);
+                        }
+                        $options['local'][] = implode(' ', array_filter($parts, 'strlen'));
                     }
                 }
                 if (!$node->{'port-share'}->isEmpty()) {

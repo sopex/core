@@ -129,9 +129,9 @@
                 </proto>
                 <port type="PortField"/>
                 <port-share type="IPPortField"/>
-                <local type="NetworkField">
-                    <WildcardEnabled>N</WildcardEnabled>
-                    <NetMaskAllowed>N</NetMaskAllowed>
+                <local type="IPPortField">
+                    <AsList>Y</AsList>
+                    <PortOptional>Y</PortOptional>
                 </local>
                 <topology type="OptionField">
                     <Required>Y</Required>

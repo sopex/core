@@ -63,10 +63,15 @@
     <field>
         <id>instance.local</id>
         <label>Bind address</label>
-        <type>text</type>
+        <type>select_multiple</type>
+        <allownew>true</allownew>
+        <style>tokenize</style>
         <help>
-            Optional IP address for bind. If specified, OpenVPN will bind to this address only.
-            If unspecified, OpenVPN will bind to all interfaces.
+            Optional IP address(es) to bind to, with an optional port per entry. If specified, OpenVPN will bind to
+            these addresses only, if unspecified it will bind to all interfaces. Multiple entries enable multi-socket
+            mode (OpenVPN 2.6+), for example to offer a dual stack setup on a single instance. When no port is given
+            for an entry, the instance "Port number" (or the OpenVPN default) is used. Examples:
+            10.10.10.10 2001:db8::1 10.10.10.10:1194 [2001:db8::1]:1194
         </help>
         <grid_view>
             <visible>false</visible>
