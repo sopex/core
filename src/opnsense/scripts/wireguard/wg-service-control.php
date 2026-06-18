@@ -82,64 +82,72 @@ function wg_start($server, $fhandle, $ifcfgflag = 'up', $reload = false)
 
     mwexecf('/sbin/ifconfig %s %sdebug', [$server->interface->getValue(), $server->debug->getValue() === '1' ? '' : '-']);
 
-    if (empty((string)$server->disableroutes)) {
-        /**
-         * Add routes for all configured peers, wg-quick seems to parse 'wg show wgX allowed-ips' for this,
-         * but this should logically congtain the same networks.
-         *
-         * XXX: For some reason these routes look a bit off, not very well integrated into OPNsense.
-         *      In the long run it might make sense to have some sort of pluggable model facility
-         *      where these (and maybe other) static routes hook into.
-         **/
-        $peers = $server->peers->getValues();
-        $routes_to_add = $routes_to_skip = ['inet' => [], 'inet6' => []];
-
-        /* calculate subnets to skip because these are automatically attached by instance address */
-        foreach ($server->tunneladdress->getValues() as $alias) {
-            $ipproto = strpos($alias, ':') === false ? 'inet' : 'inet6';
-            $alias = explode('/', $alias);
-            $alias = ($ipproto == 'inet' ? gen_subnet($alias[0], $alias[1]) :
-                gen_subnetv6($alias[0], $alias[1])) . "/{$alias[1]}";
-            $routes_to_skip[$ipproto][] = $alias;
-        }
-
-        foreach ((new OPNsense\Wireguard\Client())->clients->client->iterateItems() as $key => $client) {
-            if (empty((string)$client->enabled) || !in_array($key, $peers)) {
-                continue;
-            }
-            foreach ($client->tunneladdress->getValues() as $address) {
-                $ipproto = strpos($address, ":") === false ? "inet" :  "inet6";
-                $address = explode('/', $address);
-                $address = ($ipproto == 'inet' ? gen_subnet($address[0], $address[1]) :
-                    gen_subnetv6($address[0], $address[1])) . "/{$address[1]}";
-                /* wg-quick seems to prevent /0 being routed and translates this automatically */
-                if (str_ends_with(trim($address), '/0')) {
-                    if ($ipproto == 'inet') {
-                        array_push($routes_to_add[$ipproto], '0.0.0.0/1', '128.0.0.0/1');
-                    } else {
-                        array_push($routes_to_add[$ipproto], '::/1', '8000::/1');
-                    }
-                } elseif (!in_array($address, $routes_to_skip[$ipproto])) {
-                    $routes_to_add[$ipproto][] = $address;
-                }
-            }
-        }
-        foreach ($routes_to_add as $ipproto => $routes) {
-            foreach (array_unique($routes) as $route) {
-                mwexecf('/sbin/route -q -n add -%s %s -interface %s', [$ipproto,  $route, $server->interface]);
-            }
-        }
-    } elseif (!empty((string)$server->gateway)) {
-        /* Only bind the gateway ip to the tunnel */
-        $ipprefix = strpos($server->gateway, ":") === false ? "-4" :  "-6";
-        mwexecf('/sbin/route -q -n add %s %s -iface %s', [$ipprefix, $server->gateway, $server->interface]);
-    }
-
     if ($reload) {
         interfaces_restart_by_device(false, [(string)$server->interface]);
     }
 
     mwexecf('/sbin/ifconfig %s %s', [$server->interface, $ifcfgflag]);
+
+    /*
+     * Routes can only be installed once the interface is up. On a fresh boot the device was just
+     * created above and is still down, so adding routes before bringing it up fails ("network is
+     * down"); a manual restart worked only because the device was already up. Only add routes when
+     * the interface is going up, which also skips installing them on a CARP BACKUP node.
+     */
+    if ($ifcfgflag == 'up') {
+        if (empty((string)$server->disableroutes)) {
+            /**
+             * Add routes for all configured peers, wg-quick seems to parse 'wg show wgX allowed-ips' for this,
+             * but this should logically congtain the same networks.
+             *
+             * XXX: For some reason these routes look a bit off, not very well integrated into OPNsense.
+             *      In the long run it might make sense to have some sort of pluggable model facility
+             *      where these (and maybe other) static routes hook into.
+             **/
+            $peers = $server->peers->getValues();
+            $routes_to_add = $routes_to_skip = ['inet' => [], 'inet6' => []];
+
+            /* calculate subnets to skip because these are automatically attached by instance address */
+            foreach ($server->tunneladdress->getValues() as $alias) {
+                $ipproto = strpos($alias, ':') === false ? 'inet' : 'inet6';
+                $alias = explode('/', $alias);
+                $alias = ($ipproto == 'inet' ? gen_subnet($alias[0], $alias[1]) :
+                    gen_subnetv6($alias[0], $alias[1])) . "/{$alias[1]}";
+                $routes_to_skip[$ipproto][] = $alias;
+            }
+
+            foreach ((new OPNsense\Wireguard\Client())->clients->client->iterateItems() as $key => $client) {
+                if (empty((string)$client->enabled) || !in_array($key, $peers)) {
+                    continue;
+                }
+                foreach ($client->tunneladdress->getValues() as $address) {
+                    $ipproto = strpos($address, ":") === false ? "inet" :  "inet6";
+                    $address = explode('/', $address);
+                    $address = ($ipproto == 'inet' ? gen_subnet($address[0], $address[1]) :
+                        gen_subnetv6($address[0], $address[1])) . "/{$address[1]}";
+                    /* wg-quick seems to prevent /0 being routed and translates this automatically */
+                    if (str_ends_with(trim($address), '/0')) {
+                        if ($ipproto == 'inet') {
+                            array_push($routes_to_add[$ipproto], '0.0.0.0/1', '128.0.0.0/1');
+                        } else {
+                            array_push($routes_to_add[$ipproto], '::/1', '8000::/1');
+                        }
+                    } elseif (!in_array($address, $routes_to_skip[$ipproto])) {
+                        $routes_to_add[$ipproto][] = $address;
+                    }
+                }
+            }
+            foreach ($routes_to_add as $ipproto => $routes) {
+                foreach (array_unique($routes) as $route) {
+                    mwexecf('/sbin/route -q -n add -%s %s -interface %s', [$ipproto,  $route, $server->interface]);
+                }
+            }
+        } elseif (!empty((string)$server->gateway)) {
+            /* Only bind the gateway ip to the tunnel */
+            $ipprefix = strpos($server->gateway, ":") === false ? "-4" :  "-6";
+            mwexecf('/sbin/route -q -n add %s %s -iface %s', [$ipprefix, $server->gateway, $server->interface]);
+        }
+    }
 
     // flush checksum to ease change detection
     fseek($fhandle, 0);
