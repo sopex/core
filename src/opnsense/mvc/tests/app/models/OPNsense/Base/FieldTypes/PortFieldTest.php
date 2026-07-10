@@ -146,4 +146,51 @@ class PortFieldTest extends Field_Framework_TestCase
         $field = new PortField();
         $this->assertFalse($field->isContainer());
     }
+
+    /**
+     * test normalization of colon range to dash range
+     */
+    public function testColonRangeNormalization()
+    {
+        $field = new PortField();
+        $field->setEnableRanges("Y");
+        $field->setEnableWellKnown("Y");
+        $field->eventPostLoading();
+
+        $field->setValue("80:100");
+        $this->assertEquals("80-100", $field->getValue());
+        $this->assertEmpty($this->validate($field));
+    }
+
+    /**
+     * test normalization of colon range inside lists
+     */
+    public function testColonRangeListNormalization()
+    {
+        $field = new PortField();
+        $field->setEnableRanges("Y");
+        $field->setEnableWellKnown("Y");
+        $field->setMultiple("Y");
+        $field->eventPostLoading();
+
+        $field->setValue("80,443,https,80:100");
+        $this->assertEquals("80,443,https,80-100", $field->getValue());
+        $this->assertEmpty($this->validate($field));
+    }
+
+    /**
+     * values not recognized as a valid range are kept as-is for validation to report
+     */
+    public function testColonRangeNotRewrittenWhenInvalid()
+    {
+        $field = new PortField();
+        $field->setEnableRanges("Y");
+        $field->eventPostLoading();
+
+        foreach (['80:70000', '10:20:30', ' 80:100', '80: 100'] as $value) {
+            $field->setValue($value);
+            $this->assertEquals($value, $field->getValue());
+            $this->assertNotEmpty($this->validate($field));
+        }
+    }
 }

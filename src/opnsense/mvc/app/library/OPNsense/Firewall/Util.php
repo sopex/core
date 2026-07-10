@@ -382,6 +382,29 @@ class Util
     }
 
     /**
+     * normalize the range separator in port value(s) so ':''-' may be used interchangeably
+     * @param string $value value to normalize
+     * @param string $separator range separator to normalize to, either ':' or '-'
+     * @param string $list_separator separator between items in $value
+     * @return string normalized value
+     */
+    public static function normalizePortRanges($value, $separator, $list_separator = ',')
+    {
+        $from = $separator == ':' ? '-' : ':';
+        $items = [];
+        foreach (explode($list_separator, $value) as $item) {
+            if (strpos($item, $from) !== false && !self::isPort($item, false)) {
+                $parts = explode($from, $item);
+                if (count($parts) == 2 && self::isPort($parts[0], false) && self::isPort($parts[1], false)) {
+                    $item = implode($separator, $parts);
+                }
+            }
+            $items[] = $item;
+        }
+        return implode($list_separator, $items);
+    }
+
+    /**
      * Check if provided string is a valid domain name
      * @param string $domain
      * @return false|int

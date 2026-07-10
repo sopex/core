@@ -29,6 +29,7 @@
 namespace OPNsense\Base\FieldTypes;
 
 use OPNsense\Firewall\Alias;
+use OPNsense\Firewall\Util;
 
 /**
  * Class PortField field type for ports, includes validation for services in /etc/services or valid number ranges.
@@ -179,7 +180,8 @@ class PortField extends BaseListField
     }
 
     /**
-     * always lowercase known portnames
+     * always lowercase known portnames, accept ':' as range separator by
+     * normalizing to the '-' notation this field validates
      * @param string $value
      */
     public function setValue($value)
@@ -187,6 +189,8 @@ class PortField extends BaseListField
         $tmp = trim(strtolower($value));
         if ($this->enableWellKnown && in_array($tmp, ['any'] + array_keys(self::$wellknownservices))) {
             return parent::setValue($tmp);
+        } elseif ($this->enableRanges && !empty($value)) {
+            return parent::setValue(Util::normalizePortRanges($value, '-'));
         } else {
             return parent::setValue($value);
         }

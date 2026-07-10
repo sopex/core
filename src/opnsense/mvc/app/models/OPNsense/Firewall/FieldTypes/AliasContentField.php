@@ -347,6 +347,22 @@ class AliasContentField extends BaseField
     }
 
     /**
+     * accept '-' as port range separator for port type aliases by normalizing to the ':'
+     * notation used in pf tables and this field's validation. Relies on 'type' preceding
+     * 'content' in the model definition, so setNodes() has populated the parent type
+     * before this value arrives.
+     * @param string $value
+     */
+    public function setValue($value)
+    {
+        $parent = $this->getParentNode();
+        if (!empty($value) && $parent !== null && isset($parent->type) && (string)$parent->type == 'port') {
+            $value = Util::normalizePortRanges($value, ':', $this->separatorchar);
+        }
+        return parent::setValue($value);
+    }
+
+    /**
      * retrieve field validators for this field type
      * @return array
      */
