@@ -1,7 +1,8 @@
 <?php
 
 /*
- * Copyright (C) 2016 Deciso B.V.
+ * Copyright (C) 2026 Konstantinos Spartalis <cspartalis@potatonetworks.com>
+ * Copyright (C) 2016-2025 Deciso B.V.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,6 +30,16 @@
 namespace OPNsense\Auth;
 
 require_once 'base32/Base32.php';
+
+/*
+ * Dedicated directory for consumed token state. Created at webgui bootstrap
+ * (plugins.inc.d/webgui.inc) as 0700 owned by the web user, so no other local
+ * user can pre-create or symlink state files as they could in a world-writable
+ * temp directory. Tests point this at a writable location via their bootstrap.
+ */
+if (!defined('OTP_STATE_DIR')) {
+    define('OTP_STATE_DIR', '/var/run/otp_state');
+}
 
 /**
  * RFC 6238 TOTP: Time-Based One-Time Password Authenticator
@@ -119,19 +130,61 @@ trait TOTP
     }
 
     /**
-     * authenticate TOTP RFC 6238
+     * authenticate TOTP RFC 6238, the code must be a string of exactly otpLength ascii
+     * digits (rejecting arrays, whitespace, signs and other noncanonical numeric forms)
+     * and is compared in constant time.
      * @param string $secret secret seed to use
      * @param string $code provided code
-     * @return bool is valid
+     * @return int|false start of the accepted time step, false when invalid. The caller
+     *                   must consume the returned step via consumeTimeStep() when the
+     *                   full authentication sequence succeeds.
      */
     private function authTOTP($secret, $code)
     {
+        if (!is_string($code) || !preg_match(sprintf('/\A[0-9]{%d}\z/', $this->otpLength), $code)) {
+            return false;
+        }
         foreach ($this->timesToCheck() as $moment) {
-            if ($code == $this->calculateToken($moment, $secret)) {
-                return true;
+            if (hash_equals($this->calculateToken($moment, $secret), $code)) {
+                return (int)($moment / $this->timeWindow) * $this->timeWindow;
             }
         }
         return false;
+    }
+
+    /**
+     * atomically consume an accepted token time step. A previously validated token may not
+     * validate again (RFC 6238 section 5.2), including when offered through the accepted
+     * clock skew window or through another authenticator sharing the seed. State is kept
+     * per user and seed, so reprovisioning a seed resets it.
+     * @param string $username username the token belongs to
+     * @param string $base32seed configured seed the token was validated against
+     * @param int $step_start start of the accepted time step (unix timestamp)
+     * @return bool false when this or a later step was consumed before (replay)
+     */
+    private function consumeTimeStep($username, $base32seed, $step_start)
+    {
+        $filename = sprintf(
+            '%s/otp_consumed_%s',
+            OTP_STATE_DIR,
+            hash('sha256', $username . '|' . $base32seed)
+        );
+        $handle = fopen($filename, 'c+');
+        if ($handle === false || !flock($handle, LOCK_EX)) {
+            /* fail closed, accepting an unaccounted token is worse than refusing a valid one */
+            syslog(LOG_ERR, sprintf('unable to persist consumed token state (%s)', $filename));
+            return false;
+        }
+        $consumed = $step_start > (int)stream_get_contents($handle);
+        if ($consumed) {
+            ftruncate($handle, 0);
+            rewind($handle);
+            fwrite($handle, (string)$step_start);
+            fflush($handle);
+        }
+        flock($handle, LOCK_UN);
+        fclose($handle);
+        return $consumed;
     }
 
     /**
@@ -140,6 +193,93 @@ trait TOTP
     public function isPasswordFirst()
     {
         return $this->passwordFirst;
+    }
+
+    /**
+     * check if the user has a one-time password seed configured
+     * @param string $username username to check
+     * @return bool
+     */
+    public function hasOTP($username)
+    {
+        $userObject = $this->getUser($username);
+        return $userObject != null && !empty($userObject->otp_seed);
+    }
+
+    /**
+     * immutable id (uid) of the local account holding the token seed, used to pin a
+     * deferred token step to the exact account validated with the password. Usernames
+     * may be renamed or reassigned between both steps, uids may not.
+     * @param string $username username to resolve
+     * @return string|null account uid, null when the user does not exist
+     */
+    public function otpSubjectId($username)
+    {
+        $userObject = $this->getUser($username);
+        return $userObject != null ? (string)$userObject->uid : null;
+    }
+
+    /**
+     * split a composed secret into its password and token code parts according to the
+     * configured token order (token before the password unless passwordFirst is set)
+     * @param string $secret composed secret, its length must exceed the token length
+     * @return array password and token code
+     */
+    private function splitLoginSecret($secret)
+    {
+        $pwLength = strlen($secret) - $this->otpLength;
+        $pwStart = $this->passwordFirst ? 0 : $this->otpLength;
+        $otpStart = $this->passwordFirst ? $pwLength : 0;
+        return [substr($secret, $pwStart, $pwLength), substr($secret, $otpStart, $this->otpLength)];
+    }
+
+    /**
+     * authenticate the first factor (password) of a token authentication sequence, refusing
+     * users without a token seed as in the single request flow (_authenticate). The seed
+     * check runs inside the same failed attempt penalty as a full authenticate() sequence
+     * so response time does not reveal seed provisioning state.
+     * @param string $username username to authenticate
+     * @param string $password user password
+     * @return bool
+     */
+    public function authenticateFirstFactor($username, $password)
+    {
+        return $this->timedAuthenticate(function () use ($username, $password) {
+            return $this->hasOTP($username) && parent::_authenticate($username, $password);
+        });
+    }
+
+    /**
+     * authenticate user one-time password only (second factor verification), enforcing
+     * the same failed attempt penalty as a full authenticate() sequence
+     * @param string $username username to authenticate
+     * @param string $otp_code one-time password code
+     * @return bool
+     */
+    public function authenticateOTP($username, $otp_code)
+    {
+        return $this->timedAuthenticate(function () use ($username, $otp_code) {
+            $userObject = $this->getUser($username);
+            if ($userObject != null && !empty($userObject->otp_seed)) {
+                $otp_seed = \Base32\Base32::decode($userObject->otp_seed);
+                $step_start = $this->authTOTP($otp_seed, $otp_code);
+                if ($step_start !== false) {
+                    return $this->consumeTimeStep($username, (string)$userObject->otp_seed, $step_start);
+                }
+            }
+            return false;
+        });
+    }
+
+    /**
+     * run password policy checks on bare password (for Step 1 check)
+     * @param string $username username to check
+     * @param string $password bare password
+     * @return bool
+     */
+    public function shouldChangePasswordStep1($username, $password = null)
+    {
+        return parent::shouldChangePassword($username, $password);
     }
 
     /**
@@ -154,19 +294,13 @@ trait TOTP
         if ($userObject != null && !empty($userObject->otp_seed)) {
             if (strlen($password) > $this->otpLength) {
                 // split otp token code and userpassword
-                $pwLength = strlen($password) - $this->otpLength;
-                $pwStart = $this->otpLength;
-                $otpStart = 0;
-                if ($this->passwordFirst) {
-                    $otpStart = $pwLength;
-                    $pwStart = 0;
-                }
-                $userPassword = substr($password, $pwStart, $pwLength);
-                $code = substr($password, $otpStart, $this->otpLength);
+                list($userPassword, $code) = $this->splitLoginSecret($password);
                 $otp_seed = \Base32\Base32::decode($userObject->otp_seed);
-                if ($this->authTOTP($otp_seed, $code)) {
-                    // token valid, do parents auth
-                    return parent::_authenticate($username, $userPassword);
+                $step_start = $this->authTOTP($otp_seed, $code);
+                if ($step_start !== false && parent::_authenticate($username, $userPassword)) {
+                    // token and password valid, consume the token last so a failed
+                    // password attempt does not burn a token the user may retry with
+                    return $this->consumeTimeStep($username, (string)$userObject->otp_seed, $step_start);
                 }
             }
         }
@@ -183,9 +317,7 @@ trait TOTP
     {
         if ($password != null && strlen($password) > $this->otpLength) {
             /* deconstruct password according to settings */
-            $pwLength = strlen($password) - $this->otpLength;
-            $pwStart = $this->passwordFirst ? 0 : $this->otpLength;
-            $password = substr($password, $pwStart, $pwLength);
+            list($password) = $this->splitLoginSecret($password);
         }
 
         return parent::shouldChangePassword($username, $password);

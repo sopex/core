@@ -30,6 +30,12 @@
  * Read the configuration
  */
 
+/* in production OTP_STATE_DIR is created at webgui bootstrap (0700, web user),
+ * tests redirect the consumed token state to a location writable without it */
+if (!defined('OTP_STATE_DIR')) {
+    define('OTP_STATE_DIR', sys_get_temp_dir());
+}
+
 $config = include __DIR__ . "/app/config/config.php";
 
 /**
