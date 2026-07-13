@@ -176,21 +176,27 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
     $is_authenticated = false;
     $shouldChangePassword = false;
 
-    if (isset($_POST['login']) && !empty($_POST['usernamefld']) && !empty($_POST['passwordfld'])) {
+    if (
+        isset($_POST['login']) &&
+        !empty($_POST['usernamefld']) && is_string($_POST['usernamefld']) &&
+        !empty($_POST['passwordfld']) && is_string($_POST['passwordfld'])
+    ) {
         $username = $_POST['usernamefld'];
         $password = $_POST['passwordfld'];
         if ($authFactory->authenticateStep1("WebGui", $username, $password)) {
             // First factor (password) is valid!
-            $otp_authname = $authFactory->findOTPAuthenticator("WebGui", $username);
+            $otp_authname = $authFactory->pendingOTPAuthenticator($username);
             if ($otp_authname !== null) {
-                // User has OTP configured. Defer login to collect OTP.
-                // We do NOT stash the password in the session! The nonce is echoed back by the
-                // token form so only the party which passed step 1 can offer a token, the
-                // authenticator name binds the token check to the server found in this step.
+                // The authenticator which accepted the password requires a token, defer login
+                // to collect it. We do NOT stash the password in the session! The nonce is
+                // echoed back by the token form so only the party which passed step 1 can offer
+                // a token, the authenticator name binds the token check to the authenticator
+                // which accepted the password (never a different backend which happens to hold
+                // a seed for the same username), the stashed username is its canonical account.
                 session_regenerate_id();
                 $otp_nonce = bin2hex(random_bytes(16));
                 $_SESSION['login_otp_pending'] = [
-                    'username' => $username,
+                    'username' => $authFactory->lastUsedAuth->getUserName($username),
                     'authname' => $otp_authname,
                     'nonce' => $otp_nonce,
                     'shouldChangePassword' => $authFactory->shouldChangePassword($authFactory->lastUsedAuth, $username, $password),
@@ -214,13 +220,13 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
         /* second login step, collect OTP and authenticate using stashed username */
         $pending = !empty($_SESSION['login_otp_pending']) ? $_SESSION['login_otp_pending'] : null;
         unset($_SESSION['login_otp_pending']);
-        $otp_nonce = isset($_POST['otp_nonce']) ? (string)$_POST['otp_nonce'] : '';
+        $otp_nonce = isset($_POST['otp_nonce']) && is_string($_POST['otp_nonce']) ? $_POST['otp_nonce'] : '';
         if (
             !empty($pending) && !empty($pending['authname']) && $pending['expires'] >= time() &&
             !empty($pending['nonce']) && hash_equals($pending['nonce'], $otp_nonce)
         ) {
             $username = $pending['username'];
-            $otp_code = isset($_POST['otp_code']) ? $_POST['otp_code'] : '';
+            $otp_code = isset($_POST['otp_code']) && is_string($_POST['otp_code']) ? $_POST['otp_code'] : '';
             if ($authFactory->authenticateStep2("WebGui", $username, $otp_code, $pending['authname'])) {
                 $is_authenticated = true;
                 $shouldChangePassword = !empty($pending['shouldChangePassword']);

@@ -43,6 +43,11 @@ class AuthenticationFactory
     var $lastUsedAuth = null;
 
     /**
+     * @var string|null configured name of the last used authentication method
+     */
+    var $lastUsedAuthName = null;
+
+    /**
      * list installed auth connectors
      * @return array
      */
@@ -232,8 +237,27 @@ class AuthenticationFactory
     }
 
     /**
-     * Find the first configured authenticator able to verify a one time password for this user,
-     * which is the authenticator authenticateStep2() will use to check the token.
+     * Check if the authenticator that validated authenticateStep1() requires a one time
+     * password for this user, in which case authenticateStep2() should be called with the
+     * returned authenticator name to collect the second factor. Authenticators which did
+     * not win step 1 never demand a token, whichever configured server accepts the user
+     * first completes the login, as in the single request flow.
+     * @param string $username username validated in authenticateStep1()
+     * @return string|null authenticator name to collect a token for, null when none required
+     */
+    public function pendingOTPAuthenticator($username)
+    {
+        if (
+            $this->lastUsedAuth !== null && $this->usesTOTP($this->lastUsedAuth) &&
+            $this->lastUsedAuth->hasOTP($username)
+        ) {
+            return $this->lastUsedAuthName;
+        }
+        return null;
+    }
+
+    /**
+     * Find the first configured authenticator able to verify a one time password for this user
      * @param string $service_name service name
      * @param string $username username
      * @return string|null authenticator name or null when no authenticator holds a token seed
@@ -295,6 +319,7 @@ class AuthenticationFactory
                 }
                 if ($authenticated) {
                     $this->lastUsedAuth = $authenticator;
+                    $this->lastUsedAuthName = $authname;
                     if (!$service->checkConstraints()) {
                         syslog(LOG_WARNING, sprintf(
                             "user %s could not authenticate for %s, failed constraints on %s authenticated via %s",
@@ -305,7 +330,7 @@ class AuthenticationFactory
                         ));
                         return false;
                     }
-                    if (!$this->userUsesOTP($service_name, $username)) {
+                    if (!$this->usesTOTP($authenticator)) {
                         // authentication is complete, log as the single request flow would.
                         // when a token collection step follows, its completion logs instead.
                         syslog(LOG_NOTICE, sprintf(
@@ -325,8 +350,8 @@ class AuthenticationFactory
 
     /**
      * Authenticate user's second factor (OTP) only. The caller should pass the authenticator
-     * name collected via findOTPAuthenticator() when step 1 was validated to bind both steps
-     * to the same authenticator.
+     * name collected via pendingOTPAuthenticator() when step 1 was validated, binding both
+     * factors to the single authenticator which accepted the password.
      * @param string $service_name service name
      * @param string $username username
      * @param string $otp_code one-time password code
@@ -350,12 +375,14 @@ class AuthenticationFactory
                         if ($authenticator->authenticateOTP($service->getUserName(), $otp_code)) {
                             if ($service->checkConstraints()) {
                                 syslog(LOG_NOTICE, sprintf(
-                                    "user %s authenticated successfully for %s [using %s OTP]",
+                                    "user %s authenticated successfully for %s [using %s + %s OTP]",
                                     $username,
                                     $service_name,
+                                    get_class($service),
                                     get_class($authenticator)
                                 ));
                                 $this->lastUsedAuth = $authenticator;
+                                $this->lastUsedAuthName = $thisname;
                                 return true;
                             }
                         }
@@ -385,6 +412,7 @@ class AuthenticationFactory
                 $authenticator = $this->get($authname);
                 if ($authenticator !== null) {
                     $this->lastUsedAuth = $authenticator;
+                    $this->lastUsedAuthName = $authname;
                     $secret = $this->composeLoginSecret($authenticator, $password, $otp_code);
                     if ($authenticator->authenticate($service->getUserName(), $secret)) {
                         if ($service->checkConstraints()) {

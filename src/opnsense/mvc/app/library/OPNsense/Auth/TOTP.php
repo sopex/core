@@ -120,19 +120,61 @@ trait TOTP
     }
 
     /**
-     * authenticate TOTP RFC 6238
+     * authenticate TOTP RFC 6238, the code must be a string of exactly otpLength ascii
+     * digits (rejecting arrays, whitespace, signs and other noncanonical numeric forms)
+     * and is compared in constant time.
      * @param string $secret secret seed to use
      * @param string $code provided code
-     * @return bool is valid
+     * @return int|false start of the accepted time step, false when invalid. The caller
+     *                   must consume the returned step via consumeTimeStep() when the
+     *                   full authentication sequence succeeds.
      */
     private function authTOTP($secret, $code)
     {
+        if (!is_string($code) || !preg_match(sprintf('/\A[0-9]{%d}\z/', $this->otpLength), $code)) {
+            return false;
+        }
         foreach ($this->timesToCheck() as $moment) {
-            if ($code == $this->calculateToken($moment, $secret)) {
-                return true;
+            if (hash_equals($this->calculateToken($moment, $secret), $code)) {
+                return (int)($moment / $this->timeWindow) * $this->timeWindow;
             }
         }
         return false;
+    }
+
+    /**
+     * atomically consume an accepted token time step. A previously validated token may not
+     * validate again (RFC 6238 section 5.2), including when offered through the accepted
+     * clock skew window or through another authenticator sharing the seed. State is kept
+     * per user and seed, so reprovisioning a seed resets it.
+     * @param string $username username the token belongs to
+     * @param string $base32seed configured seed the token was validated against
+     * @param int $step_start start of the accepted time step (unix timestamp)
+     * @return bool false when this or a later step was consumed before (replay)
+     */
+    private function consumeTimeStep($username, $base32seed, $step_start)
+    {
+        $filename = sprintf(
+            '%s/otp_consumed_%s',
+            sys_get_temp_dir(),
+            hash('sha256', $username . '|' . $base32seed)
+        );
+        $handle = fopen($filename, 'c+');
+        if ($handle === false || !flock($handle, LOCK_EX)) {
+            /* fail closed, accepting an unaccounted token is worse than refusing a valid one */
+            syslog(LOG_ERR, sprintf('unable to persist consumed token state (%s)', $filename));
+            return false;
+        }
+        $consumed = $step_start > (int)stream_get_contents($handle);
+        if ($consumed) {
+            ftruncate($handle, 0);
+            rewind($handle);
+            fwrite($handle, (string)$step_start);
+            fflush($handle);
+        }
+        flock($handle, LOCK_UN);
+        fclose($handle);
+        return $consumed;
     }
 
     /**
@@ -209,8 +251,9 @@ trait TOTP
             $userObject = $this->getUser($username);
             if ($userObject != null && !empty($userObject->otp_seed)) {
                 $otp_seed = \Base32\Base32::decode($userObject->otp_seed);
-                if ($this->authTOTP($otp_seed, $otp_code)) {
-                    return true;
+                $step_start = $this->authTOTP($otp_seed, $otp_code);
+                if ($step_start !== false) {
+                    return $this->consumeTimeStep($username, (string)$userObject->otp_seed, $step_start);
                 }
             }
             return false;
@@ -242,9 +285,11 @@ trait TOTP
                 // split otp token code and userpassword
                 list($userPassword, $code) = $this->splitLoginSecret($password);
                 $otp_seed = \Base32\Base32::decode($userObject->otp_seed);
-                if ($this->authTOTP($otp_seed, $code)) {
-                    // token valid, do parents auth
-                    return parent::_authenticate($username, $userPassword);
+                $step_start = $this->authTOTP($otp_seed, $code);
+                if ($step_start !== false && parent::_authenticate($username, $userPassword)) {
+                    // token and password valid, consume the token last so a failed
+                    // password attempt does not burn a token the user may retry with
+                    return $this->consumeTimeStep($username, (string)$userObject->otp_seed, $step_start);
                 }
             }
         }

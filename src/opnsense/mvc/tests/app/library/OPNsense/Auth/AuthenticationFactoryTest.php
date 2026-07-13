@@ -39,6 +39,10 @@ class AuthenticationFactoryTest extends \PHPUnit\Framework\TestCase
     public static function cleanupTestFiles()
     {
         @unlink(self::$configDir . '/config.xml');
+        /* consumed token time step state persisted by the TOTP trait */
+        foreach (glob(sys_get_temp_dir() . '/otp_consumed_*') as $filename) {
+            @unlink($filename);
+        }
     }
 
     protected function setUp(): void
@@ -91,29 +95,69 @@ class AuthenticationFactoryTest extends \PHPUnit\Framework\TestCase
     {
         $authFactory = new AuthenticationFactory();
 
-        // user_with_otp: authenticateStep1 first
+        // make the TOTP authenticator the step 1 winner, as in the WebGui flow a token
+        // step only exists when the authenticator which accepted the password requires one
+        Config::getInstance()->object()->system->webgui->authmode = 'Local TOTP';
         $this->assertTrue($authFactory->authenticateStep1("WebGui", "user_with_otp", "password123"));
-        $this->assertNotNull($authFactory->lastUsedAuth);
-
-        // the authenticator selected to verify the token in step 2
-        $otp_authname = $authFactory->findOTPAuthenticator("WebGui", "user_with_otp");
+        $otp_authname = $authFactory->pendingOTPAuthenticator("user_with_otp");
         $this->assertEquals("Local TOTP", $otp_authname);
+        $this->assertEquals($authFactory->lastUsedAuthName, $otp_authname);
 
         // Get correct OTP code using testToken method on the TOTP authenticator
         $correct_otp = $authFactory->get($otp_authname)->testToken('ORSXG5BRGIZTINJWG4======');
         $this->assertNotEmpty($correct_otp);
 
-        // authenticateStep2: correct OTP, bound to the step 1 authenticator
-        $this->assertTrue($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, $otp_authname));
+        // authenticateStep2: incorrect OTP
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", "000000", $otp_authname));
 
         // authenticateStep2: correct OTP, but bound to an authenticator unable to verify tokens
         $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, "Local Database"));
 
-        // authenticateStep2: incorrect OTP
-        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", "000000", $otp_authname));
-
         // authenticateStep2: user without a token seed can never pass step 2
         $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_no_otp", $correct_otp));
+
+        // authenticateStep2: correct OTP, bound to the authenticator which accepted the password
+        $this->assertTrue($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, $otp_authname));
+
+        // a validated token may not validate again within its time window (RFC 6238)
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, $otp_authname));
+    }
+
+    public function testOTPRequirementFollowsStep1Winner()
+    {
+        $authFactory = new AuthenticationFactory();
+
+        // when a plain authenticator wins step 1, no token step is pending, whichever
+        // configured server accepts the user first completes the login. A token step is
+        // never spliced onto a different backend holding a seed for the same username.
+        $this->assertTrue($authFactory->authenticateStep1("WebGui", "user_with_otp", "password123"));
+        $this->assertEquals("Local Database", $authFactory->lastUsedAuthName);
+        $this->assertNull($authFactory->pendingOTPAuthenticator("user_with_otp"));
+
+        // when the TOTP authenticator wins step 1, the token step is bound to it
+        Config::getInstance()->object()->system->webgui->authmode = 'Local TOTP';
+        $this->assertTrue($authFactory->authenticateStep1("WebGui", "user_with_otp", "password123"));
+        $this->assertEquals("Local TOTP", $authFactory->pendingOTPAuthenticator("user_with_otp"));
+
+        // users without a token seed never leave a pending token step
+        Config::getInstance()->object()->system->webgui->authmode = 'Local Database,Local TOTP';
+        $this->assertTrue($authFactory->authenticateStep1("WebGui", "user_no_otp", "password123"));
+        $this->assertNull($authFactory->pendingOTPAuthenticator("user_no_otp"));
+    }
+
+    public function testOTPInputCanonicalization()
+    {
+        Config::getInstance()->object()->system->webgui->authmode = 'Local TOTP';
+        $authFactory = new AuthenticationFactory();
+        $correct_otp = $authFactory->get("Local TOTP")->testToken('ORSXG5BRGIZTINJWG4======');
+
+        // noncanonical presentations of a valid token are rejected
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp . "\n"));
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", " " . $correct_otp));
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", "+" . substr($correct_otp, 1)));
+
+        // while the canonical form validates
+        $this->assertTrue($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp));
     }
 
     public function testStep1RefusesUserWithoutSeedOnTOTPOnly()
@@ -172,7 +216,12 @@ class AuthenticationFactoryTest extends \PHPUnit\Framework\TestCase
         $authFactory = new AuthenticationFactory();
         $correct_otp = $authFactory->get("Local TOTP")->testToken('ORSXG5BRGIZTINJWG4======');
 
+        // a failed password attempt must not consume a valid token, the user may retry with it
+        $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", "wrongpassword", $correct_otp));
         $this->assertTrue($authFactory->authenticate("WebGui", "user_with_otp", "password123", $correct_otp));
+
+        // a validated token is consumed on this path too and may not be replayed
+        $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", "password123", $correct_otp));
         $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", "password123", "000000"));
     }
 
