@@ -135,11 +135,17 @@ class AuthenticationFactoryTest extends \PHPUnit\Framework\TestCase
         // failed step 1 (password) and step 2 (token) attempts spend at least the
         // constant ~2 second sequence time Base::authenticate() enforces, allow a
         // small margin for platform timer resolution
-        foreach (['authenticatePassword' => 'wrongpassword', 'authenticateOTP' => '000000'] as $method => $secret) {
+        foreach (['authenticateFirstFactor' => 'wrongpassword', 'authenticateOTP' => '000000'] as $method => $secret) {
             $tstart = microtime(true);
             $this->assertFalse($authenticator->$method("user_with_otp", $secret));
             $this->assertGreaterThanOrEqual(1.9, microtime(true) - $tstart);
         }
+
+        // a user without a token seed is refused in the same constant time, response
+        // time may not reveal seed provisioning state
+        $tstart = microtime(true);
+        $this->assertFalse($authenticator->authenticateFirstFactor("user_no_otp", "password123"));
+        $this->assertGreaterThanOrEqual(1.9, microtime(true) - $tstart);
     }
 
     public function testComposeLoginSecret()

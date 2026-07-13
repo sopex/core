@@ -181,11 +181,14 @@ class AuthenticationFactory
     /**
      * check if an authenticator consumes time based one time passwords, traversing the class
      * hierarchy since class_uses() only reports traits used by the class itself.
-     * @param IAuthConnector $authenticator authenticator to inspect
+     * @param IAuthConnector|null $authenticator authenticator to inspect
      * @return bool
      */
     private function usesTOTP($authenticator)
     {
+        if ($authenticator === null) {
+            return false;
+        }
         for ($classname = get_class($authenticator); $classname !== false; $classname = get_parent_class($classname)) {
             if (isset(class_uses($classname)[TOTP::class])) {
                 return true;
@@ -285,8 +288,7 @@ class AuthenticationFactory
                     // TOTP authenticators only serve users holding a token seed, as in the single
                     // request flow (_authenticate), users without a seed are refused here instead
                     // of being silently downgraded to password-only authentication.
-                    $authenticated = $authenticator->hasOTP($service->getUserName()) &&
-                        $authenticator->authenticatePassword($service->getUserName(), $password);
+                    $authenticated = $authenticator->authenticateFirstFactor($service->getUserName(), $password);
                 } else {
                     // Normal authenticators: verify password normally
                     $authenticated = $authenticator->authenticate($service->getUserName(), $password);
@@ -302,6 +304,17 @@ class AuthenticationFactory
                             get_class($authenticator)
                         ));
                         return false;
+                    }
+                    if (!$this->userUsesOTP($service_name, $username)) {
+                        // authentication is complete, log as the single request flow would.
+                        // when a token collection step follows, its completion logs instead.
+                        syslog(LOG_NOTICE, sprintf(
+                            "user %s authenticated successfully for %s [using %s + %s]",
+                            $username,
+                            $service_name,
+                            get_class($service),
+                            get_class($authenticator)
+                        ));
                     }
                     return true;
                 }

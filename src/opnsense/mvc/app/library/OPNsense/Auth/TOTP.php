@@ -181,16 +181,18 @@ trait TOTP
     }
 
     /**
-     * authenticate user password only (first factor verification), enforcing the same
-     * failed attempt penalty as a full authenticate() sequence
+     * authenticate the first factor (password) of a token authentication sequence, refusing
+     * users without a token seed as in the single request flow (_authenticate). The seed
+     * check runs inside the same failed attempt penalty as a full authenticate() sequence
+     * so response time does not reveal seed provisioning state.
      * @param string $username username to authenticate
      * @param string $password user password
      * @return bool
      */
-    public function authenticatePassword($username, $password)
+    public function authenticateFirstFactor($username, $password)
     {
         return $this->timedAuthenticate(function () use ($username, $password) {
-            return parent::_authenticate($username, $password);
+            return $this->hasOTP($username) && parent::_authenticate($username, $password);
         });
     }
 
