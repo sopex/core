@@ -170,37 +170,55 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
     $username = null;
     $password = null;
     $otp_code = null;
+    $is_authenticated = false;
+    $shouldChangePassword = false;
 
     if (isset($_POST['login']) && !empty($_POST['usernamefld']) && !empty($_POST['passwordfld'])) {
-        if (empty($_SESSION['Username']) && $authFactory->usesOTP('WebGui')) {
-            /*
-             * A one time password authenticator is configured for this service, defer validation
-             * until the token is collected on the next page. Since this decision is only based on
-             * the configuration (and not on the user), the response does not leak any information
-             * about the credentials provided or the 2FA status of the account in question.
-             */
-            session_regenerate_id();
-            $_SESSION['login_otp_pending'] = [
-                'username' => $_POST['usernamefld'],
-                'password' => $_POST['passwordfld'],
-                'expires' => time() + 240,
-            ];
-            session_write_close();
-            $Login_OTP = true;
-            return false;
-        }
         $username = $_POST['usernamefld'];
         $password = $_POST['passwordfld'];
+        if ($authFactory->authenticateStep1("WebGui", $username, $password)) {
+            // First factor (password) is valid!
+            if ($authFactory->userUsesOTP("WebGui", $username)) {
+                // User has OTP configured. Defer login to collect OTP.
+                // We do NOT stash the password in the session!
+                session_regenerate_id();
+                $_SESSION['login_otp_pending'] = [
+                    'username' => $username,
+                    'shouldChangePassword' => $authFactory->shouldChangePassword($authFactory->lastUsedAuth, $username, $password),
+                    'expires' => time() + 240,
+                ];
+                session_write_close();
+                $Login_OTP = true;
+                return false;
+            } else {
+                // User does not use OTP. Immediately authenticated.
+                $is_authenticated = true;
+                $shouldChangePassword = $authFactory->shouldChangePassword($authFactory->lastUsedAuth, $username, $password);
+            }
+        } else {
+            // Password invalid. Immediate failure.
+            auth_log("Web GUI authentication error for '{$username}' from {$_SERVER['REMOTE_ADDR']}");
+            $Login_Error = gettext('Wrong username or password.');
+            return false;
+        }
     } elseif (isset($_POST['login_otp'])) {
-        /* second login step, collect the credentials stashed while requesting the token (single shot) */
+        /* second login step, collect OTP and authenticate using stashed username */
         $pending = !empty($_SESSION['login_otp_pending']) ? $_SESSION['login_otp_pending'] : null;
         unset($_SESSION['login_otp_pending']);
         if (!empty($pending) && $pending['expires'] >= time()) {
             $username = $pending['username'];
-            $password = $pending['password'];
             $otp_code = isset($_POST['otp_code']) ? $_POST['otp_code'] : '';
+            if ($authFactory->authenticateStep2("WebGui", $username, $otp_code)) {
+                $is_authenticated = true;
+                $shouldChangePassword = !empty($pending['shouldChangePassword']);
+            } else {
+                auth_log("Web GUI authentication error for '{$username}' from {$_SERVER['REMOTE_ADDR']}");
+                $Login_Error = gettext('Wrong username or password.');
+                return false;
+            }
         } else {
             $Login_Error = gettext('Login session expired, please try again.');
+            return false;
         }
     } elseif (!empty($_SESSION['login_otp_pending'])) {
         /* any other request while a token was pending restarts the login sequence */
@@ -208,51 +226,44 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
     }
 
     /* Validate incoming login request */
-    if ($username !== null) {
-        $is_authenticated = $authFactory->authenticate("WebGui", $username, $password, $otp_code);
-
-        if ($is_authenticated) {
-            $authenticator = $authFactory->lastUsedAuth;
-            // Generate a new id to avoid session fixation, drop the previous session as it may
-            // still contain stashed credentials from the token collection step
-            session_regenerate_id(true);
-            $_SESSION['Username'] = $authenticator->getUserName($username);
-            $_SESSION['last_access'] = time();
-            $_SESSION['protocol'] = $config['system']['webgui']['protocol'];
-            $secret = $authFactory->composeLoginSecret($authenticator, $password, $otp_code);
-            if ($authenticator != null && $authenticator->shouldChangePassword($_SESSION['Username'], $secret)) {
-                $_SESSION['user_shouldChangePassword'] = true;
-            }
-            if (!isset($config['system']['webgui']['quietlogin'])) {
-                auth_log(sprintf("Successful login for user '%s' from: %s", $username, $_SERVER['REMOTE_ADDR']), LOG_NOTICE);
-            }
-            if (!empty($_GET['url'])) {
-                $uri = (new OPNsense\Core\SanitizeFilter())->sanitize($_GET['url'], 'local_uri');
-                if (!empty($uri)) {
-                    /**
-                     * Intentionally kept url_safe(), although vsprintf isn't a safety measure here.
-                     * ref https://github.com/opnsense/core/issues/1168
-                     */
-                    header(url_safe("Location: {$uri}"));
-                }
-            } elseif (!empty($_SESSION['user_shouldChangePassword'])) {
-                header("Location: /ui/user_portal");
-            } else {
-                if ($_SERVER['REQUEST_URI'] == "/") {
-                    // default landing page
-                    $acl = new OPNsense\Core\ACL();
-                    $url = $acl->getLandingPage($_SESSION['Username']);
-                    header(url_safe("Location: /{$url}"));
-                } else {
-                    header(url_safe("Location: {$_SERVER['REQUEST_URI']}"));
-                }
-            }
-            exit;
-        } else {
-            auth_log("Web GUI authentication error for '{$username}' from {$_SERVER['REMOTE_ADDR']}");
-            $Login_Error = gettext('Wrong username or password.');
+    if ($is_authenticated) {
+        $authenticator = $authFactory->lastUsedAuth;
+        // Generate a new id to avoid session fixation, drop the previous session as it may
+        // still contain stashed credentials from the token collection step
+        session_regenerate_id(true);
+        $_SESSION['Username'] = $authenticator->getUserName($username);
+        $_SESSION['last_access'] = time();
+        $_SESSION['protocol'] = $config['system']['webgui']['protocol'];
+        if ($shouldChangePassword) {
+            $_SESSION['user_shouldChangePassword'] = true;
         }
+        if (!isset($config['system']['webgui']['quietlogin'])) {
+            auth_log(sprintf("Successful login for user '%s' from: %s", $username, $_SERVER['REMOTE_ADDR']), LOG_NOTICE);
+        }
+        if (!empty($_GET['url'])) {
+            $uri = (new OPNsense\Core\SanitizeFilter())->sanitize($_GET['url'], 'local_uri');
+            if (!empty($uri)) {
+                /**
+                 * Intentionally kept url_safe(), although vsprintf isn't a safety measure here.
+                 * ref https://github.com/opnsense/core/issues/1168
+                 */
+                header(url_safe("Location: {$uri}"));
+            }
+        } elseif (!empty($_SESSION['user_shouldChangePassword'])) {
+            header("Location: /ui/user_portal");
+        } else {
+            if ($_SERVER['REQUEST_URI'] == "/") {
+                // default landing page
+                $acl = new OPNsense\Core\ACL();
+                $url = $acl->getLandingPage($_SESSION['Username']);
+                header(url_safe("Location: /{$url}"));
+            } else {
+                header(url_safe("Location: {$_SERVER['REQUEST_URI']}"));
+            }
+        }
+        exit;
     }
+
 
     /* Show login page if they aren't logged in */
     if (empty($_SESSION['Username'])) {

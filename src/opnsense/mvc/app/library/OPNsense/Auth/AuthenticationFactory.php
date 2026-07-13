@@ -216,6 +216,120 @@ class AuthenticationFactory
     }
 
     /**
+     * run password policy checks using the appropriate method (handling TOTP traits)
+     * @param IAuthConnector $authenticator authenticator to use
+     * @param string $username username
+     * @param string $password password
+     * @return boolean
+     */
+    public function shouldChangePassword($authenticator, $username, $password)
+    {
+        if ($authenticator !== null) {
+            if (isset(class_uses($authenticator)[TOTP::class])) {
+                return $authenticator->shouldChangePasswordStep1($username, $password);
+            }
+            return $authenticator->shouldChangePassword($username, $password);
+        }
+        return false;
+    }
+
+    /**
+     * Check if a specific user has OTP enabled for any of the configured authenticators
+     * @param string $service_name service name
+     * @param string $username username
+     * @return boolean
+     */
+    public function userUsesOTP($service_name, $username)
+    {
+        $service = $this->getService($service_name);
+        if ($service !== null) {
+            $service->setUserName($username);
+            foreach ($service->supportedAuthenticators() as $authname) {
+                $authenticator = $this->get($authname);
+                if ($authenticator !== null && isset(class_uses($authenticator)[TOTP::class])) {
+                    if ($authenticator->hasOTP($service->getUserName())) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Authenticate user's first factor (password) only
+     * @param string $service_name service name
+     * @param string $username username
+     * @param string $password password
+     * @return boolean
+     */
+    public function authenticateStep1($service_name, $username, $password)
+    {
+        openlog("audit", LOG_ODELAY, LOG_AUTH);
+        $service = $this->getService($service_name);
+        if ($service !== null) {
+            $service->setUserName($username);
+            foreach ($service->supportedAuthenticators() as $authname) {
+                $authenticator = $this->get($authname);
+                if ($authenticator !== null) {
+                    if (isset(class_uses($authenticator)[TOTP::class])) {
+                        // TOTP authenticators: verify password via authenticatePassword
+                        if ($authenticator->authenticatePassword($service->getUserName(), $password)) {
+                            $this->lastUsedAuth = $authenticator;
+                            return true;
+                        }
+                    } else {
+                        // Normal authenticators: verify password normally
+                        if ($authenticator->authenticate($service->getUserName(), $password)) {
+                            $this->lastUsedAuth = $authenticator;
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Authenticate user's second factor (OTP) only
+     * @param string $service_name service name
+     * @param string $username username
+     * @param string $otp_code one-time password code
+     * @return boolean
+     */
+    public function authenticateStep2($service_name, $username, $otp_code)
+    {
+        openlog("audit", LOG_ODELAY, LOG_AUTH);
+        $service = $this->getService($service_name);
+        if ($service !== null) {
+            $service->setUserName($username);
+            foreach ($service->supportedAuthenticators() as $authname) {
+                $authenticator = $this->get($authname);
+                if ($authenticator !== null && isset(class_uses($authenticator)[TOTP::class])) {
+                    // We check if this authenticator can verify the OTP for this user
+                    if ($authenticator->hasOTP($service->getUserName())) {
+                        if ($authenticator->authenticateOTP($service->getUserName(), $otp_code)) {
+                            if ($service->checkConstraints()) {
+                                syslog(LOG_NOTICE, sprintf(
+                                    "user %s authenticated successfully for %s [using %s OTP]",
+                                    $username,
+                                    $service_name,
+                                    get_class($authenticator)
+                                ));
+                                $this->lastUsedAuth = $authenticator;
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+
+    /**
      * Authenticate user for requested service
      * @param $service_name string service name to use, defined in Services directory
      * @param $username string username

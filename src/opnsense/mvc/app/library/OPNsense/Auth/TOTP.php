@@ -143,6 +143,57 @@ trait TOTP
     }
 
     /**
+     * check if the user has a one-time password seed configured
+     * @param string $username username to check
+     * @return bool
+     */
+    public function hasOTP($username)
+    {
+        $userObject = $this->getUser($username);
+        return $userObject != null && !empty($userObject->otp_seed);
+    }
+
+    /**
+     * authenticate user password only (first factor verification)
+     * @param string $username username to authenticate
+     * @param string $password user password
+     * @return bool
+     */
+    public function authenticatePassword($username, $password)
+    {
+        return parent::_authenticate($username, $password);
+    }
+
+    /**
+     * authenticate user one-time password only (second factor verification)
+     * @param string $username username to authenticate
+     * @param string $otp_code one-time password code
+     * @return bool
+     */
+    public function authenticateOTP($username, $otp_code)
+    {
+        $userObject = $this->getUser($username);
+        if ($userObject != null && !empty($userObject->otp_seed)) {
+            $otp_seed = \Base32\Base32::decode($userObject->otp_seed);
+            if ($this->authTOTP($otp_seed, $otp_code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * run password policy checks on bare password (for Step 1 check)
+     * @param string $username username to check
+     * @param string $password bare password
+     * @return bool
+     */
+    public function shouldChangePasswordStep1($username, $password = null)
+    {
+        return parent::shouldChangePassword($username, $password);
+    }
+
+    /**
      * authenticate user against otp key stored in local database
      * @param string $username username to authenticate
      * @param string $password user password
