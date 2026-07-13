@@ -220,6 +220,13 @@ function webgui_generate_config($port, $cert, $key, $ca, $listeners, $confdir)
     @mkdir('/tmp/lighttpdcompress');
     shell_safe('rm -rf /tmp/lighttpdcompress/*');
 
+    /* consumed token state for the TOTP trait (OTP_STATE_DIR): 0700 owned by the web
+     * user so no other local user can pre-create or symlink state files inside */
+    if (!is_dir('/var/run/otp_state')) {
+        mkdir('/var/run/otp_state', 0700);
+        chown('/var/run/otp_state', 'wwwonly');
+    }
+
     $http_rewrite_rules = <<<EOD
 # Phalcon ui and api routing
 alias.url += ( "/ui/" => "/usr/local/opnsense/www/" )

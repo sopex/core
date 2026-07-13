@@ -40,7 +40,7 @@ class AuthenticationFactoryTest extends \PHPUnit\Framework\TestCase
     {
         @unlink(self::$configDir . '/config.xml');
         /* consumed token time step state persisted by the TOTP trait */
-        foreach (glob(sys_get_temp_dir() . '/otp_consumed_*') as $filename) {
+        foreach (glob(OTP_STATE_DIR . '/otp_consumed_*') as $filename) {
             @unlink($filename);
         }
     }

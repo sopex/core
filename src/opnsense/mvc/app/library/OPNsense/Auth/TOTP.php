@@ -31,6 +31,16 @@ namespace OPNsense\Auth;
 
 require_once 'base32/Base32.php';
 
+/*
+ * Dedicated directory for consumed token state. Created at webgui bootstrap
+ * (plugins.inc.d/webgui.inc) as 0700 owned by the web user, so no other local
+ * user can pre-create or symlink state files as they could in a world-writable
+ * temp directory. Tests point this at a writable location via their bootstrap.
+ */
+if (!defined('OTP_STATE_DIR')) {
+    define('OTP_STATE_DIR', '/var/run/otp_state');
+}
+
 /**
  * RFC 6238 TOTP: Time-Based One-Time Password Authenticator
  * @package OPNsense\Auth
@@ -156,7 +166,7 @@ trait TOTP
     {
         $filename = sprintf(
             '%s/otp_consumed_%s',
-            sys_get_temp_dir(),
+            OTP_STATE_DIR,
             hash('sha256', $username . '|' . $base32seed)
         );
         $handle = fopen($filename, 'c+');
