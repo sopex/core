@@ -10,11 +10,11 @@
     </authserver>
     <user>
       <name>user_no_otp</name>
-      <password>$2y$10$tZ264s7wT9TefQWl27yVKeP60X/y7D/Qe61uD0K/uV5X23qR20b92</password>
+      <password>$2y$10$GxYfGxQ.h3J6BKJacHpgJ.s9XxQ9Ot3FjTEJTGyGAdQ7Um.UgCpeq</password>
     </user>
     <user>
       <name>user_with_otp</name>
-      <password>$2y$10$tZ264s7wT9TefQWl27yVKeP60X/y7D/Qe61uD0K/uV5X23qR20b92</password>
+      <password>$2y$10$GxYfGxQ.h3J6BKJacHpgJ.s9XxQ9Ot3FjTEJTGyGAdQ7Um.UgCpeq</password>
       <otp_seed>ORSXG5BRGIZTINJWG4======</otp_seed>
     </user>
   </system>

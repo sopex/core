@@ -33,6 +33,9 @@
 
 require_once("auth.inc");
 
+/* seconds a user has to complete the second (one time password) login step */
+define('WEBGUI_OTP_STEP_TIMEOUT', 240);
+
 $acl = new OPNsense\Core\ACL();
 $priv_list = $acl->getPrivList();
 
@@ -178,17 +181,23 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
         $password = $_POST['passwordfld'];
         if ($authFactory->authenticateStep1("WebGui", $username, $password)) {
             // First factor (password) is valid!
-            if ($authFactory->userUsesOTP("WebGui", $username)) {
+            $otp_authname = $authFactory->findOTPAuthenticator("WebGui", $username);
+            if ($otp_authname !== null) {
                 // User has OTP configured. Defer login to collect OTP.
-                // We do NOT stash the password in the session!
+                // We do NOT stash the password in the session! The nonce is echoed back by the
+                // token form so only the party which passed step 1 can offer a token, the
+                // authenticator name binds the token check to the server found in this step.
                 session_regenerate_id();
+                $otp_nonce = bin2hex(random_bytes(16));
                 $_SESSION['login_otp_pending'] = [
                     'username' => $username,
+                    'authname' => $otp_authname,
+                    'nonce' => $otp_nonce,
                     'shouldChangePassword' => $authFactory->shouldChangePassword($authFactory->lastUsedAuth, $username, $password),
-                    'expires' => time() + 240,
+                    'expires' => time() + WEBGUI_OTP_STEP_TIMEOUT,
                 ];
                 session_write_close();
-                $Login_OTP = true;
+                $Login_OTP = $otp_nonce;
                 return false;
             } else {
                 // User does not use OTP. Immediately authenticated.
@@ -205,10 +214,14 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
         /* second login step, collect OTP and authenticate using stashed username */
         $pending = !empty($_SESSION['login_otp_pending']) ? $_SESSION['login_otp_pending'] : null;
         unset($_SESSION['login_otp_pending']);
-        if (!empty($pending) && $pending['expires'] >= time()) {
+        $otp_nonce = isset($_POST['otp_nonce']) ? (string)$_POST['otp_nonce'] : '';
+        if (
+            !empty($pending) && !empty($pending['authname']) && $pending['expires'] >= time() &&
+            !empty($pending['nonce']) && hash_equals($pending['nonce'], $otp_nonce)
+        ) {
             $username = $pending['username'];
             $otp_code = isset($_POST['otp_code']) ? $_POST['otp_code'] : '';
-            if ($authFactory->authenticateStep2("WebGui", $username, $otp_code)) {
+            if ($authFactory->authenticateStep2("WebGui", $username, $otp_code, $pending['authname'])) {
                 $is_authenticated = true;
                 $shouldChangePassword = !empty($pending['shouldChangePassword']);
             } else {
@@ -461,6 +474,7 @@ function display_login_form($Login_Error, $Login_OTP = false)
           <span class="help-block"><?=gettext("Enter the one-time password from your authenticator."); ?></span>
         </div>
 
+        <input type="hidden" name="otp_nonce" value="<?=html_safe($Login_OTP); ?>" />
         <button type="submit" name="login_otp" value="1" class="btn btn-primary pull-right"><?=gettext("Continue"); ?></button>
 <?php    else: ?>
         <div class="form-group">

@@ -93,18 +93,95 @@ class AuthenticationFactoryTest extends \PHPUnit\Framework\TestCase
 
         // user_with_otp: authenticateStep1 first
         $this->assertTrue($authFactory->authenticateStep1("WebGui", "user_with_otp", "password123"));
-        $authenticator = $authFactory->lastUsedAuth;
-        $this->assertNotNull($authenticator);
+        $this->assertNotNull($authFactory->lastUsedAuth);
 
-        // Get correct OTP code using testToken method on authenticator
-        $correct_otp = $authenticator->testToken('ORSXG5BRGIZTINJWG4======');
+        // the authenticator selected to verify the token in step 2
+        $otp_authname = $authFactory->findOTPAuthenticator("WebGui", "user_with_otp");
+        $this->assertEquals("Local TOTP", $otp_authname);
+
+        // Get correct OTP code using testToken method on the TOTP authenticator
+        $correct_otp = $authFactory->get($otp_authname)->testToken('ORSXG5BRGIZTINJWG4======');
         $this->assertNotEmpty($correct_otp);
 
-        // authenticateStep2: correct OTP
-        $this->assertTrue($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp));
+        // authenticateStep2: correct OTP, bound to the step 1 authenticator
+        $this->assertTrue($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, $otp_authname));
+
+        // authenticateStep2: correct OTP, but bound to an authenticator unable to verify tokens
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, "Local Database"));
 
         // authenticateStep2: incorrect OTP
-        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", "000000"));
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", "000000", $otp_authname));
+
+        // authenticateStep2: user without a token seed can never pass step 2
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_no_otp", $correct_otp));
+    }
+
+    public function testStep1RefusesUserWithoutSeedOnTOTPOnly()
+    {
+        // when only a TOTP authenticator serves the WebGui, a user without a token
+        // seed is refused instead of downgraded to password-only authentication
+        Config::getInstance()->object()->system->webgui->authmode = 'Local TOTP';
+        $authFactory = new AuthenticationFactory();
+
+        $this->assertFalse($authFactory->authenticateStep1("WebGui", "user_no_otp", "password123"));
+        $this->assertTrue($authFactory->authenticateStep1("WebGui", "user_with_otp", "password123"));
+    }
+
+    public function testFailedAttemptPenalty()
+    {
+        $authFactory = new AuthenticationFactory();
+        $authenticator = $authFactory->get("Local TOTP");
+
+        // failed step 1 (password) and step 2 (token) attempts spend at least the
+        // constant ~2 second sequence time Base::authenticate() enforces, allow a
+        // small margin for platform timer resolution
+        foreach (['authenticatePassword' => 'wrongpassword', 'authenticateOTP' => '000000'] as $method => $secret) {
+            $tstart = microtime(true);
+            $this->assertFalse($authenticator->$method("user_with_otp", $secret));
+            $this->assertGreaterThanOrEqual(1.9, microtime(true) - $tstart);
+        }
+    }
+
+    public function testComposeLoginSecret()
+    {
+        $authFactory = new AuthenticationFactory();
+
+        // default order: token before password
+        $authenticator = $authFactory->get("Local TOTP");
+        $this->assertEquals("123456password", $authFactory->composeLoginSecret($authenticator, "password", "123456"));
+
+        // reverse token order: password before token
+        $authenticator->setProperties(['name' => 'Local TOTP', 'passwordFirst' => '1']);
+        $this->assertEquals("password123456", $authFactory->composeLoginSecret($authenticator, "password", "123456"));
+
+        // non TOTP authenticators receive the bare password
+        $authenticator = $authFactory->get("Local Database");
+        $this->assertEquals("password", $authFactory->composeLoginSecret($authenticator, "password", "123456"));
+    }
+
+    public function testAuthenticateComposedSecret()
+    {
+        // single request flow, token collected separately and composed into the secret
+        Config::getInstance()->object()->system->webgui->authmode = 'Local TOTP';
+        $authFactory = new AuthenticationFactory();
+        $correct_otp = $authFactory->get("Local TOTP")->testToken('ORSXG5BRGIZTINJWG4======');
+
+        $this->assertTrue($authFactory->authenticate("WebGui", "user_with_otp", "password123", $correct_otp));
+        $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", "password123", "000000"));
+    }
+
+    public function testShouldChangePasswordCompliance()
+    {
+        // fixture users carry bcrypt hashes, compliance requires SHA-512 crypt
+        $webgui = Config::getInstance()->object()->system->webgui;
+        $webgui->enable_password_policy_constraints = '1';
+        $webgui->password_policy_compliance = '1';
+        $authFactory = new AuthenticationFactory();
+
+        foreach (["Local Database", "Local TOTP"] as $authname) {
+            $authenticator = $authFactory->get($authname);
+            $this->assertTrue($authFactory->shouldChangePassword($authenticator, "user_with_otp", "password123"));
+        }
     }
 
     public static function tearDownAfterClass(): void
