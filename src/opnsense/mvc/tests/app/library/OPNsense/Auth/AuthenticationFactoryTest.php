@@ -116,11 +116,38 @@ class AuthenticationFactoryTest extends \PHPUnit\Framework\TestCase
         // authenticateStep2: user without a token seed can never pass step 2
         $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_no_otp", $correct_otp));
 
-        // authenticateStep2: correct OTP, bound to the authenticator which accepted the password
-        $this->assertTrue($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, $otp_authname));
+        // authenticateStep2: correct OTP, bound to the authenticator which accepted the
+        // password and pinned to the account holding the seed
+        $subject_id = $authFactory->get($otp_authname)->otpSubjectId("user_with_otp");
+        $this->assertEquals("2002", $subject_id);
+        $this->assertTrue($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, $otp_authname, $subject_id));
 
         // a validated token may not validate again within its time window (RFC 6238)
-        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, $otp_authname));
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, $otp_authname, $subject_id));
+    }
+
+    public function testStep2SubjectPinning()
+    {
+        Config::getInstance()->object()->system->webgui->authmode = 'Local TOTP';
+        $authFactory = new AuthenticationFactory();
+        $correct_otp = $authFactory->get("Local TOTP")->testToken('ORSXG5BRGIZTINJWG4======');
+
+        // a stale subject id is refused
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, "Local TOTP", "9999"));
+
+        // simulate a rename race: the account validated in step 1 is renamed away and a
+        // different account, holding its own seed, now answers to the stashed username
+        foreach (Config::getInstance()->object()->system->user as $user) {
+            if ((string)$user->name == 'user_with_otp') {
+                $user->name = 'user_renamed';
+            } elseif ((string)$user->name == 'user_no_otp') {
+                $user->name = 'user_with_otp';
+                $user->otp_seed = 'ORSXG5BRGIZTINJWG4======';
+            }
+        }
+
+        // the username now resolves to uid 2001, the pinned subject (2002) refuses the token
+        $this->assertFalse($authFactory->authenticateStep2("WebGui", "user_with_otp", $correct_otp, "Local TOTP", "2002"));
     }
 
     public function testOTPRequirementFollowsStep1Winner()

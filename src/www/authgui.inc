@@ -198,6 +198,7 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
                 $_SESSION['login_otp_pending'] = [
                     'username' => $authFactory->lastUsedAuth->getUserName($username),
                     'authname' => $otp_authname,
+                    'uid' => $authFactory->lastUsedAuth->otpSubjectId($username),
                     'nonce' => $otp_nonce,
                     'shouldChangePassword' => $authFactory->shouldChangePassword($authFactory->lastUsedAuth, $username, $password),
                     'expires' => time() + WEBGUI_OTP_STEP_TIMEOUT,
@@ -227,7 +228,7 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
         ) {
             $username = $pending['username'];
             $otp_code = isset($_POST['otp_code']) && is_string($_POST['otp_code']) ? $_POST['otp_code'] : '';
-            if ($authFactory->authenticateStep2("WebGui", $username, $otp_code, $pending['authname'])) {
+            if ($authFactory->authenticateStep2("WebGui", $username, $otp_code, $pending['authname'], $pending['uid'] ?? null)) {
                 $is_authenticated = true;
                 $shouldChangePassword = !empty($pending['shouldChangePassword']);
             } else {

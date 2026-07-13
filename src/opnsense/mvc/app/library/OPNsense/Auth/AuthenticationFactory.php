@@ -351,14 +351,17 @@ class AuthenticationFactory
     /**
      * Authenticate user's second factor (OTP) only. The caller should pass the authenticator
      * name collected via pendingOTPAuthenticator() when step 1 was validated, binding both
-     * factors to the single authenticator which accepted the password.
+     * factors to the single authenticator which accepted the password, and the subject id
+     * (otpSubjectId()) collected at the same moment, pinning the token check to the exact
+     * account the password was validated for even when usernames are renamed in between.
      * @param string $service_name service name
      * @param string $username username
      * @param string $otp_code one-time password code
      * @param string|null $authname when offered, only this authenticator may verify the token
+     * @param string|null $subject_id when offered, the seed account must still carry this uid
      * @return boolean
      */
-    public function authenticateStep2($service_name, $username, $otp_code, $authname = null)
+    public function authenticateStep2($service_name, $username, $otp_code, $authname = null, $subject_id = null)
     {
         openlog("audit", LOG_ODELAY, LOG_AUTH);
         $service = $this->getService($service_name);
@@ -370,6 +373,16 @@ class AuthenticationFactory
                 }
                 $authenticator = $this->get($thisname);
                 if ($authenticator !== null && $this->usesTOTP($authenticator)) {
+                    if ($subject_id !== null && $authenticator->otpSubjectId($service->getUserName()) !== $subject_id) {
+                        // the account behind this username is no longer the account
+                        // validated in step 1, restart the sequence
+                        syslog(LOG_WARNING, sprintf(
+                            "user %s token subject changed between login steps for %s",
+                            $username,
+                            $service_name
+                        ));
+                        continue;
+                    }
                     // We check if this authenticator can verify the OTP for this user
                     if ($authenticator->hasOTP($service->getUserName())) {
                         if ($authenticator->authenticateOTP($service->getUserName(), $otp_code)) {

@@ -10,10 +10,12 @@
     </authserver>
     <user>
       <name>user_no_otp</name>
+      <uid>2001</uid>
       <password>$2y$10$GxYfGxQ.h3J6BKJacHpgJ.s9XxQ9Ot3FjTEJTGyGAdQ7Um.UgCpeq</password>
     </user>
     <user>
       <name>user_with_otp</name>
+      <uid>2002</uid>
       <password>$2y$10$GxYfGxQ.h3J6BKJacHpgJ.s9XxQ9Ot3FjTEJTGyGAdQ7Um.UgCpeq</password>
       <otp_seed>ORSXG5BRGIZTINJWG4======</otp_seed>
     </user>

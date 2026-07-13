@@ -197,6 +197,19 @@ trait TOTP
     }
 
     /**
+     * immutable id (uid) of the local account holding the token seed, used to pin a
+     * deferred token step to the exact account validated with the password. Usernames
+     * may be renamed or reassigned between both steps, uids may not.
+     * @param string $username username to resolve
+     * @return string|null account uid, null when the user does not exist
+     */
+    public function otpSubjectId($username)
+    {
+        $userObject = $this->getUser($username);
+        return $userObject != null ? (string)$userObject->uid : null;
+    }
+
+    /**
      * split a composed secret into its password and token code parts according to the
      * configured token order, inverse of composeLoginSecret()
      * @param string $secret composed secret, its length must exceed the token length
