@@ -203,22 +203,6 @@ class AuthenticationFactory
     }
 
     /**
-     * combine password and one time password into the composed secret the authenticator
-     * expects, connectors which do not consume tokens receive the bare password.
-     * @param IAuthConnector $authenticator authenticator to inspect
-     * @param $password string user password
-     * @param $otp_code string|null one time password when offered separately
-     * @return string secret to authenticate with
-     */
-    public function composeLoginSecret($authenticator, $password, $otp_code = null)
-    {
-        if (!empty($otp_code) && $this->usesTOTP($authenticator)) {
-            return $authenticator->composeLoginSecret($password, $otp_code);
-        }
-        return $password;
-    }
-
-    /**
      * run password policy checks using the appropriate method (handling TOTP traits)
      * @param IAuthConnector $authenticator authenticator to use
      * @param string $username username
@@ -254,40 +238,6 @@ class AuthenticationFactory
             return $this->lastUsedAuthName;
         }
         return null;
-    }
-
-    /**
-     * Find the first configured authenticator able to verify a one time password for this user
-     * @param string $service_name service name
-     * @param string $username username
-     * @return string|null authenticator name or null when no authenticator holds a token seed
-     */
-    public function findOTPAuthenticator($service_name, $username)
-    {
-        $service = $this->getService($service_name);
-        if ($service !== null) {
-            $service->setUserName($username);
-            foreach ($service->supportedAuthenticators() as $authname) {
-                $authenticator = $this->get($authname);
-                if ($authenticator !== null && $this->usesTOTP($authenticator)) {
-                    if ($authenticator->hasOTP($service->getUserName())) {
-                        return $authname;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Check if a specific user has OTP enabled for any of the configured authenticators
-     * @param string $service_name service name
-     * @param string $username username
-     * @return boolean
-     */
-    public function userUsesOTP($service_name, $username)
-    {
-        return $this->findOTPAuthenticator($service_name, $username) !== null;
     }
 
     /**
@@ -411,11 +361,9 @@ class AuthenticationFactory
      * @param $service_name string service name to use, defined in Services directory
      * @param $username string username
      * @param $password string password
-     * @param $otp_code string|null one time password when collected separately, combined
-     *                              with the password according to the authenticator its settings
      * @return boolean
      */
-    public function authenticate($service_name, $username, $password, $otp_code = null)
+    public function authenticate($service_name, $username, $password)
     {
         openlog("audit", LOG_ODELAY, LOG_AUTH);
         $service = $this->getService($service_name);
@@ -426,8 +374,7 @@ class AuthenticationFactory
                 if ($authenticator !== null) {
                     $this->lastUsedAuth = $authenticator;
                     $this->lastUsedAuthName = $authname;
-                    $secret = $this->composeLoginSecret($authenticator, $password, $otp_code);
-                    if ($authenticator->authenticate($service->getUserName(), $secret)) {
+                    if ($authenticator->authenticate($service->getUserName(), $password)) {
                         if ($service->checkConstraints()) {
                             syslog(LOG_NOTICE, sprintf(
                                 "user %s authenticated successfully for %s [using %s + %s]",

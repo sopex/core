@@ -80,17 +80,6 @@ class AuthenticationFactoryTest extends \PHPUnit\Framework\TestCase
         $this->assertFalse($authFactory->authenticateStep1("WebGui", "user_with_otp", "wrongpassword"));
     }
 
-    public function testUserUsesOTP()
-    {
-        $authFactory = new AuthenticationFactory();
-
-        // user_no_otp: does not use OTP
-        $this->assertFalse($authFactory->userUsesOTP("WebGui", "user_no_otp"));
-
-        // user_with_otp: uses OTP
-        $this->assertTrue($authFactory->userUsesOTP("WebGui", "user_with_otp"));
-    }
-
     public function testAuthenticateStep2()
     {
         $authFactory = new AuthenticationFactory();
@@ -219,37 +208,20 @@ class AuthenticationFactoryTest extends \PHPUnit\Framework\TestCase
         $this->assertGreaterThanOrEqual(1.9, microtime(true) - $tstart);
     }
 
-    public function testComposeLoginSecret()
-    {
-        $authFactory = new AuthenticationFactory();
-
-        // default order: token before password
-        $authenticator = $authFactory->get("Local TOTP");
-        $this->assertEquals("123456password", $authFactory->composeLoginSecret($authenticator, "password", "123456"));
-
-        // reverse token order: password before token
-        $authenticator->setProperties(['name' => 'Local TOTP', 'passwordFirst' => '1']);
-        $this->assertEquals("password123456", $authFactory->composeLoginSecret($authenticator, "password", "123456"));
-
-        // non TOTP authenticators receive the bare password
-        $authenticator = $authFactory->get("Local Database");
-        $this->assertEquals("password", $authFactory->composeLoginSecret($authenticator, "password", "123456"));
-    }
-
     public function testAuthenticateComposedSecret()
     {
-        // single request flow, token collected separately and composed into the secret
+        // single request flow, token composed into the secret (default order: token first)
         Config::getInstance()->object()->system->webgui->authmode = 'Local TOTP';
         $authFactory = new AuthenticationFactory();
         $correct_otp = $authFactory->get("Local TOTP")->testToken('ORSXG5BRGIZTINJWG4======');
 
         // a failed password attempt must not consume a valid token, the user may retry with it
-        $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", "wrongpassword", $correct_otp));
-        $this->assertTrue($authFactory->authenticate("WebGui", "user_with_otp", "password123", $correct_otp));
+        $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", $correct_otp . "wrongpassword"));
+        $this->assertTrue($authFactory->authenticate("WebGui", "user_with_otp", $correct_otp . "password123"));
 
         // a validated token is consumed on this path too and may not be replayed
-        $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", "password123", $correct_otp));
-        $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", "password123", "000000"));
+        $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", $correct_otp . "password123"));
+        $this->assertFalse($authFactory->authenticate("WebGui", "user_with_otp", "000000password123"));
     }
 
     public function testShouldChangePasswordCompliance()

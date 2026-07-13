@@ -211,7 +211,7 @@ trait TOTP
 
     /**
      * split a composed secret into its password and token code parts according to the
-     * configured token order, inverse of composeLoginSecret()
+     * configured token order (token before the password unless passwordFirst is set)
      * @param string $secret composed secret, its length must exceed the token length
      * @return array password and token code
      */
@@ -221,18 +221,6 @@ trait TOTP
         $pwStart = $this->passwordFirst ? 0 : $this->otpLength;
         $otpStart = $this->passwordFirst ? $pwLength : 0;
         return [substr($secret, $pwStart, $pwLength), substr($secret, $otpStart, $this->otpLength)];
-    }
-
-    /**
-     * combine password and token code into the composed secret _authenticate() expects,
-     * inverse of splitLoginSecret()
-     * @param string $password user password
-     * @param string $otp_code token code
-     * @return string composed secret
-     */
-    public function composeLoginSecret($password, $otp_code)
-    {
-        return $this->passwordFirst ? $password . $otp_code : $otp_code . $password;
     }
 
     /**

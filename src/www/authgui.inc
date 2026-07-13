@@ -171,8 +171,6 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
 
     $authFactory = new \OPNsense\Auth\AuthenticationFactory();
     $username = null;
-    $password = null;
-    $otp_code = null;
     $is_authenticated = false;
     $shouldChangePassword = false;
 
