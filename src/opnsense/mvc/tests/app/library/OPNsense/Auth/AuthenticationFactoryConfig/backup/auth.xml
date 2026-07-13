@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<opnsense>
+  <system>
+    <webgui>
+      <authmode>Local Database,Local TOTP</authmode>
+    </webgui>
+    <authserver>
+      <name>Local TOTP</name>
+      <type>totp</type>
+    </authserver>
+    <user>
+      <name>user_no_otp</name>
+      <password>$2y$10$tZ264s7wT9TefQWl27yVKeP60X/y7D/Qe61uD0K/uV5X23qR20b92</password>
+    </user>
+    <user>
+      <name>user_with_otp</name>
+      <password>$2y$10$tZ264s7wT9TefQWl27yVKeP60X/y7D/Qe61uD0K/uV5X23qR20b92</password>
+      <otp_seed>ORSXG5BRGIZTINJWG4======</otp_seed>
+    </user>
+  </system>
+</opnsense>

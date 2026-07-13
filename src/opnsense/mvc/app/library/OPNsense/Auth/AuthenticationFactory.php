@@ -178,28 +178,6 @@ class AuthenticationFactory
     }
 
     /**
-     * check if any of the authenticators configured for the requested service is able to
-     * consume a one time password, in which case the caller may offer a separate token input.
-     * this is a configuration (not user) property, so it is safe to act on before any
-     * credentials have been validated.
-     * @param $service_name string service name to use, defined in Services directory
-     * @return boolean
-     */
-    public function usesOTP($service_name)
-    {
-        $service = $this->getService($service_name);
-        if ($service !== null) {
-            foreach ($service->supportedAuthenticators() as $authname) {
-                $authenticator = $this->get($authname);
-                if ($authenticator !== null && isset(class_uses($authenticator)[TOTP::class])) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
      * combine password and one time password into the composed secret the authenticator
      * expects, connectors which do not consume tokens receive the bare password.
      * @param IAuthConnector $authenticator authenticator to inspect
@@ -327,7 +305,6 @@ class AuthenticationFactory
         }
         return false;
     }
-
 
     /**
      * Authenticate user for requested service

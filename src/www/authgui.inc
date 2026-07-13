@@ -264,7 +264,6 @@ function session_auth(&$Login_Error = null, &$Login_OTP = false)
         exit;
     }
 
-
     /* Show login page if they aren't logged in */
     if (empty($_SESSION['Username'])) {
         return false;
@@ -457,9 +456,9 @@ function display_login_form($Login_Error, $Login_OTP = false)
 
 <?php    if ($Login_OTP): ?>
         <div class="form-group">
-          <label for="otp_code"><?=gettext("One-time password:"); ?></label>
+          <label for="otp_code"><?=gettext("One time password:"); ?></label>
           <input id="otp_code" type="text" name="otp_code" class="form-control" tabindex="1" autofocus="autofocus" autocomplete="one-time-code" inputmode="numeric" autocapitalize="off" autocorrect="off" />
-          <span class="help-block"><?=gettext("Enter the one-time password from your authenticator, or leave empty if not applicable."); ?></span>
+          <span class="help-block"><?=gettext("Enter the one-time password from your authenticator."); ?></span>
         </div>
 
         <button type="submit" name="login_otp" value="1" class="btn btn-primary pull-right"><?=gettext("Continue"); ?></button>
