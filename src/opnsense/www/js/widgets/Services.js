@@ -60,9 +60,8 @@ export default class Services extends BaseTableWidget {
             return;
         }
 
-        $('[data-toggle="tooltip"]').tooltip('hide');
-
         const $container = $('#services-container');
+        $container.find('[data-toggle="tooltip"]').tooltip('hide');
         $container.empty();
 
         data.rows.sort((a, b) => a.description.localeCompare(b.description));
@@ -83,7 +82,7 @@ export default class Services extends BaseTableWidget {
 
             let $tile = $(`
                 <div class="flextable-row" style="padding: 4px 10px; display: flex; align-items: center; min-width: 0;">
-                    <i class="fa fa-circle text-muted text-${statusColor} srv-status-icon"
+                    <i class="fa fa-circle text-${statusColor} srv-status-icon"
                        style="font-size: 11px; flex-shrink: 0;"
                        title="${statusTitle}" data-toggle="tooltip"></i>
                     <div style="
@@ -105,7 +104,7 @@ export default class Services extends BaseTableWidget {
             $container.append($tile);
         }
 
-        $('[data-toggle="tooltip"]').tooltip({container: 'body'});
+        $container.find('[data-toggle="tooltip"]').tooltip({container: 'body'});
 
         $('.srv_status_act2').on('click', async (event) => {
             this.locked = true;
