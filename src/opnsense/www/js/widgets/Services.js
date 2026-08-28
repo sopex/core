@@ -25,8 +25,8 @@
  */
 
 export default class Services extends BaseTableWidget {
-    constructor() {
-        super();
+    constructor(config) {
+        super(config);
         this.locked = false;
     }
 
