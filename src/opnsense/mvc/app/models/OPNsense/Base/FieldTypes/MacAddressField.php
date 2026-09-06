@@ -36,12 +36,59 @@ use OPNsense\Base\Validators\CallbackValidator;
 class MacAddressField extends BaseSetField
 {
     /**
-     * trim MAC addresses
+     * Canonicalize MAC address to lowercase, colon-separated notation
+     * @param string $address
+     * @return string
+     */
+    protected function canonicalize(string $address): string
+    {
+        if (filter_var($address, FILTER_VALIDATE_MAC)) {
+            $hex = strtolower(str_replace([':', '-', '.'], '', $address));
+            return implode(':', str_split($hex, 2));
+        }
+        return $address;
+    }
+
+    /**
+     * trim, canonicalize and deduplicate MAC addresses
      * @param string $value
      */
     public function setValue($value)
     {
-        parent::setValue(trim($value));
+        $result = [];
+        foreach ($this->iterateInput(trim((string)$value)) as $address) {
+            $address = trim($address);
+            if ($address === '') {
+                continue;
+            }
+            $address = $this->canonicalize($address);
+            if (!in_array($address, $result, true)) {
+                $result[] = $address;
+            }
+        }
+        parent::setValue(implode($this->internalFieldSeparator, $result));
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setAsList($value)
+    {
+        parent::setAsList($value);
+        if (!empty($this->internalValue)) {
+            $this->setValue($this->internalValue);
+        }
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setFieldSeparator($value)
+    {
+        parent::setFieldSeparator($value);
+        if (!empty($this->internalValue)) {
+            $this->setValue($this->internalValue);
+        }
     }
 
    /**
