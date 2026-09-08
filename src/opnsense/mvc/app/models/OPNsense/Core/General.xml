@@ -1,0 +1,71 @@
+<model>
+    <mount>//system/general</mount>
+    <version>1.0.0</version>
+    <migration_prefix>M</migration_prefix>
+    <description>System General Settings</description>
+    <items>
+        <hostname type="HostnameField">
+            <Required>Y</Required>
+            <IpAllowed>N</IpAllowed>
+            <IsDNSName>N</IsDNSName>
+            <Default>OPNsense</Default>
+            <ValidationMessage>The hostname may only contain the characters a-z, 0-9 and '-'.</ValidationMessage>
+        </hostname>
+        <domain type="HostnameField">
+            <Required>Y</Required>
+            <IpAllowed>N</IpAllowed>
+            <IsDNSName>N</IsDNSName>
+            <Default>localdomain</Default>
+            <ValidationMessage>The domain may only contain the characters a-z, 0-9, '-' and '.'.</ValidationMessage>
+        </domain>
+        <timezone type="OptionField">
+            <Required>Y</Required>
+            <Default>Etc/UTC</Default>
+            <ValidationMessage>The selected time zone is invalid.</ValidationMessage>
+        </timezone>
+        <language type="OptionField">
+            <Default>en_US</Default>
+        </language>
+        <theme type="OptionField">
+            <Default>opnsense</Default>
+        </theme>
+        <prefer_ipv4 type="BooleanField">
+            <Default>0</Default>
+        </prefer_ipv4>
+        <gw_switch_default type="BooleanField">
+            <Default>0</Default>
+        </gw_switch_default>
+        <dnslocalhost type="BooleanField">
+            <Default>0</Default>
+        </dnslocalhost>
+        <dnsallowoverride type="BooleanField">
+            <Default>1</Default>
+        </dnsallowoverride>
+        <dnsallowoverride_exclude type="InterfaceField">
+            <Multiple>Y</Multiple>
+            <Required>N</Required>
+            <filters>
+                <enable>/^(?!0).*$/</enable>
+            </filters>
+        </dnsallowoverride_exclude>
+        <dnssearchdomain type="CSVListField">
+            <Required>N</Required>
+        </dnssearchdomain>
+        <picture type="TextField">
+            <Required>N</Required>
+        </picture>
+        <picture_filename type="TextField">
+            <Required>N</Required>
+        </picture_filename>
+        <dnsservers type="ArrayField">
+            <server type="NetworkField">
+                <NetMaskAllowed>N</NetMaskAllowed>
+                <Required>Y</Required>
+                <ValidationMessage>A valid IP address must be specified for DNS server.</ValidationMessage>
+            </server>
+            <gateway type="TextField">
+                <Default>none</Default>
+            </gateway>
+        </dnsservers>
+    </items>
+</model>

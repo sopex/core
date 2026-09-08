@@ -358,7 +358,7 @@
     </openvpnservers>
     <picture>
         <filename>Picture.js</filename>
-        <link>/system_general.php</link>
+        <link>/ui/core/general</link>
         <endpoints>
             <endpoint>/api/core/dashboard/picture</endpoint>
         </endpoints>

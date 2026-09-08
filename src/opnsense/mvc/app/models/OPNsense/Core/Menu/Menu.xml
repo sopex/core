@@ -56,11 +56,9 @@
             <LogFile order="100" VisibleName="Log File" url="/ui/diagnostics/log/core/routing"/>
         </Routes>
         <Settings cssClass="fa fa-cogs fa-fw">
-            <Administration url="/system_advanced_admin.php"/>
-            <General url="/system_general.php">
-                <Edit url="/system_general.php*" visibility="hidden"/>
-            </General>
-            <Miscellaneous url="/system_advanced_misc.php"/>
+            <Administration url="/ui/core/admin"/>
+            <General url="/ui/core/general"/>
+            <Miscellaneous url="/ui/core/misc"/>
             <Tunables url="/ui/core/tunables"/>
         </Settings>
         <Snapshots cssClass="fa fa-hdd-o fa-fw" url="/ui/core/snapshots"/>
@@ -92,7 +90,7 @@
         <Schedules order="210" url="/firewall_schedule.php" cssClass="fa fa-calendar fa-fw">
             <SchedulesEdit url="/firewall_schedule_edit.php*" visibility="hidden"/>
         </Schedules>
-        <Advanced order="220" url="/system_advanced_firewall.php" cssClass="fa fa-sliders fa-fw"/>
+        <Advanced order="220" url="/ui/firewall/settings" cssClass="fa fa-sliders fa-fw"/>
         <Diagnostics order="500" cssClass="fa fa-medkit fa-fw">
             <Aliases url="/ui/firewall/alias_util/"/>
             <States url="/ui/diagnostics/firewall/states"/>

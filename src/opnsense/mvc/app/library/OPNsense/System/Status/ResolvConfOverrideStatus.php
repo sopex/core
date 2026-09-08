@@ -39,7 +39,7 @@ class ResolvConfOverrideStatus extends AbstractStatus
         $this->internalPersistent = true;
         $this->internalTitle = gettext('/etc/resolv.conf override');
         $this->internalIsBanner = true;
-        $this->internalScope[] = '/system_general.php';
+        $this->internalScope[] = '/ui/core/general';
     }
 
     public function collectStatus()

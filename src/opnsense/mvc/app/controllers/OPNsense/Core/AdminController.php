@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (C) 2025 Deciso B.V.
+ * Copyright (C) 2026 Deciso B.V.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,27 +26,21 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-namespace OPNsense\System\Status;
+namespace OPNsense\Core;
 
-use OPNsense\System\AbstractStatus;
-use OPNsense\System\SystemStatusCode;
-
-class OpensshOverrideStatus extends AbstractStatus
+/**
+ * Class AdminController
+ * Page controller for System: Settings: Administration
+ * @package OPNsense\Core
+ */
+class AdminController extends \OPNsense\Base\IndexController
 {
-    public function __construct()
+    /**
+     * Render Admin Settings UI
+     */
+    public function indexAction()
     {
-        $this->internalPriority = 2;
-        $this->internalPersistent = true;
-        $this->internalTitle = gettext('OpenSSH config override');
-        $this->internalIsBanner = true;
-        $this->internalScope[] = '/ui/core/admin';
-    }
-
-    public function collectStatus()
-    {
-        if (count(glob('/usr/local/etc/ssh/sshd_config.d/*.conf'))) {
-            $this->internalMessage = gettext('The OpenSSH GUI configuration may be overridden by currently provided files on the disk.');
-            $this->internalStatus = SystemStatusCode::NOTICE;
-        }
+        $this->view->pick('OPNsense/Core/admin');
+        $this->view->adminForm = $this->getForm('admin');
     }
 }

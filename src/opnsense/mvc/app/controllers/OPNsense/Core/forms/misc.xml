@@ -1,0 +1,103 @@
+<form>
+    <field>
+        <type>header</type>
+        <label>Cryptography Settings</label>
+    </field>
+    <field>
+        <id>misc.crypto_hardware</id>
+        <label>Cryptographic Hardware</label>
+        <type>select_multiple</type>
+        <style>selectpicker</style>
+        <help>A cryptographic accelerator module uses hardware capacity to speed up cryptographic operations like encrypting, decrypting, and hashing.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>Thermal Sensors</label>
+    </field>
+    <field>
+        <id>misc.thermal_hardware</id>
+        <label>Thermal Hardware Sensor</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <help>Select hardware temperature sensor driver.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>Power &amp; Frequency</label>
+    </field>
+    <field>
+        <id>misc.powerd_enable</id>
+        <label>Enable PowerD</label>
+        <type>checkbox</type>
+        <help>The powerd utility monitors the system state and sets the CPU frequency accordingly.</help>
+    </field>
+    <field>
+        <id>misc.powerd_ac_mode</id>
+        <label>On AC Power Mode</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <help>CPU frequency mode while on AC power.</help>
+    </field>
+    <field>
+        <id>misc.powerd_battery_mode</id>
+        <label>On Battery Power Mode</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <help>CPU frequency mode while on battery power.</help>
+    </field>
+    <field>
+        <id>misc.powerd_normal_mode</id>
+        <label>On Normal Power Mode</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <help>CPU frequency mode when power source is unknown.</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>RAM Disk Settings (Memory file system)</label>
+    </field>
+    <field>
+        <id>misc.use_mfs_var</id>
+        <label>Use RAM disk for /var</label>
+        <type>checkbox</type>
+        <help>Set up a RAM disk for /var. All data will be lost across reboots unless backed up.</help>
+    </field>
+    <field>
+        <id>misc.max_mfs_var</id>
+        <label>/var RAM Disk Size (%)</label>
+        <type>text</type>
+        <help>Percentage of total memory to allocate to /var RAM disk (0-100, leave blank for default 50%).</help>
+    </field>
+    <field>
+        <id>misc.use_mfs_tmp</id>
+        <label>Use RAM disk for /tmp</label>
+        <type>checkbox</type>
+        <help>Set up a RAM disk for /tmp. All temporary files will be stored in memory.</help>
+    </field>
+    <field>
+        <id>misc.max_mfs_tmp</id>
+        <label>/tmp RAM Disk Size (%)</label>
+        <type>text</type>
+        <help>Percentage of total memory to allocate to /tmp RAM disk (0-100, leave blank for default 50%).</help>
+    </field>
+
+    <field>
+        <type>header</type>
+        <label>Disk &amp; System Audio</label>
+    </field>
+    <field>
+        <id>misc.use_swap_file</id>
+        <label>Use swap file</label>
+        <type>checkbox</type>
+        <help>Create and use a swap file in /usr/swap.</help>
+    </field>
+    <field>
+        <id>misc.disablebeep</id>
+        <label>Disable Speaker</label>
+        <type>checkbox</type>
+        <help>Prevent the system from playing melodies on startup and shutdown through the internal PC speaker.</help>
+    </field>
+</form>

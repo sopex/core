@@ -1,6 +1,6 @@
 <model>
     <mount>//OPNsense/Firewall/Filter</mount>
-    <version>1.0.9</version>
+    <version>1.0.10</version>
     <migration_prefix>MFP</migration_prefix>
     <description>Firewall rules (new)</description>
     <items>
@@ -18,6 +18,147 @@
                     <Default>0</Default>
                     <Required>Y</Required>
                 </scrub_random_id>
+                <disablefilter type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </disablefilter>
+                <optimization type="OptionField">
+                    <Required>Y</Required>
+                    <Default>normal</Default>
+                    <OptionValues>
+                        <normal>Normal</normal>
+                        <high-latency>High-latency</high-latency>
+                        <aggressive>Aggressive</aggressive>
+                        <conservative>Conservative</conservative>
+                    </OptionValues>
+                </optimization>
+                <state-policy type="OptionField">
+                    <BlankDesc>default</BlankDesc>
+                    <OptionValues>
+                        <if-bound>Bind states to interface</if-bound>
+                        <floating>Floating states</floating>
+                    </OptionValues>
+                </state-policy>
+                <maximumstates type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>1</MinimumValue>
+                </maximumstates>
+                <maximumfrags type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>1</MinimumValue>
+                </maximumfrags>
+                <maximumtableentries type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>1</MinimumValue>
+                </maximumtableentries>
+                <adaptivestart type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>0</MinimumValue>
+                </adaptivestart>
+                <adaptiveend type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>0</MinimumValue>
+                </adaptiveend>
+                <aliasesresolveinterval type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>1</MinimumValue>
+                </aliasesresolveinterval>
+                <checkaliasesurlcert type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </checkaliasesurlcert>
+                <disablereplyto type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </disablereplyto>
+                <bogonsinterval type="OptionField">
+                    <Required>Y</Required>
+                    <Default>monthly</Default>
+                    <OptionValues>
+                        <monthly>Monthly</monthly>
+                        <weekly>Weekly</weekly>
+                        <daily>Daily</daily>
+                    </OptionValues>
+                </bogonsinterval>
+                <schedule_states type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </schedule_states>
+                <skip_rules_gw_down type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </skip_rules_gw_down>
+                <lb_use_sticky type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </lb_use_sticky>
+                <pf_share_forward type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </pf_share_forward>
+                <pf_disable_force_gw type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </pf_disable_force_gw>
+                <srctrack type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>0</MinimumValue>
+                </srctrack>
+                <keepcounters type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </keepcounters>
+                <pfdebug type="OptionField">
+                    <Required>Y</Required>
+                    <Default>urgent</Default>
+                    <OptionValues>
+                        <none>None</none>
+                        <urgent>Urgent</urgent>
+                        <misc>Miscellaneous</misc>
+                        <loud>Loud</loud>
+                    </OptionValues>
+                </pfdebug>
+                <noantilockout type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </noantilockout>
+                <no_ipv6_rfc4890_req type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </no_ipv6_rfc4890_req>
+                <no_port0_block type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </no_port0_block>
+                <no_sshlockout type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </no_sshlockout>
+                <no_virusprot type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </no_virusprot>
+                <bypassstaticroutes type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </bypassstaticroutes>
+                <syncookies type="OptionField">
+                    <Required>Y</Required>
+                    <Default>never</Default>
+                    <OptionValues>
+                        <never>Never</never>
+                        <always>Always</always>
+                        <adaptive>Adaptive</adaptive>
+                    </OptionValues>
+                </syncookies>
+                <syncookies_adaptstart type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>0</MinimumValue>
+                </syncookies_adaptstart>
+                <syncookies_adaptend type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>0</MinimumValue>
+                </syncookies_adaptend>
             </filter>
             <nat>
                 <snat_mode type=".\SNatModeField" volatile="true">
@@ -30,7 +171,50 @@
                         <disabled>Disable Source NAT rule generation</disabled>
                     </OptionValues>
                 </snat_mode>
+                <natreflection type="OptionField">
+                    <Required>Y</Required>
+                    <Default>enable</Default>
+                    <OptionValues>
+                        <enable>Enabled</enable>
+                        <purenat>Pure NAT</purenat>
+                        <disable>Disabled</disable>
+                    </OptionValues>
+                </natreflection>
+                <enablebinatreflection type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </enablebinatreflection>
+                <enablenatreflectionhelper type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </enablenatreflectionhelper>
+                <reflectiontimeout type="IntegerField">
+                    <Required>N</Required>
+                    <MinimumValue>1</MinimumValue>
+                </reflectiontimeout>
             </nat>
+            <logging>
+                <logdefaultblock type="BooleanField">
+                    <Default>1</Default>
+                    <Required>Y</Required>
+                </logdefaultblock>
+                <logdefaultpass type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </logdefaultpass>
+                <logoutboundnat type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </logoutboundnat>
+                <logbogons type="BooleanField">
+                    <Default>1</Default>
+                    <Required>Y</Required>
+                </logbogons>
+                <logprivatenets type="BooleanField">
+                    <Default>1</Default>
+                    <Required>Y</Required>
+                </logprivatenets>
+            </logging>
         </settings>
         <rules>
             <rule type=".\FilterRuleField">

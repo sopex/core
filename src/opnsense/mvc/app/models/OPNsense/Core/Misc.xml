@@ -1,0 +1,82 @@
+<model>
+    <mount>//system/misc</mount>
+    <version>1.0.0</version>
+    <migration_prefix>M</migration_prefix>
+    <description>System Miscellaneous Settings</description>
+    <items>
+        <powerd_enable type="BooleanField">
+            <Default>0</Default>
+            <Required>Y</Required>
+        </powerd_enable>
+        <powerd_ac_mode type="OptionField">
+            <Required>Y</Required>
+            <Default>hadp</Default>
+            <OptionValues>
+                <hadp>Hiadaptive</hadp>
+                <adp>Adaptive</adp>
+                <min>Minimum</min>
+                <max>Maximum</max>
+            </OptionValues>
+        </powerd_ac_mode>
+        <powerd_battery_mode type="OptionField">
+            <Required>Y</Required>
+            <Default>hadp</Default>
+            <OptionValues>
+                <hadp>Hiadaptive</hadp>
+                <adp>Adaptive</adp>
+                <min>Minimum</min>
+                <max>Maximum</max>
+            </OptionValues>
+        </powerd_battery_mode>
+        <powerd_normal_mode type="OptionField">
+            <Required>Y</Required>
+            <Default>hadp</Default>
+            <OptionValues>
+                <hadp>Hiadaptive</hadp>
+                <adp>Adaptive</adp>
+                <min>Minimum</min>
+                <max>Maximum</max>
+            </OptionValues>
+        </powerd_normal_mode>
+        <crypto_hardware type="OptionField">
+            <Required>N</Required>
+            <Multiple>Y</Multiple>
+        </crypto_hardware>
+        <thermal_hardware type="OptionField">
+            <BlankDesc>None/ACPI</BlankDesc>
+            <OptionValues>
+                <none>None/ACPI</none>
+                <coretemp>Intel Core* CPU on-die thermal sensor</coretemp>
+                <amdtemp>AMD K8, K10 and K11 CPU on-die thermal sensor</amdtemp>
+            </OptionValues>
+        </thermal_hardware>
+        <use_mfs_var type="BooleanField">
+            <Default>0</Default>
+            <Required>Y</Required>
+        </use_mfs_var>
+        <max_mfs_var type="IntegerField">
+            <Required>N</Required>
+            <MinimumValue>0</MinimumValue>
+            <MaximumValue>100</MaximumValue>
+            <ValidationMessage>Memory usage percentage out of bounds.</ValidationMessage>
+        </max_mfs_var>
+        <use_mfs_tmp type="BooleanField">
+            <Default>0</Default>
+            <Required>Y</Required>
+        </use_mfs_tmp>
+        <max_mfs_tmp type="IntegerField">
+            <Required>N</Required>
+            <MinimumValue>0</MinimumValue>
+            <MaximumValue>100</MaximumValue>
+            <ValidationMessage>Memory usage percentage out of bounds.</ValidationMessage>
+        </max_mfs_tmp>
+        <use_swap_file type="BooleanField">
+            <Default>0</Default>
+            <Required>Y</Required>
+        </use_swap_file>
+        <disablebeep type="BooleanField">
+            <Default>0</Default>
+            <Required>Y</Required>
+        </disablebeep>
+    </items>
+</model>

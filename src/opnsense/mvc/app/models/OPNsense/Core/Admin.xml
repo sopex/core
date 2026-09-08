@@ -1,0 +1,238 @@
+<model>
+    <mount>//system/admin</mount>
+    <version>1.0.0</version>
+    <migration_prefix>M</migration_prefix>
+    <description>System Administration Settings</description>
+    <items>
+        <!-- ========================================================= -->
+        <!-- Web GUI Settings                                          -->
+        <!-- ========================================================= -->
+        <webgui>
+            <protocol type="OptionField">
+                <Required>Y</Required>
+                <Default>https</Default>
+                <OptionValues>
+                    <http>HTTP</http>
+                    <https>HTTPS</https>
+                </OptionValues>
+                <ValidationMessage>You must specify a valid web GUI protocol.</ValidationMessage>
+            </protocol>
+            <port type="IntegerField">
+                <Required>N</Required>
+                <MinimumValue>1</MinimumValue>
+                <MaximumValue>65535</MaximumValue>
+                <ValidationMessage>You must specify a valid web GUI port number.</ValidationMessage>
+            </port>
+            <ssl-certref type="CertificateField">
+                <Required>N</Required>
+                <Type>cert</Type>
+            </ssl-certref>
+            <ssl-ciphers type="CSVListField">
+                <Required>N</Required>
+            </ssl-ciphers>
+            <ssl-hsts type="BooleanField">
+                <Default>0</Default>
+            </ssl-hsts>
+            <disablehttpredirect type="BooleanField">
+                <Default>0</Default>
+            </disablehttpredirect>
+            <httpaccesslog type="BooleanField">
+                <Default>0</Default>
+            </httpaccesslog>
+            <session_timeout type="IntegerField">
+                <Required>N</Required>
+                <MinimumValue>1</MinimumValue>
+                <ValidationMessage>Session timeout must be an integer value.</ValidationMessage>
+            </session_timeout>
+            <compression type="OptionField">
+                <Required>N</Required>
+                <Default></Default>
+                <OptionValues>
+                    <val_off value="">Off</val_off>
+                    <val_1 value="1">Low</val_1>
+                    <val_5 value="5">Medium</val_5>
+                    <val_9 value="9">High</val_9>
+                </OptionValues>
+                <ValidationMessage>Invalid compression value.</ValidationMessage>
+            </compression>
+            <nodnsrebindcheck type="BooleanField">
+                <Default>0</Default>
+            </nodnsrebindcheck>
+            <nohttpreferercheck type="BooleanField">
+                <Default>0</Default>
+            </nohttpreferercheck>
+            <noroot type="BooleanField">
+                <Default>0</Default>
+            </noroot>
+            <althostnames type="TextField">
+                <Required>N</Required>
+            </althostnames>
+            <interfaces type="InterfaceField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+            </interfaces>
+            <authmode type="CSVListField">
+                <Required>N</Required>
+            </authmode>
+            <quietlogin type="BooleanField">
+                <Default>0</Default>
+            </quietlogin>
+        </webgui>
+
+        <!-- ========================================================= -->
+        <!-- OpenSSH Settings                                          -->
+        <!-- ========================================================= -->
+        <ssh>
+            <enabled type="BooleanField">
+                <Default>0</Default>
+            </enabled>
+            <port type="IntegerField">
+                <Required>N</Required>
+                <MinimumValue>1</MinimumValue>
+                <MaximumValue>65535</MaximumValue>
+                <ValidationMessage>You must specify a valid SSH port number.</ValidationMessage>
+            </port>
+            <interfaces type="InterfaceField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+            </interfaces>
+            <kex type="CSVListField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+            </kex>
+            <ciphers type="CSVListField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+            </ciphers>
+            <macs type="CSVListField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+            </macs>
+            <keys type="CSVListField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+            </keys>
+            <keysig type="CSVListField">
+                <Multiple>Y</Multiple>
+                <Required>N</Required>
+            </keysig>
+            <rekeylimit type="OptionField">
+                <Required>N</Required>
+                <Default></Default>
+                <OptionValues>
+                    <opt_default value="">System defaults</opt_default>
+                    <opt_def60s value="default 60s">60 seconds</opt_def60s>
+                    <opt_def600s value="default 600s">10 minutes</opt_def600s>
+                    <opt_512m60s value="512M 60s">512MB, 60 seconds</opt_512m60s>
+                    <opt_512m600s value="512M 600s">512MB, 10 minutes</opt_512m600s>
+                    <opt_512m1h value="512M 1h">512MB, 1 hour</opt_512m1h>
+                    <opt_1g60s value="1G 60s">1GB, 60 seconds</opt_1g60s>
+                    <opt_1g1h value="1G 1h">1GB, 1 hour</opt_1g1h>
+                </OptionValues>
+                <ValidationMessage>Invalid rekey limit option.</ValidationMessage>
+            </rekeylimit>
+            <passwordauth type="BooleanField">
+                <Default>0</Default>
+            </passwordauth>
+            <permitrootlogin type="OptionField">
+                <Required>Y</Required>
+                <Default>no</Default>
+                <OptionValues>
+                    <no>No</no>
+                    <yes>Yes</yes>
+                    <without-password>Without Password (Public Key Only)</without-password>
+                </OptionValues>
+            </permitrootlogin>
+            <noauto type="BooleanField">
+                <Default>1</Default>
+            </noauto>
+        </ssh>
+
+        <!-- ========================================================= -->
+        <!-- Console & Shell Settings                                  -->
+        <!-- ========================================================= -->
+        <console>
+            <disableconsolemenu type="BooleanField">
+                <Default>0</Default>
+            </disableconsolemenu>
+            <usevirtualterminal type="BooleanField">
+                <Default>1</Default>
+            </usevirtualterminal>
+            <sudo_allow_wheel type="OptionField">
+                <Default></Default>
+                <Required>N</Required>
+                <OptionValues>
+                    <opt_disallow value="">Disallow</opt_disallow>
+                    <opt_pwd value="1">Ask password</opt_pwd>
+                    <opt_nopwd value="2">No password</opt_nopwd>
+                </OptionValues>
+            </sudo_allow_wheel>
+            <sudo_allow_group type="TextField">
+                <Required>N</Required>
+            </sudo_allow_group>
+            <user_allow_gen_token type="CSVListField">
+                <Required>N</Required>
+            </user_allow_gen_token>
+            <serialspeed type="OptionField">
+                <Default>115200</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <val_1500000 value="1500000">1500000</val_1500000>
+                    <val_115200 value="115200">115200</val_115200>
+                    <val_57600 value="57600">57600</val_57600>
+                    <val_38400 value="38400">38400</val_38400>
+                    <val_19200 value="19200">19200</val_19200>
+                    <val_14400 value="14400">14400</val_14400>
+                    <val_9600 value="9600">9600</val_9600>
+                </OptionValues>
+                <ValidationMessage>Invalid serial speed.</ValidationMessage>
+            </serialspeed>
+            <serialusb type="BooleanField">
+                <Default>0</Default>
+            </serialusb>
+            <primaryconsole type="OptionField">
+                <Default>video</Default>
+                <Required>Y</Required>
+                <OptionValues>
+                    <video value="video">VGA Console</video>
+                    <serial value="serial">Serial Console</serial>
+                    <efi value="efi">EFI Console</efi>
+                    <null value="null">Mute Console</null>
+                </OptionValues>
+            </primaryconsole>
+            <secondaryconsole type="OptionField">
+                <Required>N</Required>
+                <Default></Default>
+                <OptionValues>
+                    <opt_none value="">None</opt_none>
+                    <video value="video">VGA Console</video>
+                    <serial value="serial">Serial Console</serial>
+                    <efi value="efi">EFI Console</efi>
+                    <null value="null">Mute Console</null>
+                </OptionValues>
+            </secondaryconsole>
+            <autologout type="IntegerField">
+                <Required>N</Required>
+                <MinimumValue>1</MinimumValue>
+                <ValidationMessage>Inactivity timeout must be an integer value.</ValidationMessage>
+            </autologout>
+        </console>
+
+        <!-- ========================================================= -->
+        <!-- Development & Syslog Settings                             -->
+        <!-- ========================================================= -->
+        <development>
+            <deployment type="OptionField">
+                <Default></Default>
+                <Required>N</Required>
+                <OptionValues>
+                    <production value="">Production</production>
+                    <development value="development">Development</development>
+                </OptionValues>
+            </deployment>
+            <nologlighttpd type="BooleanField">
+                <Default>0</Default>
+            </nologlighttpd>
+        </development>
+    </items>
+</model>

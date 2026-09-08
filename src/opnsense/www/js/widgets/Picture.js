@@ -53,7 +53,7 @@ export default class Picture extends BaseWidget {
     _showError() {
         $('#picture-container').html(`
             <div class="error-message">
-                <a href="/system_general.php">${this.translations.nopicture}</a>
+                <a href="/ui/core/general">${this.translations.nopicture}</a>
             </div>
         `);
     }

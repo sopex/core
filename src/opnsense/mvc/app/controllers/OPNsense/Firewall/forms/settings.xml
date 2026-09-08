@@ -24,6 +24,269 @@
             <style>scrub_option</style>
             <help>Replace predictable IPv4 identification values with random values.</help>
         </field>
+
+        <field>
+            <type>header</type>
+            <label>General</label>
+        </field>
+        <field>
+            <id>filter.settings.filter.disablefilter</id>
+            <label>Disable Firewall</label>
+            <type>checkbox</type>
+            <help>Disable all packet filtering. Note that this also turns off NAT!</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.optimization</id>
+            <label>Firewall Optimization</label>
+            <type>dropdown</type>
+            <help>Select Firewall optimization profile for state table timeouts.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.state-policy</id>
+            <label>State Policy</label>
+            <type>dropdown</type>
+            <help>Default state binding policy for rules which do not explicitly configure one.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.aliasesresolveinterval</id>
+            <label>Aliases Resolve Interval</label>
+            <type>text</type>
+            <help>Interval, in seconds, between periodic DNS resolution of hostnames in aliases.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.checkaliasesurlcert</id>
+            <label>Check Certificate of Aliases URLs</label>
+            <type>checkbox</type>
+            <help>Verify the certificate of URL tables during periodic fetch.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.disablereplyto</id>
+            <label>Disable reply-to</label>
+            <type>checkbox</type>
+            <help>Disable reply-to on WAN rules. With multi-WAN, this option might cause inbound traffic to exit via the wrong interface.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.bogonsinterval</id>
+            <label>Bogon Update Interval</label>
+            <type>dropdown</type>
+            <help>Frequency of bogon network list updates.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.schedule_states</id>
+            <label>Schedule States</label>
+            <type>checkbox</type>
+            <help>Clear states when scheduled rules expire.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.skip_rules_gw_down</id>
+            <label>Skip rules when gateway is down</label>
+            <type>checkbox</type>
+            <help>Do not generate firewall rules that specify down gateways.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.lb_use_sticky</id>
+            <label>Use sticky connections</label>
+            <type>checkbox</type>
+            <help>Successive connections from the same client IP will be directed to the same pool server.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.pf_share_forward</id>
+            <label>Shared Forwarding</label>
+            <type>checkbox</type>
+            <help>Use pf shared forwarding for routing.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.pf_disable_force_gw</id>
+            <label>Disable force gateway</label>
+            <type>checkbox</type>
+            <help>Disable automatically created outbound NAT rules when using static routes.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.bypassstaticroutes</id>
+            <label>Static route filtering</label>
+            <type>checkbox</type>
+            <help>Bypass firewall rules for traffic on the same interface.</help>
+        </field>
+
+        <field>
+            <type>header</type>
+            <label>State Table &amp; Limits</label>
+        </field>
+        <field>
+            <id>filter.settings.filter.maximumstates</id>
+            <label>Maximum states</label>
+            <type>text</type>
+            <help>Maximum number of connections to hold in the state table.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.maximumfrags</id>
+            <label>Maximum fragments</label>
+            <type>text</type>
+            <help>Maximum number of packet fragments to hold for reassembly.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.maximumtableentries</id>
+            <label>Maximum table entries</label>
+            <type>text</type>
+            <help>Maximum number of table entries for aliases and bogons.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.adaptivestart</id>
+            <label>Adaptive Start</label>
+            <type>text</type>
+            <help>When number of state entries exceeds this value, adaptive scaling begins.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.adaptiveend</id>
+            <label>Adaptive End</label>
+            <type>text</type>
+            <help>When number of state entries reaches this value, state timeouts are scaled to 0.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.srctrack</id>
+            <label>Source Tracking Table</label>
+            <type>text</type>
+            <help>Maximum number of source tracking entries for sticky connections.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.keepcounters</id>
+            <label>Keep rule counters</label>
+            <type>checkbox</type>
+            <help>Preserve rule packet and byte counters across filter reloads.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.pfdebug</id>
+            <label>Debug</label>
+            <type>dropdown</type>
+            <help>Debug level for packet filter logging.</help>
+        </field>
+
+        <field>
+            <type>header</type>
+            <label>Security &amp; Protection</label>
+        </field>
+        <field>
+            <id>filter.settings.filter.noantilockout</id>
+            <label>Disable anti-lockout</label>
+            <type>checkbox</type>
+            <help>Disable the automatic rule allowing access to the WebGUI/SSH from the LAN interface.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.no_ipv6_rfc4890_req</id>
+            <label>Disable IPv6 RFC4890 requirements</label>
+            <type>checkbox</type>
+            <help>Disable default rules enforcing RFC 4890 IPv6 ICMP filtering.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.no_port0_block</id>
+            <label>Disable port 0 blocking</label>
+            <type>checkbox</type>
+            <help>Disable automatic drop of TCP/UDP packets with port 0.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.no_sshlockout</id>
+            <label>Disable SSH lockout table</label>
+            <type>checkbox</type>
+            <help>Disable automatic sshlockout table blocking brute force SSH login attempts.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.no_virusprot</id>
+            <label>Disable virusprot table</label>
+            <type>checkbox</type>
+            <help>Disable virusprot table blocking hosts that exceed connection limits.</help>
+        </field>
+
+        <field>
+            <type>header</type>
+            <label>SYN Cookies</label>
+        </field>
+        <field>
+            <id>filter.settings.filter.syncookies</id>
+            <label>SYN Cookies</label>
+            <type>dropdown</type>
+            <help>Enable SYN cookies protection against SYN floods.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.syncookies_adaptstart</id>
+            <label>Adaptive Start</label>
+            <type>text</type>
+            <help>Percentage of state table at which SYN cookies become active in adaptive mode.</help>
+        </field>
+        <field>
+            <id>filter.settings.filter.syncookies_adaptend</id>
+            <label>Adaptive End</label>
+            <type>text</type>
+            <help>Percentage of state table at which SYN cookies become inactive in adaptive mode.</help>
+        </field>
     </tab>
+
+    <tab id="settings-nat" description="Network Address Translation">
+        <field>
+            <type>header</type>
+            <label>NAT Reflection</label>
+        </field>
+        <field>
+            <id>filter.settings.nat.natreflection</id>
+            <label>Reflection for port forwards</label>
+            <type>dropdown</type>
+            <help>Enable NAT reflection for port forwarding rules.</help>
+        </field>
+        <field>
+            <id>filter.settings.nat.reflectiontimeout</id>
+            <label>Reflection Timeout</label>
+            <type>text</type>
+            <help>Timeout in seconds for NAT reflection connections.</help>
+        </field>
+        <field>
+            <id>filter.settings.nat.enablebinatreflection</id>
+            <label>Reflection for 1:1 NAT</label>
+            <type>checkbox</type>
+            <help>Enable NAT reflection for 1:1 NAT rules.</help>
+        </field>
+        <field>
+            <id>filter.settings.nat.enablenatreflectionhelper</id>
+            <label>Automatic outbound NAT for Reflection</label>
+            <type>checkbox</type>
+            <help>Automatically create outbound NAT rules for reflected traffic.</help>
+        </field>
+    </tab>
+
+    <tab id="settings-logging" description="Logging">
+        <field>
+            <type>header</type>
+            <label>Firewall Log Settings</label>
+        </field>
+        <field>
+            <id>filter.settings.logging.logdefaultblock</id>
+            <label>Log packets matched from the default block rules</label>
+            <type>checkbox</type>
+            <help>Log packets blocked by the default rule.</help>
+        </field>
+        <field>
+            <id>filter.settings.logging.logdefaultpass</id>
+            <label>Log packets matched from the default pass rules</label>
+            <type>checkbox</type>
+            <help>Log packets passed by the default rule.</help>
+        </field>
+        <field>
+            <id>filter.settings.logging.logoutboundnat</id>
+            <label>Log packets handled by outbound NAT rules</label>
+            <type>checkbox</type>
+            <help>Log packets that undergo outbound NAT translation.</help>
+        </field>
+        <field>
+            <id>filter.settings.logging.logbogons</id>
+            <label>Log packets matched from the bogon rule</label>
+            <type>checkbox</type>
+            <help>Log packets blocked by the bogons table rule.</help>
+        </field>
+        <field>
+            <id>filter.settings.logging.logprivatenets</id>
+            <label>Log packets matched from the private networks rule</label>
+            <type>checkbox</type>
+            <help>Log packets blocked by the block private networks rule.</help>
+        </field>
+    </tab>
+
     <activetab>settings-filter</activetab>
 </form>

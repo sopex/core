@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (C) 2025 Deciso B.V.
+ * Copyright (C) 2026 Deciso B.V.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,27 +26,36 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-namespace OPNsense\System\Status;
+namespace OPNsense\Core\Api;
 
-use OPNsense\System\AbstractStatus;
-use OPNsense\System\SystemStatusCode;
+use OPNsense\Base\ApiMutableModelControllerBase;
+use OPNsense\Core\Backend;
 
-class OpensshOverrideStatus extends AbstractStatus
+/**
+ * Class MiscController
+ * REST API controller for System Miscellaneous settings.
+ * @package OPNsense\Core\Api
+ */
+class MiscController extends ApiMutableModelControllerBase
 {
-    public function __construct()
-    {
-        $this->internalPriority = 2;
-        $this->internalPersistent = true;
-        $this->internalTitle = gettext('OpenSSH config override');
-        $this->internalIsBanner = true;
-        $this->internalScope[] = '/ui/core/admin';
-    }
+    protected static $internalModelName = 'misc';
+    protected static $internalModelClass = 'OPNsense\Core\Misc';
 
-    public function collectStatus()
+    /**
+     * Reconfigure backend services upon miscellaneous settings changes
+     * @return array
+     */
+    public function reconfigureAction()
     {
-        if (count(glob('/usr/local/etc/ssh/sshd_config.d/*.conf'))) {
-            $this->internalMessage = gettext('The OpenSSH GUI configuration may be overridden by currently provided files on the disk.');
-            $this->internalStatus = SystemStatusCode::NOTICE;
+        $result = ['status' => 'failed'];
+        if ($this->request->isPost()) {
+            $backend = new Backend();
+            $backend->configdRun('dns reload');
+            $backend->configdRun('cron restart');
+            $backend->configdRun('service restart powerd');
+            $backend->configdRun('service restart kernel');
+            $result = ['status' => 'ok'];
         }
+        return $result;
     }
 }

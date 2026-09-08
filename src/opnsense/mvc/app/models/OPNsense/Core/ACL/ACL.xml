@@ -438,19 +438,22 @@
     <page-system-advanced-admin>
         <name>System: Advanced: Admin Access Page</name>
         <patterns>
-            <pattern>system_advanced_admin.php*</pattern>
+            <pattern>ui/core/admin</pattern>
+            <pattern>api/core/admin/*</pattern>
         </patterns>
     </page-system-advanced-admin>
     <page-system-advanced-firewall>
         <name>System: Advanced: Firewall and NAT</name>
         <patterns>
-            <pattern>system_advanced_firewall.php*</pattern>
+            <pattern>ui/firewall/settings</pattern>
+            <pattern>api/firewall/settings/*</pattern>
         </patterns>
     </page-system-advanced-firewall>
     <page-system-advanced-misc>
         <name>System: Advanced: Miscellaneous</name>
         <patterns>
-            <pattern>system_advanced_misc.php*</pattern>
+            <pattern>ui/core/misc</pattern>
+            <pattern>api/core/misc/*</pattern>
         </patterns>
     </page-system-advanced-misc>
     <page-system-advanced-sysctl>
@@ -529,7 +532,8 @@
     <page-system-generalsetup>
         <name>System: General Setup</name>
         <patterns>
-            <pattern>system_general.php*</pattern>
+            <pattern>ui/core/general</pattern>
+            <pattern>api/core/general/*</pattern>
         </patterns>
     </page-system-generalsetup>
     <page-system-hasync>

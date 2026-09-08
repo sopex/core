@@ -1,0 +1,191 @@
+<form>
+    <field>
+        <type>header</type>
+        <label>System</label>
+    </field>
+    <field>
+        <id>general.hostname</id>
+        <label>Hostname</label>
+        <type>text</type>
+        <help>Name of the firewall host, without domain part</help>
+    </field>
+    <field>
+        <id>general.domain</id>
+        <label>Domain</label>
+        <type>text</type>
+        <help>Do not use 'local' as your internal domain name. It is reserved for and will interfere with mDNS (avahi, bonjour, etc.). Instead, use the special-use domain internal or home.arpa, also to avoid DNSSEC validation issues. E.g. internal, name.internal.</help>
+    </field>
+    <field>
+        <id>general.timezone</id>
+        <label>Time zone</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <help>Select the location closest to you</help>
+    </field>
+    <field>
+        <id>general.language</id>
+        <label>Language</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <help>Choose a language for the web GUI.</help>
+    </field>
+    <field>
+        <id>general.theme</id>
+        <label>Theme</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <help>This will change the look and feel of the GUI.</help>
+    </field>
+    <field>
+        <id>general.picture</id>
+        <label>Picture Data</label>
+        <type>hidden</type>
+        <style>hidden</style>
+    </field>
+    <field>
+        <id>general.picture_filename</id>
+        <label>Picture Filename</label>
+        <type>hidden</type>
+        <style>hidden</style>
+    </field>
+    <field>
+        <type>header</type>
+        <label>Networking</label>
+    </field>
+    <field>
+        <id>general.prefer_ipv4</id>
+        <label>Prefer IPv4 over IPv6</label>
+        <type>checkbox</type>
+        <help>By default, if a hostname resolves IPv6 and IPv4 addresses IPv6 will be used. If you check this option, IPv4 will be used instead of IPv6.</help>
+    </field>
+    <field>
+        <id>general.dns1</id>
+        <label>DNS Server 1</label>
+        <type>text</type>
+        <help>Enter IP addresses to be used by the system for DNS resolution. These are also used for the DHCP service, DNS services and for PPTP VPN clients. In addition, optionally select the gateway for each DNS server. When using multiple WAN connections there should be at least one unique DNS server per gateway.</help>
+    </field>
+    <field>
+        <id>general.dns1gw</id>
+        <label>DNS Server 1 Gateway</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+    </field>
+    <field>
+        <id>general.dns2</id>
+        <label>DNS Server 2</label>
+        <type>text</type>
+    </field>
+    <field>
+        <id>general.dns2gw</id>
+        <label>DNS Server 2 Gateway</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+    </field>
+    <field>
+        <id>general.dns3</id>
+        <label>DNS Server 3</label>
+        <type>text</type>
+    </field>
+    <field>
+        <id>general.dns3gw</id>
+        <label>DNS Server 3 Gateway</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+    </field>
+    <field>
+        <id>general.dns4</id>
+        <label>DNS Server 4</label>
+        <type>text</type>
+    </field>
+    <field>
+        <id>general.dns4gw</id>
+        <label>DNS Server 4 Gateway</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+    </field>
+    <field>
+        <id>general.dns5</id>
+        <label>DNS Server 5</label>
+        <type>text</type>
+        <advanced>true</advanced>
+    </field>
+    <field>
+        <id>general.dns5gw</id>
+        <label>DNS Server 5 Gateway</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <advanced>true</advanced>
+    </field>
+    <field>
+        <id>general.dns6</id>
+        <label>DNS Server 6</label>
+        <type>text</type>
+        <advanced>true</advanced>
+    </field>
+    <field>
+        <id>general.dns6gw</id>
+        <label>DNS Server 6 Gateway</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <advanced>true</advanced>
+    </field>
+    <field>
+        <id>general.dns7</id>
+        <label>DNS Server 7</label>
+        <type>text</type>
+        <advanced>true</advanced>
+    </field>
+    <field>
+        <id>general.dns7gw</id>
+        <label>DNS Server 7 Gateway</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <advanced>true</advanced>
+    </field>
+    <field>
+        <id>general.dns8</id>
+        <label>DNS Server 8</label>
+        <type>text</type>
+        <advanced>true</advanced>
+    </field>
+    <field>
+        <id>general.dns8gw</id>
+        <label>DNS Server 8 Gateway</label>
+        <type>dropdown</type>
+        <style>selectpicker</style>
+        <advanced>true</advanced>
+    </field>
+    <field>
+        <id>general.dnssearchdomain</id>
+        <label>DNS search domain</label>
+        <type>select_multiple</type>
+        <style>tokenize</style>
+        <allownew>true</allownew>
+        <help>Enter additional domains to add to the local list of search domains. Use "." to disable passing any other automatic search domain for resolving.</help>
+    </field>
+    <field>
+        <id>general.dnsallowoverride</id>
+        <label>DNS server options</label>
+        <type>checkbox</type>
+        <help>Allow DNS server list to be overridden by DHCP/PPP on WAN. If this option is set, DNS servers assigned by a DHCP/PPP server on WAN will be used for their own purposes (including the DNS services). However, they will not be assigned to DHCP clients. Since this option concerns all interfaces retrieving dynamic dns entries, you can exclude items from the list below.</help>
+    </field>
+    <field>
+        <id>general.dnsallowoverride_exclude</id>
+        <label>Exclude interfaces</label>
+        <type>select_multiple</type>
+        <style>selectpicker</style>
+        <help>Exclude interfaces from dynamic DNS overrides.</help>
+    </field>
+    <field>
+        <id>general.dnslocalhost</id>
+        <label>Do not use the local DNS service as a nameserver for this system</label>
+        <type>checkbox</type>
+        <help>By default localhost (127.0.0.1) will be used as the first nameserver when e.g. Dnsmasq or Unbound is enabled, so system can use the local DNS service to perform lookups. Checking this box omits localhost from the list of DNS servers.</help>
+    </field>
+    <field>
+        <id>general.gw_switch_default</id>
+        <label>Gateway switching</label>
+        <type>checkbox</type>
+        <help>Allow default gateway switching. If the link where the default gateway resides fails switch the default gateway to another available one.</help>
+    </field>
+</form>

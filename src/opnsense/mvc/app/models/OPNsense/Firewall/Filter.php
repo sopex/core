@@ -408,6 +408,33 @@ class Filter extends BaseModel
                 }
             }
         }
+        /* Settings validations */
+        $fSettings = $this->settings->filter;
+        $start = (string)$fSettings->adaptivestart;
+        $end = (string)$fSettings->adaptiveend;
+        if (($start !== '' && $end === '') || ($start === '' && $end !== '')) {
+            $messages->appendMessage(new Message(
+                gettext("The Firewall Adaptive values must be set together."),
+                "settings.filter.adaptivestart"
+            ));
+        }
+
+        if ((string)$fSettings->syncookies === 'adaptive') {
+            $cStart = (string)$fSettings->syncookies_adaptstart;
+            $cEnd = (string)$fSettings->syncookies_adaptend;
+            if ($cStart === '' || $cEnd === '') {
+                $messages->appendMessage(new Message(
+                    gettext("Syncookie Adaptive values must be set together."),
+                    "settings.filter.syncookies_adaptstart"
+                ));
+            } elseif ((int)$cStart <= (int)$cEnd) {
+                $messages->appendMessage(new Message(
+                    gettext("Syncookie Adaptive Start must be a higher value than End."),
+                    "settings.filter.syncookies_adaptstart"
+                ));
+            }
+        }
+
         return $messages;
     }
 
@@ -430,15 +457,157 @@ class Filter extends BaseModel
     }
 
     /**
-     * Persist volatile SNAT model fields into legacy configuration nodes.
+     * Backward-compatibility synchronizer: writes settings state to legacy config nodes
+     */
+    public function syncToLegacyConfig()
+    {
+        $config = Config::getInstance()->object();
+        if (!isset($config->system)) {
+            $config->addChild('system');
+        }
+        if (!isset($config->filter)) {
+            $config->addChild('filter');
+        }
+        if (!isset($config->syslog)) {
+            $config->addChild('syslog');
+        }
+
+        $f = $this->settings->filter;
+        $n = $this->settings->nat;
+        $l = $this->settings->logging;
+
+        // Filter settings
+        if ((string)$f->disablefilter === '1') {
+            $config->system->disablefilter = 'true';
+        } else {
+            unset($config->system->disablefilter);
+        }
+
+        $config->system->optimization = (string)$f->optimization;
+        if (!empty((string)$f->{'state-policy'})) {
+            $config->system->{'state-policy'} = (string)$f->{'state-policy'};
+        } else {
+            unset($config->system->{'state-policy'});
+        }
+
+        foreach (['maximumstates', 'maximumfrags', 'maximumtableentries', 'adaptivestart', 'adaptiveend', 'aliasesresolveinterval', 'srctrack'] as $prop) {
+            if ((string)$f->$prop !== '') {
+                $config->system->$prop = (string)$f->$prop;
+            } else {
+                unset($config->system->$prop);
+            }
+        }
+
+        foreach (['checkaliasesurlcert', 'disablereplyto', 'schedule_states', 'skip_rules_gw_down', 'lb_use_sticky', 'pf_share_forward', 'pf_disable_force_gw', 'keepcounters', 'no_ipv6_rfc4890_req', 'no_port0_block', 'no_sshlockout', 'no_virusprot'] as $prop) {
+            if ((string)$f->$prop === '1') {
+                $config->system->$prop = 'true';
+            } else {
+                unset($config->system->$prop);
+            }
+        }
+
+        if (!isset($config->system->bogons)) {
+            $config->system->addChild('bogons');
+        }
+        $config->system->bogons->interval = (string)$f->bogonsinterval;
+        $config->system->pfdebug = (string)$f->pfdebug;
+
+        if (!isset($config->system->webgui)) {
+            $config->system->addChild('webgui');
+        }
+        if ((string)$f->noantilockout === '1') {
+            $config->system->webgui->noantilockout = 'true';
+        } else {
+            unset($config->system->webgui->noantilockout);
+        }
+
+        if ((string)$f->bypassstaticroutes === '1') {
+            $config->filter->bypassstaticroutes = 'true';
+        } else {
+            unset($config->filter->bypassstaticroutes);
+        }
+
+        if ((string)$f->syncookies !== 'never') {
+            $config->system->syncookies = (string)$f->syncookies;
+            if ((string)$f->syncookies === 'adaptive') {
+                $config->system->syncookies_adaptstart = (string)$f->syncookies_adaptstart;
+                $config->system->syncookies_adaptend = (string)$f->syncookies_adaptend;
+            }
+        } else {
+            unset($config->system->syncookies);
+            unset($config->system->syncookies_adaptstart);
+            unset($config->system->syncookies_adaptend);
+        }
+
+        // NAT reflection
+        $natRef = (string)$n->natreflection;
+        if ($natRef === 'disable') {
+            $config->system->disablenatreflection = 'yes';
+        } elseif ($natRef === 'purenat') {
+            $config->system->disablenatreflection = 'purenat';
+        } else {
+            unset($config->system->disablenatreflection);
+        }
+
+        if ((string)$n->enablebinatreflection === '1') {
+            $config->system->enablebinatreflection = 'true';
+        } else {
+            unset($config->system->enablebinatreflection);
+        }
+
+        if ((string)$n->enablenatreflectionhelper === '1') {
+            $config->system->enablenatreflectionhelper = 'true';
+        } else {
+            unset($config->system->enablenatreflectionhelper);
+        }
+
+        if ((string)$n->reflectiontimeout !== '') {
+            $config->system->reflectiontimeout = (string)$n->reflectiontimeout;
+        } else {
+            unset($config->system->reflectiontimeout);
+        }
+
+        // Logging
+        $config->syslog->nologdefaultblock = ((string)$l->logdefaultblock === '0') ? 'true' : null;
+        if ($config->syslog->nologdefaultblock === null) {
+            unset($config->syslog->nologdefaultblock);
+        }
+
+        $config->syslog->nologdefaultpass = ((string)$l->logdefaultpass === '0') ? 'true' : null;
+        if ($config->syslog->nologdefaultpass === null) {
+            unset($config->syslog->nologdefaultpass);
+        }
+
+        if ((string)$l->logoutboundnat === '1') {
+            $config->syslog->logoutboundnat = 'true';
+        } else {
+            unset($config->syslog->logoutboundnat);
+        }
+
+        $config->syslog->nologbogons = ((string)$l->logbogons === '0') ? 'true' : null;
+        if ($config->syslog->nologbogons === null) {
+            unset($config->syslog->nologbogons);
+        }
+
+        $config->syslog->nologprivatenets = ((string)$l->logprivatenets === '0') ? 'true' : null;
+        if ($config->syslog->nologprivatenets === null) {
+            unset($config->syslog->nologprivatenets);
+        }
+    }
+
+    /**
+     * Persist volatile SNAT and settings fields into legacy configuration nodes.
      */
     public function serializeToConfig($validateFullModel = false, $disable_validation = false)
     {
         $result = parent::serializeToConfig($validateFullModel, $disable_validation);
-        $mode = $this->settings->nat->snat_mode->getValue();
-        if ((string)Config::getInstance()->object()->nat->outbound->mode !== $mode) {
-            /* SimpleXML will create the node when not there */
-            Config::getInstance()->object()->nat->outbound->mode = $mode;
+        if ($result) {
+            $mode = $this->settings->nat->snat_mode->getValue();
+            if ((string)Config::getInstance()->object()->nat->outbound->mode !== $mode) {
+                /* SimpleXML will create the node when not there */
+                Config::getInstance()->object()->nat->outbound->mode = $mode;
+            }
+            $this->syncToLegacyConfig();
         }
         return $result;
     }

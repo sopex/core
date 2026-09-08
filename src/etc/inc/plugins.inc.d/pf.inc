@@ -149,7 +149,7 @@ function pf_firewall($fw)
                             'protocol' => 'tcp','flags' => 'any', 'from' => $network['from'],
                             'to' => $network['to'], 'quick' => false,
                             'descr' => "pass traffic between statically routed subnets",
-                            '#ref' => 'system_advanced_firewall.php#bypassstaticroutes'],
+                            '#ref' => 'ui/firewall/settings#bypassstaticroutes'],
                         $defaults['pass']
                     );
                     $fw->registerFilterRule(
@@ -157,7 +157,7 @@ function pf_firewall($fw)
                         ['interface' => $gw['interface'], 'statetype' => 'sloppy', 'ipprotocol' => $proto,
                             'from' => $network['from'],'to' => $network['to'], 'quick' => false,
                             'descr' => "pass traffic between statically routed subnets",
-                            '#ref' => 'system_advanced_firewall.php#bypassstaticroutes'],
+                            '#ref' => 'ui/firewall/settings#bypassstaticroutes'],
                         $defaults['pass']
                     );
                 }
@@ -274,7 +274,7 @@ function filter_auto_destination_nat()
                 'interface' => $lockoutif,
                 'nordr' => true,
                 'protocol' => 'tcp',
-                '#ref' => 'system_advanced_firewall.php#noantilockout',
+                '#ref' => 'ui/firewall/settings#noantilockout',
             ];
         }
     }

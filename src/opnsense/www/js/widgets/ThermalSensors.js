@@ -227,7 +227,7 @@ export default class ThermalSensors extends BaseWidget {
 
         if (!this.chart || data.length === 0) {
             $(`.${this.id}-chart-container`).html(`
-                <a href="/system_advanced_misc.php">${this.translations.unconfigured}</a>
+                <a href="/ui/core/misc">${this.translations.unconfigured}</a>
             `).css('margin', '2em auto')
             return;
         }

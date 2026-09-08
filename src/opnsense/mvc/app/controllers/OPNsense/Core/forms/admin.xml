@@ -1,0 +1,266 @@
+<form>
+    <tab id="webgui" description="Web GUI">
+        <field>
+            <id>admin.webgui.protocol</id>
+            <label>Protocol</label>
+            <type>dropdown</type>
+            <help>Select the protocol for web GUI management (HTTP or HTTPS).</help>
+        </field>
+        <field>
+            <id>admin.webgui.ssl-certref</id>
+            <label>SSL Certificate</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>The SSL certificate manager can be used to create or import certificates if required.</help>
+        </field>
+        <field>
+            <id>admin.webgui.ssl-ciphers</id>
+            <label>SSL Ciphers</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>Limit SSL cipher selection in case the system defaults are undesired. Note that restrictive use may lead to an inaccessible web GUI.</help>
+        </field>
+        <field>
+            <id>admin.webgui.ssl-hsts</id>
+            <label>HTTP Strict Transport Security</label>
+            <type>checkbox</type>
+            <help>HTTP Strict Transport Security (HSTS) is a web security policy mechanism that helps to protect websites against protocol downgrade attacks and cookie hijacking.</help>
+        </field>
+        <field>
+            <id>admin.webgui.port</id>
+            <label>TCP port</label>
+            <type>text</type>
+            <help>Enter a custom port number for the web GUI above if you want to override the default (80 for HTTP, 443 for HTTPS). Changes will take effect immediately after save.</help>
+        </field>
+        <field>
+            <id>admin.webgui.disablehttpredirect</id>
+            <label>HTTP Redirect</label>
+            <type>checkbox</type>
+            <help>When this is unchecked, access to the web GUI is always permitted even on port 80, regardless of the listening port configured. Check this box to disable this automatically added redirect rule.</help>
+        </field>
+        <field>
+            <id>admin.webgui.quietlogin</id>
+            <label>Login Messages</label>
+            <type>checkbox</type>
+            <help>When this is checked, successful logins to the web GUI will not be logged.</help>
+        </field>
+        <field>
+            <id>admin.webgui.session_timeout</id>
+            <label>Session Timeout</label>
+            <type>text</type>
+            <help>Time in minutes to expire idle management sessions. The default is 4 hours (240 minutes).</help>
+        </field>
+        <field>
+            <id>admin.webgui.nodnsrebindcheck</id>
+            <label>DNS Rebind Check</label>
+            <type>checkbox</type>
+            <help>When this is unchecked, your system is protected against DNS Rebinding attacks. This blocks private IP responses from your configured DNS servers. Check this box to disable this protection if it interferes with web GUI access or name resolution in your environment.</help>
+        </field>
+        <field>
+            <id>admin.webgui.althostnames</id>
+            <label>Alternate Hostnames</label>
+            <type>text</type>
+            <help>Here you can specify alternate hostnames by which the router may be queried, to bypass the DNS Rebinding Attack checks. Separate hostnames with spaces.</help>
+        </field>
+        <field>
+            <id>admin.webgui.compression</id>
+            <label>HTTP Compression</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>Enable compression of HTTP pages and dynamic content. Transfer less data to the client for an additional cost in processing power.</help>
+        </field>
+        <field>
+            <id>admin.webgui.httpaccesslog</id>
+            <label>Access log</label>
+            <type>checkbox</type>
+            <help>Enable access logging on the web GUI for debugging and analysis purposes.</help>
+        </field>
+        <field>
+            <id>admin.webgui.loglighttpd</id>
+            <label>Server Log</label>
+            <type>checkbox</type>
+            <help>If this is checked, errors from the web GUI will appear in the main system log.</help>
+        </field>
+        <field>
+            <id>admin.webgui.interfaces</id>
+            <label>Listen Interfaces</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>Only accept connections from the selected interfaces. Leave empty to listen globally. Use with care.</help>
+        </field>
+        <field>
+            <id>admin.webgui.nohttpreferercheck</id>
+            <label>HTTP_REFERER enforcement</label>
+            <type>checkbox</type>
+            <help>When this is unchecked, access to the web GUI is protected against HTTP_REFERER redirection attempts. Check this box to disable this protection if you find that it interferes with web GUI access in certain corner cases such as using external scripts to interact with this system.</help>
+        </field>
+    </tab>
+    <tab id="ssh" description="Secure Shell">
+        <field>
+            <id>admin.ssh.enabled</id>
+            <label>Enable Secure Shell</label>
+            <type>checkbox</type>
+            <help>Enable OpenSSH server daemon.</help>
+        </field>
+        <field>
+            <id>admin.ssh.permitrootlogin</id>
+            <label>Root Login</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>Root login is generally discouraged. It is advised to log in via another user and switch to root afterwards.</help>
+        </field>
+        <field>
+            <id>admin.ssh.passwordauth</id>
+            <label>Authentication Method</label>
+            <type>checkbox</type>
+            <help>When disabled, authorized keys need to be configured for each user that has been granted secure shell access.</help>
+        </field>
+        <field>
+            <id>admin.ssh.port</id>
+            <label>SSH port</label>
+            <type>text</type>
+            <help>Leave this blank for the default of 22.</help>
+        </field>
+        <field>
+            <id>admin.ssh.interfaces</id>
+            <label>Listen Interfaces</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>Only accept connections from the selected interfaces. Leave empty to listen globally. Use with care.</help>
+        </field>
+        <field>
+            <id>admin.ssh.kex</id>
+            <label>Key exchange algorithms</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>The key exchange methods that are used to generate per-connection keys.</help>
+        </field>
+        <field>
+            <id>admin.ssh.ciphers</id>
+            <label>Ciphers</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>The ciphers to encrypt the connection.</help>
+        </field>
+        <field>
+            <id>admin.ssh.macs</id>
+            <label>MACs</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>The message authentication codes used to detect traffic modification.</help>
+        </field>
+        <field>
+            <id>admin.ssh.keys</id>
+            <label>Host key algorithms</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>Specifies the host key algorithms that the server offers.</help>
+        </field>
+        <field>
+            <id>admin.ssh.keysig</id>
+            <label>Public key signature algorithms</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>The signature algorithms that are used for public key authentication.</help>
+        </field>
+        <field>
+            <id>admin.ssh.rekeylimit</id>
+            <label>Rekey Limit</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>Specifies the maximum amount of data that may be transmitted or received before the session key is renegotiated within a given time. The defaults depend on cipher and are usually the best option.</help>
+        </field>
+    </tab>
+    <tab id="console" description="Console">
+        <field>
+            <id>admin.console.usevirtualterminal</id>
+            <label>Console driver</label>
+            <type>checkbox</type>
+            <help>Use the virtual terminal driver (vt).</help>
+        </field>
+        <field>
+            <id>admin.console.primaryconsole</id>
+            <label>Primary Console</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>Select the primary console. This preferred console will show boot script output. All consoles display OS boot messages, console messages, and the console menu.</help>
+        </field>
+        <field>
+            <id>admin.console.secondaryconsole</id>
+            <label>Secondary Console</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>Select the secondary console if multiple consoles are present. All consoles display OS boot messages, console messages, and the console menu.</help>
+        </field>
+        <field>
+            <id>admin.console.serialspeed</id>
+            <label>Serial Speed</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>Allows selection of different speeds for the serial console port.</help>
+        </field>
+        <field>
+            <id>admin.console.serialusb</id>
+            <label>USB-based serial</label>
+            <type>checkbox</type>
+            <help>Use USB-based serial ports.</help>
+        </field>
+        <field>
+            <id>admin.console.disableconsolemenu</id>
+            <label>Console menu</label>
+            <type>checkbox</type>
+            <help>Password protect the console menu.</help>
+        </field>
+    </tab>
+    <tab id="auth" description="Authentication">
+        <field>
+            <id>admin.webgui.authmode</id>
+            <label>Server</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>Select one or more authentication servers to validate user credentials against. Multiple servers can make sense with remote authentication methods to provide a fallback during connectivity issues. When nothing is specified the default of "Local Database" is used.</help>
+        </field>
+        <field>
+            <id>admin.console.sudo_allow_wheel</id>
+            <label>Sudo</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>Permit sudo usage for administrators with shell access.</help>
+        </field>
+        <field>
+            <id>admin.console.sudo_allow_group</id>
+            <label>Sudo group</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>Select the allowed groups for sudo usage. The "wheel" group is always set for recovery purposes and an additional local group can be selected at will.</help>
+        </field>
+        <field>
+            <id>admin.console.user_allow_gen_token</id>
+            <label>User OTP seed</label>
+            <type>select_multiple</type>
+            <style>selectpicker</style>
+            <help>Permit users to generate their own OTP seed in the password page.</help>
+        </field>
+        <field>
+            <id>admin.console.autologout</id>
+            <label>Inactivity timeout</label>
+            <type>text</type>
+            <help>When set, defines the number of minutes an ssh or console session might idle before being logged out automatically, only available on [t]csh type shells. Does not affect currently active shells.</help>
+        </field>
+    </tab>
+    <tab id="deployment" description="Deployment">
+        <field>
+            <id>admin.development.deployment</id>
+            <label>Deployment type</label>
+            <type>dropdown</type>
+            <style>selectpicker</style>
+            <help>Set the deployment type of this OPNsense instance (Production or Development).</help>
+        </field>
+        <field>
+            <id>admin.webgui.noroot</id>
+            <label>Strict security</label>
+            <type>checkbox</type>
+            <help>Stricten security by running the webserver as non root user (Experimental). Not all components may be compatible with this feature.</help>
+        </field>
+    </tab>
+</form>

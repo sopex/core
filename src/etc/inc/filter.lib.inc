@@ -227,7 +227,7 @@ function filter_core_rules_system($fw, $defaults)
             1,
             ['ipprotocol' => 'inet6', 'protocol' => 'ipv6-icmp', 'icmp6-type' => '1,2,3,4,135,136',
                 'statetype' => 'keep', 'descr' => 'IPv6 RFC4890 requirements (ICMP)', 'disabled' => $ipv6_disabled,
-                '#ref' => 'system_advanced_firewall.php#no_ipv6_rfc4890_req'],
+                '#ref' => 'ui/firewall/settings#no_ipv6_rfc4890_req'],
             $defaults['pass']
         );
         // Allow only bare essential icmpv6 packets
@@ -236,7 +236,7 @@ function filter_core_rules_system($fw, $defaults)
             ['ipprotocol' => 'inet6', 'protocol' => 'ipv6-icmp', 'icmp6-type' => '128,129,133,134,135,136',
                 'statetype' => 'keep', 'descr' => 'IPv6 RFC4890 requirements (ICMP)', 'from' => '(self)',
                 'to' => 'fe80::/10,ff02::/16', 'direction' => 'out', 'disabled' => $ipv6_disabled,
-                '#ref' => 'system_advanced_firewall.php#no_ipv6_rfc4890_req'],
+                '#ref' => 'ui/firewall/settings#no_ipv6_rfc4890_req'],
             $defaults['pass']
         );
         $fw->registerFilterRule(
@@ -244,7 +244,7 @@ function filter_core_rules_system($fw, $defaults)
             ['ipprotocol' => 'inet6', 'protocol' => 'ipv6-icmp', 'icmp6-type' => '128,133,134,135,136',
                 'statetype' => 'keep', 'descr' => 'IPv6 RFC4890 requirements (ICMP)', 'from' => 'fe80::/10',
                 'to' => 'fe80::/10,ff02::/16', 'direction' => 'in', 'disabled' => $ipv6_disabled,
-                '#ref' => 'system_advanced_firewall.php#no_ipv6_rfc4890_req'],
+                '#ref' => 'ui/firewall/settings#no_ipv6_rfc4890_req'],
             $defaults['pass']
         );
         $fw->registerFilterRule(
@@ -252,7 +252,7 @@ function filter_core_rules_system($fw, $defaults)
             ['ipprotocol' => 'inet6', 'protocol' => 'ipv6-icmp', 'icmp6-type' => '128,133,134,135,136',
                 'statetype' => 'keep', 'descr' => 'IPv6 RFC4890 requirements (ICMP)', 'from' => 'ff02::/16',
                 'to' => 'fe80::/10', 'direction' => 'in', 'disabled' => $ipv6_disabled,
-                '#ref' => 'system_advanced_firewall.php#no_ipv6_rfc4890_req'],
+                '#ref' => 'ui/firewall/settings#no_ipv6_rfc4890_req'],
             $defaults['pass']
         );
         $fw->registerFilterRule(
@@ -260,7 +260,7 @@ function filter_core_rules_system($fw, $defaults)
             ['ipprotocol' => 'inet6', 'protocol' => 'ipv6-icmp', 'icmp6-type' => '128,133,134,135,136',
                 'statetype' => 'keep', 'descr' => 'IPv6 RFC4890 requirements (ICMP)', 'from' => '::',
                 'to' => 'ff02::/16', 'direction' => 'in', 'disabled' => $ipv6_disabled,
-                '#ref' => 'system_advanced_firewall.php#no_ipv6_rfc4890_req'],
+                '#ref' => 'ui/firewall/settings#no_ipv6_rfc4890_req'],
             $defaults['pass']
         );
     }
@@ -273,7 +273,7 @@ function filter_core_rules_system($fw, $defaults)
                 /* XXX get rid of inet46 it should pertain to all */
                 ['ipprotocol' => 'inet46', 'protocol' => 'tcp/udp', $target => '0',
                     'descr' => 'block all targeting port 0',
-                    '#ref' => 'system_advanced_firewall.php#no_port0_block'],
+                    '#ref' => 'ui/firewall/settings#no_port0_block'],
                 $defaults['block']
             );
         }
@@ -296,7 +296,7 @@ function filter_core_rules_system($fw, $defaults)
             1,
             ['protocol' => 'tcp', 'from' => '<sshlockout>', 'to' => '(self)' , 'descr' => 'sshlockout', 'direction' => 'in',
             'to_port' => !empty($config['system']['ssh']['port']) ? $config['system']['ssh']['port'] : 22,
-            '#ref' => 'system_advanced_firewall.php#no_sshlockout'],
+            '#ref' => 'ui/firewall/settings#no_sshlockout'],
             $defaults['block']
         );
         $webport = '443';
@@ -309,7 +309,7 @@ function filter_core_rules_system($fw, $defaults)
             1,
             ['protocol' => 'tcp', 'from' => '<sshlockout>', 'to' => '(self)' , 'descr' => 'sshlockout',
             'direction' => 'in','to_port' => $webport,
-            '#ref' => 'system_advanced_firewall.php#no_sshlockout'],
+            '#ref' => 'ui/firewall/settings#no_sshlockout'],
             $defaults['block']
         );
     }
@@ -319,7 +319,7 @@ function filter_core_rules_system($fw, $defaults)
         $fw->registerFilterRule(
             1,
             ['from' => '<virusprot>', 'descr' => 'virusprot overload table',
-            '#ref' => 'system_advanced_firewall.php#no_virusprot'],
+            '#ref' => 'ui/firewall/settings#no_virusprot'],
             $defaults['block']
         );
     }
@@ -588,7 +588,7 @@ function filter_core_rules_system($fw, $defaults)
                     'to' => '(self)',
                     'to_port' => $to_port,
                     'descr' => 'anti-lockout rule',
-                    '#ref' => 'system_advanced_firewall.php#noantilockout'
+                    '#ref' => 'ui/firewall/settings#noantilockout'
                 ],
                 $defaults['pass']
             );
@@ -622,7 +622,7 @@ function filter_core_rules_system($fw, $defaults)
                                     'statetype' => 'keep',
                                     'allowopts' => true,
                                     'quick' => false,
-                                    '#ref' => 'system_advanced_firewall.php#pf_disable_force_gw',
+                                    '#ref' => 'ui/firewall/settings#pf_disable_force_gw',
                                     'descr' => "let out anything from firewall host itself (force gw)"],
                                     $defaults['pass']
                                 );

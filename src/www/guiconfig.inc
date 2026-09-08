@@ -233,7 +233,7 @@ function print_firewall_banner()
                 'currently not enforced. It can be enabled in the %sFirewall/NAT%s ' .
                 'settings.'
             ),
-            '<a href="/system_advanced_firewall.php">',
+            '<a href="/ui/firewall/settings">',
             '</a>'
         ));
     }
