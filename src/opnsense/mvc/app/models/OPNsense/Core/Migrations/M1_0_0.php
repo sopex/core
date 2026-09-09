@@ -34,9 +34,29 @@ use OPNsense\Core\Config;
 use OPNsense\Core\Firmware;
 use OPNsense\Core\General;
 use OPNsense\Core\Misc;
-
 class M1_0_0 extends BaseModelMigration
 {
+    /**
+     * Parse legacy boolean/presence node.
+     * In legacy XML, presence of a tag (such as empty <tag/>, <tag>true</tag>, <tag>1</tag>, or <tag>yes</tag>)
+     * indicates the flag is enabled. Only explicit '0', 'no', 'false', or 'off' represents disabled.
+     *
+     * @param mixed $node
+     * @param string $default
+     * @return string '1' or '0'
+     */
+    private function parseLegacyBool($node, string $default = '0'): string
+    {
+        if (!isset($node)) {
+            return $default;
+        }
+        $val = strtolower(trim((string)$node));
+        if ($val === '0' || $val === 'no' || $val === 'false' || $val === 'off') {
+            return '0';
+        }
+        return '1';
+    }
+
     /**
      * Migrate Core models to version 1.0.0
      * @param $model
@@ -71,19 +91,19 @@ class M1_0_0 extends BaseModelMigration
                     $model->dnssearchdomain = (string)$config->system->dnssearchdomain;
                 }
                 if (isset($config->system->dnsallowoverride)) {
-                    $model->dnsallowoverride = !empty((string)$config->system->dnsallowoverride) ? '1' : '0';
+                    $model->dnsallowoverride = $this->parseLegacyBool($config->system->dnsallowoverride);
                 }
                 if (!empty((string)$config->system->dnsallowoverride_exclude)) {
                     $model->dnsallowoverride_exclude = (string)$config->system->dnsallowoverride_exclude;
                 }
                 if (isset($config->system->dnslocalhost)) {
-                    $model->dnslocalhost = '1';
+                    $model->dnslocalhost = $this->parseLegacyBool($config->system->dnslocalhost);
                 }
                 if (isset($config->system->prefer_ipv4)) {
-                    $model->prefer_ipv4 = '1';
+                    $model->prefer_ipv4 = $this->parseLegacyBool($config->system->prefer_ipv4);
                 }
                 if (isset($config->system->gw_switch_default)) {
-                    $model->gw_switch_default = '1';
+                    $model->gw_switch_default = $this->parseLegacyBool($config->system->gw_switch_default);
                 }
                 if (!empty((string)$config->system->picture)) {
                     $model->picture = (string)$config->system->picture;
@@ -141,14 +161,14 @@ class M1_0_0 extends BaseModelMigration
                     }
                     $model->webgui->{'ssl-ciphers'} = implode(',', array_filter(array_map('trim', $ciphers)));
                 }
-                if (isset($webgui->{'ssl-hsts'}) && !empty((string)$webgui->{'ssl-hsts'})) {
-                    $model->webgui->{'ssl-hsts'} = '1';
+                if (isset($webgui->{'ssl-hsts'})) {
+                    $model->webgui->{'ssl-hsts'} = $this->parseLegacyBool($webgui->{'ssl-hsts'});
                 }
-                if (isset($webgui->disablehttpredirect) && !empty((string)$webgui->disablehttpredirect)) {
-                    $model->webgui->disablehttpredirect = '1';
+                if (isset($webgui->disablehttpredirect)) {
+                    $model->webgui->disablehttpredirect = $this->parseLegacyBool($webgui->disablehttpredirect);
                 }
-                if (isset($webgui->httpaccesslog) && !empty((string)$webgui->httpaccesslog)) {
-                    $model->webgui->httpaccesslog = '1';
+                if (isset($webgui->httpaccesslog)) {
+                    $model->webgui->httpaccesslog = $this->parseLegacyBool($webgui->httpaccesslog);
                 }
                 if (!empty((string)$webgui->session_timeout)) {
                     $model->webgui->session_timeout = (string)$webgui->session_timeout;
@@ -156,14 +176,14 @@ class M1_0_0 extends BaseModelMigration
                 if (isset($webgui->compression) && (string)$webgui->compression !== '') {
                     $model->webgui->compression = (string)$webgui->compression;
                 }
-                if (isset($webgui->nodnsrebindcheck) && !empty((string)$webgui->nodnsrebindcheck)) {
-                    $model->webgui->nodnsrebindcheck = '1';
+                if (isset($webgui->nodnsrebindcheck)) {
+                    $model->webgui->nodnsrebindcheck = $this->parseLegacyBool($webgui->nodnsrebindcheck);
                 }
-                if (isset($webgui->nohttpreferercheck) && !empty((string)$webgui->nohttpreferercheck)) {
-                    $model->webgui->nohttpreferercheck = '1';
+                if (isset($webgui->nohttpreferercheck)) {
+                    $model->webgui->nohttpreferercheck = $this->parseLegacyBool($webgui->nohttpreferercheck);
                 }
-                if (isset($webgui->noroot) && !empty((string)$webgui->noroot)) {
-                    $model->webgui->noroot = '1';
+                if (isset($webgui->noroot)) {
+                    $model->webgui->noroot = $this->parseLegacyBool($webgui->noroot);
                 }
                 if (!empty((string)$webgui->althostnames)) {
                     $model->webgui->althostnames = (string)$webgui->althostnames;
@@ -174,16 +194,16 @@ class M1_0_0 extends BaseModelMigration
                 if (!empty((string)$webgui->authmode)) {
                     $model->webgui->authmode = (string)$webgui->authmode;
                 }
-                if (isset($webgui->quietlogin) && !empty((string)$webgui->quietlogin)) {
-                    $model->webgui->quietlogin = '1';
+                if (isset($webgui->quietlogin)) {
+                    $model->webgui->quietlogin = $this->parseLegacyBool($webgui->quietlogin);
                 }
             }
 
             // 2. OpenSSH settings migration
             if (isset($config->system->ssh)) {
                 $ssh = $config->system->ssh;
-                if (!empty((string)$ssh->enabled)) {
-                    $model->ssh->enabled = '1';
+                if (isset($ssh->enabled)) {
+                    $model->ssh->enabled = $this->parseLegacyBool($ssh->enabled);
                 }
                 if (isset($ssh->port) && (string)$ssh->port !== '') {
                     $model->ssh->port = (string)$ssh->port;
@@ -209,30 +229,32 @@ class M1_0_0 extends BaseModelMigration
                 if (!empty((string)$ssh->rekeylimit)) {
                     $model->ssh->rekeylimit = (string)$ssh->rekeylimit;
                 }
-                if (isset($ssh->passwordauth) && !empty((string)$ssh->passwordauth)) {
-                    $model->ssh->passwordauth = '1';
+                if (isset($ssh->passwordauth)) {
+                    $model->ssh->passwordauth = $this->parseLegacyBool($ssh->passwordauth);
                 }
                 if (isset($ssh->permitrootlogin)) {
-                    $prl = (string)$ssh->permitrootlogin;
-                    if (in_array($prl, ['yes', 'no', 'without-password', 'prohibit-password'])) {
-                        $model->ssh->permitrootlogin = ($prl === 'prohibit-password') ? 'without-password' : $prl;
+                    $prl = strtolower(trim((string)$ssh->permitrootlogin));
+                    if ($prl === 'without-password' || $prl === 'prohibit-password') {
+                        $model->ssh->permitrootlogin = 'without-password';
+                    } elseif ($prl === 'no' || $prl === '0' || $prl === 'false' || $prl === 'off') {
+                        $model->ssh->permitrootlogin = 'no';
                     } else {
-                        $model->ssh->permitrootlogin = !empty($prl) ? 'yes' : 'no';
+                        $model->ssh->permitrootlogin = 'yes';
                     }
                 }
                 if (isset($ssh->noauto)) {
-                    $model->ssh->noauto = !empty((string)$ssh->noauto) ? '1' : '0';
+                    $model->ssh->noauto = $this->parseLegacyBool($ssh->noauto);
                 }
             }
 
             // 3. Console & Shell settings migration
             if (isset($config->system)) {
                 $sys = $config->system;
-                if (isset($sys->disableconsolemenu) && !empty((string)$sys->disableconsolemenu)) {
-                    $model->console->disableconsolemenu = '1';
+                if (isset($sys->disableconsolemenu)) {
+                    $model->console->disableconsolemenu = $this->parseLegacyBool($sys->disableconsolemenu);
                 }
                 if (isset($sys->usevirtualterminal)) {
-                    $model->console->usevirtualterminal = !empty((string)$sys->usevirtualterminal) ? '1' : '0';
+                    $model->console->usevirtualterminal = $this->parseLegacyBool($sys->usevirtualterminal);
                 }
                 if (isset($sys->sudo_allow_wheel) && (string)$sys->sudo_allow_wheel !== '') {
                     $model->console->sudo_allow_wheel = (string)$sys->sudo_allow_wheel;
@@ -246,8 +268,8 @@ class M1_0_0 extends BaseModelMigration
                 if (!empty((string)$sys->serialspeed)) {
                     $model->console->serialspeed = (string)$sys->serialspeed;
                 }
-                if (isset($sys->serialusb) && !empty((string)$sys->serialusb)) {
-                    $model->console->serialusb = '1';
+                if (isset($sys->serialusb)) {
+                    $model->console->serialusb = $this->parseLegacyBool($sys->serialusb);
                 }
                 if (!empty((string)$sys->primaryconsole)) {
                     $model->console->primaryconsole = (string)$sys->primaryconsole;
@@ -264,8 +286,8 @@ class M1_0_0 extends BaseModelMigration
             }
 
             // 4. Syslog settings migration (inverted)
-            if (isset($config->syslog->nologlighttpd) && !empty((string)$config->syslog->nologlighttpd)) {
-                $model->development->nologlighttpd = '1';
+            if (isset($config->syslog->nologlighttpd)) {
+                $model->development->nologlighttpd = $this->parseLegacyBool($config->syslog->nologlighttpd);
             } else {
                 $model->development->nologlighttpd = '0';
             }
@@ -276,7 +298,7 @@ class M1_0_0 extends BaseModelMigration
             if (isset($config->system)) {
                 $sys = $config->system;
                 if (isset($sys->powerd_enable)) {
-                    $model->powerd_enable = !empty((string)$sys->powerd_enable) ? '1' : '0';
+                    $model->powerd_enable = $this->parseLegacyBool($sys->powerd_enable);
                 }
                 if (!empty((string)$sys->powerd_ac_mode)) {
                     $model->powerd_ac_mode = (string)$sys->powerd_ac_mode;
@@ -294,22 +316,22 @@ class M1_0_0 extends BaseModelMigration
                     $model->thermal_hardware = (string)$sys->thermal_hardware;
                 }
                 if (isset($sys->use_mfs_var)) {
-                    $model->use_mfs_var = !empty((string)$sys->use_mfs_var) ? '1' : '0';
+                    $model->use_mfs_var = $this->parseLegacyBool($sys->use_mfs_var);
                 }
                 if (isset($sys->max_mfs_var) && (string)$sys->max_mfs_var !== '') {
                     $model->max_mfs_var = (string)$sys->max_mfs_var;
                 }
                 if (isset($sys->use_mfs_tmp)) {
-                    $model->use_mfs_tmp = !empty((string)$sys->use_mfs_tmp) ? '1' : '0';
+                    $model->use_mfs_tmp = $this->parseLegacyBool($sys->use_mfs_tmp);
                 }
                 if (isset($sys->max_mfs_tmp) && (string)$sys->max_mfs_tmp !== '') {
                     $model->max_mfs_tmp = (string)$sys->max_mfs_tmp;
                 }
                 if (isset($sys->use_swap_file)) {
-                    $model->use_swap_file = !empty((string)$sys->use_swap_file) ? '1' : '0';
+                    $model->use_swap_file = $this->parseLegacyBool($sys->use_swap_file);
                 }
                 if (isset($sys->disablebeep)) {
-                    $model->disablebeep = !empty((string)$sys->disablebeep) ? '1' : '0';
+                    $model->disablebeep = $this->parseLegacyBool($sys->disablebeep);
                 }
             }
 

@@ -86,6 +86,9 @@ class GeneralControllerTest extends \PHPUnit\Framework\TestCase
         (new AppConfig())->update('application.configDir', self::$testConfigDir);
         (new AppConfig())->update('globals.simulate_mode', true);
         Config::getInstance()->forceReload();
+        if (file_exists('/tmp/.general_staleroutes.json')) {
+            @unlink('/tmp/.general_staleroutes.json');
+        }
     }
 
     protected function tearDown(): void
@@ -302,6 +305,72 @@ class GeneralControllerTest extends \PHPUnit\Framework\TestCase
         $this->assertCount(2, $items, 'Existing DNS servers must not be erased on partial save');
         $this->assertEquals('8.8.8.8', (string)$items[0]->server);
         $this->assertEquals('1.1.1.1', (string)$items[1]->server);
+    }
+
+    /**
+     * Test partial flat DNS edits (e.g. dns1gw only, or dns1 only) merge with existing values
+     * rather than deleting other configured DNS servers or omitting existing fields.
+     */
+    public function testPartialFlatDnsEditsPreserveOtherDnsServers()
+    {
+        // 1. Initial save with 2 servers
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['general'] = [
+            'dnsservers' => [
+                ['server' => '8.8.8.8', 'gateway' => 'none'],
+                ['server' => '1.1.1.1', 'gateway' => 'none'],
+            ]
+        ];
+        $controller1 = $this->getController();
+        $res1 = $controller1->setAction();
+        $this->assertEquals('saved', $res1['result']);
+
+        // 2. Partial flat edit: only modify dns1gw
+        $_POST = [];
+        $_POST['general'] = [
+            'dns1gw' => 'WAN_GW'
+        ];
+        $controller2 = $this->getController();
+        $res2 = $controller2->setAction();
+        $this->assertEquals('saved', $res2['result']);
+
+        $model2 = $this->getModelFromController($controller2);
+        $items2 = array_values(iterator_to_array($model2->dnsservers->iterateItems()));
+        $this->assertCount(2, $items2, 'Supplying only dns1gw must not delete existing servers');
+        $this->assertEquals('8.8.8.8', (string)$items2[0]->server);
+        $this->assertEquals('WAN_GW', (string)$items2[0]->gateway);
+        $this->assertEquals('1.1.1.1', (string)$items2[1]->server);
+        $this->assertEquals('none', (string)$items2[1]->gateway);
+
+        // 3. Partial flat edit: only modify dns1 server IP
+        $_POST = [];
+        $_POST['general'] = [
+            'dns1' => '9.9.9.9'
+        ];
+        $controller3 = $this->getController();
+        $res3 = $controller3->setAction();
+        $this->assertEquals('saved', $res3['result']);
+
+        $model3 = $this->getModelFromController($controller3);
+        $items3 = array_values(iterator_to_array($model3->dnsservers->iterateItems()));
+        $this->assertCount(2, $items3, 'Supplying only dns1 must not drop the remaining servers');
+        $this->assertEquals('9.9.9.9', (string)$items3[0]->server);
+        $this->assertEquals('WAN_GW', (string)$items3[0]->gateway);
+        $this->assertEquals('1.1.1.1', (string)$items3[1]->server);
+        $this->assertEquals('none', (string)$items3[1]->gateway);
+
+        // 4. Explicit clear via empty array dnsservers: []
+        $_POST = [];
+        $_POST['general'] = [
+            'dnsservers' => []
+        ];
+        $controller4 = $this->getController();
+        $res4 = $controller4->setAction();
+        $this->assertEquals('saved', $res4['result']);
+
+        $model4 = $this->getModelFromController($controller4);
+        $items4 = iterator_to_array($model4->dnsservers->iterateItems());
+        $this->assertCount(0, $items4, 'Explicit dnsservers: [] clears all servers');
     }
 
     /**
@@ -585,6 +654,62 @@ class GeneralControllerTest extends \PHPUnit\Framework\TestCase
         $this->assertIsArray($result);
         $this->assertEquals('ok', $result['status']);
         $this->assertFileDoesNotExist($staleFile, 'Stale routes cache file must be unlinked after reconfigure');
+    }
+
+    /**
+     * Test successive saves before reconfiguration accumulate and deduplicate pending stale DNS routes
+     */
+    public function testSuccessiveSavesAccumulatePendingDnsRouteCleanup()
+    {
+        $staleFile = '/tmp/.general_staleroutes.json';
+        if (file_exists($staleFile)) {
+            @unlink($staleFile);
+        }
+
+        // 1. Initial setup: DNS1 has gateway WAN_GW
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['general'] = [
+            'dnsservers' => [
+                ['server' => '1.1.1.1', 'gateway' => 'WAN_GW'],
+            ]
+        ];
+        $controller1 = $this->getController();
+        $controller1->setAction();
+
+        // 2. First update: change DNS1 server from 1.1.1.1 to 2.2.2.2 (same gateway)
+        $_POST = [];
+        $_POST['general'] = [
+            'dnsservers' => [
+                ['server' => '2.2.2.2', 'gateway' => 'WAN_GW'],
+            ]
+        ];
+        $controller2 = $this->getController();
+        $controller2->setAction();
+
+        $this->assertFileExists($staleFile);
+        $stale1 = json_decode(file_get_contents($staleFile), true);
+        $this->assertEquals(['1.1.1.1'], $stale1);
+
+        // 3. Second update without reconfigure: change DNS1 server from 2.2.2.2 to 3.3.3.3
+        $_POST = [];
+        $_POST['general'] = [
+            'dnsservers' => [
+                ['server' => '3.3.3.3', 'gateway' => 'WAN_GW'],
+            ]
+        ];
+        $controller3 = $this->getController();
+        $controller3->setAction();
+
+        $this->assertFileExists($staleFile);
+        $stale2 = json_decode(file_get_contents($staleFile), true);
+        $this->assertContains('1.1.1.1', $stale2, 'Pending cleanup of original server must be preserved');
+        $this->assertContains('2.2.2.2', $stale2, 'Pending cleanup of second server must be accumulated');
+        $this->assertCount(2, $stale2, 'Stale routes must be accumulated and deduplicated');
+
+        // 4. Reconfigure consumes and cleans up the accumulated stale routes
+        $resReconfig = $controller3->reconfigureAction();
+        $this->assertEquals('ok', $resReconfig['status']);
+        $this->assertFileDoesNotExist($staleFile, 'Reconfigure must consume and unlink accumulated stale routes file');
     }
 
     /**

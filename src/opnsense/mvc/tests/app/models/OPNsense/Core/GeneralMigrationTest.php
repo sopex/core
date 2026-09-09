@@ -198,4 +198,31 @@ XML;
         $messages = $model->performValidation();
         $this->assertCount(0, $messages);
     }
+
+    public function testEmptyTagLegacyBooleanMigration()
+    {
+        $mockXml = <<<XML
+<?xml version="1.0"?>
+<opnsense>
+  <system>
+    <hostname>empty-tag-host</hostname>
+    <domain>test.domain</domain>
+    <prefer_ipv4/>
+    <gw_switch_default/>
+    <dnslocalhost/>
+    <dnsallowoverride/>
+  </system>
+</opnsense>
+XML;
+        $this->writeMockConfig($mockXml);
+
+        $model = new General();
+        $migration = new M1_0_0();
+        $migration->run($model);
+
+        $this->assertEquals('1', (string)$model->prefer_ipv4);
+        $this->assertEquals('1', (string)$model->gw_switch_default);
+        $this->assertEquals('1', (string)$model->dnslocalhost);
+        $this->assertEquals('1', (string)$model->dnsallowoverride);
+    }
 }

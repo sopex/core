@@ -244,4 +244,70 @@ EOF;
         $this->assertEquals('without-password', (string)$model->ssh->permitrootlogin);
         $this->assertCount(0, $model->performValidation());
     }
+
+    /**
+     * Test empty-tag legacy boolean migration (e.g. <disableconsolemenu/>, <ssl-hsts/>)
+     */
+    public function testEmptyTagLegacyBooleanMigration()
+    {
+        $xml = <<<EOF
+<opnsense>
+    <system>
+        <webgui>
+            <ssl-hsts/>
+            <disablehttpredirect/>
+            <httpaccesslog/>
+            <nodnsrebindcheck/>
+            <nohttpreferercheck/>
+            <noroot/>
+            <quietlogin/>
+        </webgui>
+        <ssh>
+            <enabled/>
+            <passwordauth/>
+            <permitrootlogin/>
+            <noauto/>
+        </ssh>
+        <disableconsolemenu/>
+        <usevirtualterminal/>
+        <serialusb/>
+    </system>
+    <syslog>
+        <nologlighttpd/>
+    </syslog>
+</opnsense>
+EOF;
+        $this->setMockConfig($xml);
+
+        $model = new Admin();
+        $migration = new M1_0_0();
+        $migration->run($model);
+
+        $this->assertEquals('1', (string)$model->webgui->{'ssl-hsts'});
+        $this->assertEquals('1', (string)$model->webgui->disablehttpredirect);
+        $this->assertEquals('1', (string)$model->webgui->httpaccesslog);
+        $this->assertEquals('1', (string)$model->webgui->nodnsrebindcheck);
+        $this->assertEquals('1', (string)$model->webgui->nohttpreferercheck);
+        $this->assertEquals('1', (string)$model->webgui->noroot);
+        $this->assertEquals('1', (string)$model->webgui->quietlogin);
+
+        $this->assertEquals('1', (string)$model->ssh->enabled);
+        $this->assertEquals('1', (string)$model->ssh->passwordauth);
+        $this->assertEquals('yes', (string)$model->ssh->permitrootlogin);
+        $this->assertEquals('1', (string)$model->ssh->noauto);
+
+        $this->assertEquals('1', (string)$model->console->disableconsolemenu);
+        $this->assertEquals('1', (string)$model->console->usevirtualterminal);
+        $this->assertEquals('1', (string)$model->console->serialusb);
+
+        $this->assertEquals('1', (string)$model->development->nologlighttpd);
+
+        // Verify that synchronizing preserves security settings in legacy XML
+        $model->syncToLegacyConfig();
+        $cfg = Config::getInstance()->object();
+        $this->assertTrue(isset($cfg->system->disableconsolemenu));
+        $this->assertTrue(isset($cfg->system->webgui->{'ssl-hsts'}));
+        $this->assertTrue(isset($cfg->system->webgui->disablehttpredirect));
+        $this->assertTrue(isset($cfg->system->ssh->enabled));
+    }
 }

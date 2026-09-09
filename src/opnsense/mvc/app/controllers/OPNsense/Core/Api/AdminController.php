@@ -64,27 +64,20 @@ class AdminController extends ApiMutableModelControllerBase
 
             // 2. Network Interfaces
             $interfaces = [];
-            if (file_exists('/usr/local/etc/inc/interfaces.inc')) {
-                require_once 'interfaces.inc';
-            }
-            if (function_exists('get_configured_interface_with_descr')) {
-                $interfaces = get_configured_interface_with_descr();
-            } elseif (function_exists('legacy_config_get_interfaces')) {
-                foreach (legacy_config_get_interfaces(['enable' => true]) as $ifname => $ifdetail) {
-                    $interfaces[$ifname] = $ifdetail['descr'] ?? strtoupper($ifname);
+            $configObj = Config::getInstance()->object();
+            if (isset($configObj->interfaces)) {
+                foreach ($configObj->interfaces->children() as $key => $ifnode) {
+                    if (!empty((string)$ifnode->enable)) {
+                        $interfaces[(string)$key] = !empty((string)$ifnode->descr) ? (string)$ifnode->descr : strtoupper((string)$key);
+                    }
                 }
             }
             $result['interfaces'] = $interfaces;
 
             // 3. Authentication Servers
             $authservers = [];
-            if (file_exists('/usr/local/etc/inc/auth.inc')) {
-                require_once 'auth.inc';
-            }
-            if (function_exists('auth_get_authserver_list')) {
-                foreach (auth_get_authserver_list('WebGui') as $auth_key => $auth_server) {
-                    $authservers[$auth_key] = $auth_server['name'] ?? $auth_key;
-                }
+            foreach ((new \OPNsense\Auth\AuthenticationFactory())->listServers('WebGui') as $auth_key => $auth_server) {
+                $authservers[$auth_key] = $auth_server['name'] ?? $auth_key;
             }
             $result['authservers'] = $authservers;
 
@@ -99,7 +92,6 @@ class AdminController extends ApiMutableModelControllerBase
 
             // 6. User Groups
             $groups = [];
-            $configObj = Config::getInstance()->object();
             if (isset($configObj->system->group)) {
                 foreach ($configObj->system->group as $group) {
                     $grpName = (string)$group->name;
@@ -110,19 +102,16 @@ class AdminController extends ApiMutableModelControllerBase
 
             // 7. Console Devices
             $consoles = [];
-            if (file_exists('/usr/local/etc/inc/system.inc')) {
-                require_once 'system.inc';
-            }
             if (function_exists('system_console_types')) {
                 foreach (system_console_types() as $console_key => $console_type) {
                     $consoles[$console_key] = $console_type['name'] ?? $console_key;
                 }
             } else {
                 $consoles = [
-                    'video'  => 'VGA Console',
-                    'serial' => 'Serial Console',
-                    'efi'    => 'EFI Console',
-                    'null'   => 'Mute Console'
+                    'video'  => gettext('VGA Console'),
+                    'serial' => gettext('Serial Console'),
+                    'efi'    => gettext('EFI Console'),
+                    'null'   => gettext('Mute Console')
                 ];
             }
             $result['consoles'] = $consoles;
@@ -346,10 +335,6 @@ class AdminController extends ApiMutableModelControllerBase
         }
 
         $certificates = [];
-        if (file_exists('/usr/local/etc/inc/certs.inc')) {
-            require_once 'certs.inc';
-        }
-
         $configObj = Config::getInstance()->object();
         if (isset($configObj->cert)) {
             foreach ($configObj->cert as $cert) {

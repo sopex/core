@@ -141,12 +141,41 @@ class GeneralController extends ApiMutableModelControllerBase
 
                 if ($hasDnsInput) {
                     if (!isset($postData['dnsservers'])) {
+                        // Extract existing DNS server slots to merge with omitted flat fields
+                        $existingSlots = [];
+                        if ($mdl->dnsservers !== null) {
+                            $slotIdx = 1;
+                            foreach ($mdl->dnsservers->iterateItems() as $dnsItem) {
+                                if ($slotIdx <= 8) {
+                                    $existingSlots[$slotIdx] = [
+                                        'server'  => (string)$dnsItem->server,
+                                        'gateway' => !empty((string)$dnsItem->gateway) ? (string)$dnsItem->gateway : 'none'
+                                    ];
+                                }
+                                $slotIdx++;
+                            }
+                        }
+
                         $dnsservers = [];
                         for ($i = 1; $i <= 8; $i++) {
-                            if (!empty($postData["dns{$i}"])) {
+                            // If slot i's server is provided in postData, use it; otherwise preserve existing slot value
+                            if (array_key_exists("dns{$i}", $postData)) {
+                                $srv = trim((string)$postData["dns{$i}"]);
+                            } else {
+                                $srv = $existingSlots[$i]['server'] ?? '';
+                            }
+
+                            // If slot i's gateway is provided in postData, use it; otherwise preserve existing slot value
+                            if (array_key_exists("dns{$i}gw", $postData)) {
+                                $gw = !empty($postData["dns{$i}gw"]) ? $postData["dns{$i}gw"] : 'none';
+                            } else {
+                                $gw = $existingSlots[$i]['gateway'] ?? 'none';
+                            }
+
+                            if (!empty($srv)) {
                                 $dnsservers[] = [
-                                    'server' => trim($postData["dns{$i}"]),
-                                    'gateway' => !empty($postData["dns{$i}gw"]) ? $postData["dns{$i}gw"] : 'none'
+                                    'server'  => $srv,
+                                    'gateway' => $gw
                                 ];
                             }
                         }
@@ -204,7 +233,15 @@ class GeneralController extends ApiMutableModelControllerBase
                         }
 
                         if (!empty($staleroutes)) {
-                            @file_put_contents(self::$staleRoutesFile, json_encode($staleroutes));
+                            $existingStale = [];
+                            if (file_exists(self::$staleRoutesFile)) {
+                                $decoded = json_decode(@file_get_contents(self::$staleRoutesFile), true);
+                                if (is_array($decoded)) {
+                                    $existingStale = $decoded;
+                                }
+                            }
+                            $merged = array_values(array_unique(array_merge($existingStale, $staleroutes)));
+                            @file_put_contents(self::$staleRoutesFile, json_encode($merged));
                         }
                     }
                 }

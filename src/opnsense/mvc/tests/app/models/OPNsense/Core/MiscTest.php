@@ -174,4 +174,38 @@ EOF;
         $this->assertEquals('2048', (string)$config->system->use_swap_file);
         $this->assertEquals('true', (string)$config->system->disablebeep);
     }
+
+    public function testEmptyTagLegacyBooleanMigration()
+    {
+        $xml = <<<EOF
+<opnsense>
+    <system>
+        <powerd_enable/>
+        <use_mfs_var/>
+        <use_mfs_tmp/>
+        <use_swap_file/>
+        <disablebeep/>
+    </system>
+</opnsense>
+EOF;
+        $this->setMockConfig($xml);
+
+        $model = new Misc();
+        $migration = new M1_0_0();
+        $migration->run($model);
+
+        $this->assertEquals('1', (string)$model->powerd_enable);
+        $this->assertEquals('1', (string)$model->use_mfs_var);
+        $this->assertEquals('1', (string)$model->use_mfs_tmp);
+        $this->assertEquals('1', (string)$model->use_swap_file);
+        $this->assertEquals('1', (string)$model->disablebeep);
+
+        $model->syncToLegacyConfig();
+        $config = Config::getInstance()->object();
+        $this->assertTrue(isset($config->system->powerd_enable));
+        $this->assertTrue(isset($config->system->use_mfs_var));
+        $this->assertTrue(isset($config->system->use_mfs_tmp));
+        $this->assertTrue(isset($config->system->use_swap_file));
+        $this->assertTrue(isset($config->system->disablebeep));
+    }
 }
