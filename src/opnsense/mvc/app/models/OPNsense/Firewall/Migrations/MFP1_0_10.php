@@ -50,7 +50,14 @@ class MFP1_0_10 extends BaseModelMigration
                     $model->settings->filter->optimization = (string)$system->optimization;
                 }
                 if (isset($system->{'state-policy'})) {
-                    $model->settings->filter->{'state-policy'} = (string)$system->{'state-policy'};
+                    $val = (string)$system->{'state-policy'};
+                    if ($val === '' || $val === '1' || $val === 'yes' || $val === 'if-bound') {
+                        $model->settings->filter->{'state-policy'} = 'if-bound';
+                    } else {
+                        $model->settings->filter->{'state-policy'} = 'floating';
+                    }
+                } else {
+                    $model->settings->filter->{'state-policy'} = 'floating';
                 }
                 if (isset($system->maximumstates) && (string)$system->maximumstates !== '') {
                     $model->settings->filter->maximumstates = (string)$system->maximumstates;

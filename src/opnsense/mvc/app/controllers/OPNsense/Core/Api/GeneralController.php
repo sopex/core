@@ -129,34 +129,46 @@ class GeneralController extends ApiMutableModelControllerBase
             }
 
             if (is_array($postData)) {
-                if (!isset($postData['dnsservers'])) {
-                    $dnsservers = [];
+                $hasDnsInput = array_key_exists('dnsservers', $postData);
+                if (!$hasDnsInput) {
                     for ($i = 1; $i <= 8; $i++) {
-                        if (!empty($postData["dns{$i}"])) {
-                            $dnsservers[] = [
-                                'server' => trim($postData["dns{$i}"]),
-                                'gateway' => !empty($postData["dns{$i}gw"]) ? $postData["dns{$i}gw"] : 'none'
-                            ];
+                        if (array_key_exists("dns{$i}", $postData) || array_key_exists("dns{$i}gw", $postData)) {
+                            $hasDnsInput = true;
+                            break;
                         }
                     }
-                    $postData['dnsservers'] = $dnsservers;
+                }
+
+                if ($hasDnsInput) {
+                    if (!isset($postData['dnsservers'])) {
+                        $dnsservers = [];
+                        for ($i = 1; $i <= 8; $i++) {
+                            if (!empty($postData["dns{$i}"])) {
+                                $dnsservers[] = [
+                                    'server' => trim($postData["dns{$i}"]),
+                                    'gateway' => !empty($postData["dns{$i}gw"]) ? $postData["dns{$i}gw"] : 'none'
+                                ];
+                            }
+                        }
+                        $postData['dnsservers'] = $dnsservers;
+                    }
+
+                    // Flush existing dnsservers so new set is applied cleanly
+                    if ($mdl->dnsservers !== null) {
+                        $delKeys = [];
+                        foreach ($mdl->dnsservers->iterateItems() as $key => $node) {
+                            $delKeys[] = $key;
+                        }
+                        foreach ($delKeys as $key) {
+                            $mdl->dnsservers->del($key);
+                        }
+                    }
                 }
 
                 // Handle delete picture signal
                 if (isset($postData['del_picture']) && ($postData['del_picture'] === 'true' || $postData['del_picture'] === true)) {
                     $postData['picture'] = '';
                     $postData['picture_filename'] = '';
-                }
-
-                // Flush existing dnsservers so new set is applied cleanly
-                if (isset($postData['dnsservers']) && $mdl->dnsservers !== null) {
-                    $delKeys = [];
-                    foreach ($mdl->dnsservers->iterateItems() as $key => $node) {
-                        $delKeys[] = $key;
-                    }
-                    foreach ($delKeys as $key) {
-                        $mdl->dnsservers->del($key);
-                    }
                 }
 
                 Config::getInstance()->lock();

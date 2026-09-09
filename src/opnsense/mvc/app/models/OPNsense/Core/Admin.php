@@ -40,83 +40,6 @@ use OPNsense\Core\Config;
 class Admin extends BaseModel
 {
     /**
-     * Map of legacy and flat property aliases to internal container nodes
-     */
-    private static $aliasMap = [
-        // WebGUI aliases
-        'protocol'             => ['webgui', 'protocol'],
-        'webguiproto'          => ['webgui', 'protocol'],
-        'port'                 => ['webgui', 'port'],
-        'webguiport'           => ['webgui', 'port'],
-        'ssl_certref'          => ['webgui', 'ssl-certref'],
-        'ssl-certref'          => ['webgui', 'ssl-certref'],
-        'ciphers'              => ['webgui', 'ssl-ciphers'],
-        'ssl_ciphers'          => ['webgui', 'ssl-ciphers'],
-        'ssl-ciphers'          => ['webgui', 'ssl-ciphers'],
-        'hsts'                 => ['webgui', 'ssl-hsts'],
-        'ssl_hsts'             => ['webgui', 'ssl-hsts'],
-        'ssl-hsts'             => ['webgui', 'ssl-hsts'],
-        'disablehttpredirect'  => ['webgui', 'disablehttpredirect'],
-        'httpaccesslog'        => ['webgui', 'httpaccesslog'],
-        'session_timeout'      => ['webgui', 'session_timeout'],
-        'compression'          => ['webgui', 'compression'],
-        'nodnsrebindcheck'     => ['webgui', 'nodnsrebindcheck'],
-        'nohttpreferercheck'   => ['webgui', 'nohttpreferercheck'],
-        'noroot'               => ['webgui', 'noroot'],
-        'althostnames'         => ['webgui', 'althostnames'],
-        'interfaces'           => ['webgui', 'interfaces'],
-        'webguiinterfaces'     => ['webgui', 'interfaces'],
-        'authmode'             => ['webgui', 'authmode'],
-        'quietlogin'           => ['webgui', 'quietlogin'],
-
-        // OpenSSH aliases
-        'ssh_enabled'          => ['ssh', 'enabled'],
-        'enablesshd'           => ['ssh', 'enabled'],
-        'ssh_port'             => ['ssh', 'port'],
-        'sshport'              => ['ssh', 'port'],
-        'ssh_interfaces'       => ['ssh', 'interfaces'],
-        'sshinterfaces'        => ['ssh', 'interfaces'],
-        'kex'                  => ['ssh', 'kex'],
-        'ssh_kex'              => ['ssh', 'kex'],
-        'ssh-kex'              => ['ssh', 'kex'],
-        'ssh_ciphers'          => ['ssh', 'ciphers'],
-        'ssh-ciphers'          => ['ssh', 'ciphers'],
-        'macs'                 => ['ssh', 'macs'],
-        'ssh_macs'             => ['ssh', 'macs'],
-        'ssh-macs'             => ['ssh', 'macs'],
-        'keys'                 => ['ssh', 'keys'],
-        'ssh_keys'             => ['ssh', 'keys'],
-        'ssh-keys'             => ['ssh', 'keys'],
-        'keysig'               => ['ssh', 'keysig'],
-        'ssh_keysig'           => ['ssh', 'keysig'],
-        'ssh-keysig'           => ['ssh', 'keysig'],
-        'rekeylimit'           => ['ssh', 'rekeylimit'],
-        'ssh_rekeylimit'       => ['ssh', 'rekeylimit'],
-        'ssh-rekeylimit'       => ['ssh', 'rekeylimit'],
-        'passwordauth'         => ['ssh', 'passwordauth'],
-        'sshpasswordauth'      => ['ssh', 'passwordauth'],
-        'permitrootlogin'      => ['ssh', 'permitrootlogin'],
-        'sshdpermitrootlogin'  => ['ssh', 'permitrootlogin'],
-        'noauto'               => ['ssh', 'noauto'],
-
-        // Console aliases
-        'disableconsolemenu'   => ['console', 'disableconsolemenu'],
-        'usevirtualterminal'   => ['console', 'usevirtualterminal'],
-        'sudo_allow_wheel'     => ['console', 'sudo_allow_wheel'],
-        'sudo_allow_group'     => ['console', 'sudo_allow_group'],
-        'user_allow_gen_token' => ['console', 'user_allow_gen_token'],
-        'serialspeed'          => ['console', 'serialspeed'],
-        'serialusb'            => ['console', 'serialusb'],
-        'primaryconsole'       => ['console', 'primaryconsole'],
-        'secondaryconsole'     => ['console', 'secondaryconsole'],
-        'autologout'           => ['console', 'autologout'],
-
-        // Development aliases
-        'deployment'           => ['development', 'deployment'],
-        'nologlighttpd'        => ['development', 'nologlighttpd'],
-    ];
-
-    /**
      * Populate dynamic option lists on initialization
      */
     protected function init()
@@ -144,68 +67,6 @@ class Admin extends BaseModel
     }
 
     /**
-     * Magic getter supporting flat and legacy property aliases
-     * @param string $name
-     * @return mixed
-     */
-    public function __get($name)
-    {
-        if ($name === 'loglighttpd') {
-            return (string)$this->development->nologlighttpd === '1' ? '0' : '1';
-        }
-
-        if (isset(self::$aliasMap[$name])) {
-            [$container, $field] = self::$aliasMap[$name];
-            return $this->$container->$field;
-        }
-
-        return parent::__get($name);
-    }
-
-    /**
-     * Magic setter supporting flat and legacy property aliases
-     * @param string $name
-     * @param mixed $value
-     */
-    public function __set($name, $value)
-    {
-        if ($name === 'loglighttpd') {
-            $this->development->nologlighttpd = (empty($value) || $value === '0') ? '1' : '0';
-            return;
-        }
-
-        if (isset(self::$aliasMap[$name])) {
-            [$container, $field] = self::$aliasMap[$name];
-
-            if ($name === 'permitrootlogin' || $name === 'sshdpermitrootlogin') {
-                if ($value === '1' || $value === 1) {
-                    $value = 'yes';
-                } elseif ($value === '0' || $value === 0 || $value === '') {
-                    $value = 'no';
-                }
-            }
-
-            $this->$container->$field = $value;
-            return;
-        }
-
-        parent::__set($name, $value);
-    }
-
-    /**
-     * Magic isset supporting flat and legacy property aliases
-     * @param string $name
-     * @return bool
-     */
-    public function __isset($name)
-    {
-        if ($name === 'loglighttpd' || isset(self::$aliasMap[$name])) {
-            return true;
-        }
-        return parent::__isset($name);
-    }
-
-    /**
      * Perform deep model validations matching system_advanced_admin.php
      * @param bool $validateFullModel
      * @return \OPNsense\Base\Validation\Group
@@ -218,18 +79,20 @@ class Admin extends BaseModel
         $webguiPort = (string)$this->webgui->port;
         if (!empty($webguiPort)) {
             if (!is_numeric($webguiPort) || (int)$webguiPort < 1 || (int)$webguiPort > 65535 || strpos((string)$webguiPort, '.') !== false) {
-                $msgText = gettext('You must specify a valid web GUI port number.');
-                $messages->appendMessage(new Message($msgText, 'webgui.port'));
-                $messages->appendMessage(new Message($msgText, 'port'));
+                $messages->appendMessage(new Message(
+                    gettext('You must specify a valid web GUI port number.'),
+                    'webgui.port'
+                ));
             }
         }
 
         /* 2. WebGUI Protocol validation */
         $protocol = (string)$this->webgui->protocol;
         if (empty($protocol) || !in_array($protocol, ['http', 'https'])) {
-            $msgText = gettext('You must specify a valid web GUI protocol.');
-            $messages->appendMessage(new Message($msgText, 'webgui.protocol'));
-            $messages->appendMessage(new Message($msgText, 'protocol'));
+            $messages->appendMessage(new Message(
+                gettext('You must specify a valid web GUI protocol.'),
+                'webgui.protocol'
+            ));
         }
 
         /* 3. Certificate Purpose check */
@@ -243,9 +106,10 @@ class Admin extends BaseModel
                             $purpose = cert_get_purpose((string)$cert->crt);
                             if (isset($purpose['server']) && $purpose['server'] === 'No') {
                                 $descr = (string)($cert->descr ?? $certRef);
-                                $msgText = sprintf(gettext('Certificate %s is not intended for server use.'), $descr);
-                                $messages->appendMessage(new Message($msgText, 'webgui.ssl-certref'));
-                                $messages->appendMessage(new Message($msgText, 'ssl_certref'));
+                                $messages->appendMessage(new Message(
+                                    sprintf(gettext('Certificate %s is not intended for server use.'), $descr),
+                                    'webgui.ssl-certref'
+                                ));
                             }
                         }
                         break;
@@ -264,9 +128,10 @@ class Admin extends BaseModel
                         ? is_hostname($host)
                         : (filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) !== false && strpos($host, '_') === false && strpos($host, '/') === false);
                     if (!$isValid) {
-                        $msgText = sprintf(gettext('Alternate hostname %s is not a valid hostname.'), htmlspecialchars($host));
-                        $messages->appendMessage(new Message($msgText, 'webgui.althostnames'));
-                        $messages->appendMessage(new Message($msgText, 'althostnames'));
+                        $messages->appendMessage(new Message(
+                            sprintf(gettext('Alternate hostname %s is not a valid hostname.'), htmlspecialchars($host)),
+                            'webgui.althostnames'
+                        ));
                     }
                 }
             }
@@ -276,9 +141,10 @@ class Admin extends BaseModel
         $sessionTimeout = (string)$this->webgui->session_timeout;
         if (!empty($sessionTimeout)) {
             if (!is_numeric($sessionTimeout) || (int)$sessionTimeout < 1 || strpos((string)$sessionTimeout, '.') !== false) {
-                $msgText = gettext('Session timeout must be an integer value.');
-                $messages->appendMessage(new Message($msgText, 'webgui.session_timeout'));
-                $messages->appendMessage(new Message($msgText, 'session_timeout'));
+                $messages->appendMessage(new Message(
+                    gettext('Session timeout must be an integer value.'),
+                    'webgui.session_timeout'
+                ));
             }
         }
 
@@ -295,9 +161,10 @@ class Admin extends BaseModel
                 }
             }
             if ($hasTls13 && !in_array('TLS_AES_128_GCM_SHA256', array_map('trim', $selectedCiphers))) {
-                $msgText = gettext('A TLS 1.3-compliant application MUST implement the TLS_AES_128_GCM_SHA256 according to RFC 8446.');
-                $messages->appendMessage(new Message($msgText, 'webgui.ssl-ciphers'));
-                $messages->appendMessage(new Message($msgText, 'ciphers'));
+                $messages->appendMessage(new Message(
+                    gettext('A TLS 1.3-compliant application MUST implement the TLS_AES_128_GCM_SHA256 according to RFC 8446.'),
+                    'webgui.ssl-ciphers'
+                ));
             }
         }
 
@@ -305,9 +172,10 @@ class Admin extends BaseModel
         $sshPort = (string)$this->ssh->port;
         if (!empty($sshPort)) {
             if (!is_numeric($sshPort) || (int)$sshPort < 1 || (int)$sshPort > 65535 || strpos((string)$sshPort, '.') !== false) {
-                $msgText = gettext('You must specify a valid SSH port number.');
-                $messages->appendMessage(new Message($msgText, 'ssh.port'));
-                $messages->appendMessage(new Message($msgText, 'ssh_port'));
+                $messages->appendMessage(new Message(
+                    gettext('You must specify a valid SSH port number.'),
+                    'ssh.port'
+                ));
             }
         }
 
@@ -315,27 +183,30 @@ class Admin extends BaseModel
         $rekey = (string)$this->ssh->rekeylimit;
         $validRekey = ['', 'default 60s', 'default 600s', '512M 60s', '512M 600s', '512M 1h', '1G 60s', '1G 1h'];
         if (!empty($rekey) && !in_array($rekey, $validRekey)) {
-            $msgText = gettext('Invalid rekey limit option.');
-            $messages->appendMessage(new Message($msgText, 'ssh.rekeylimit'));
-            $messages->appendMessage(new Message($msgText, 'rekeylimit'));
+            $messages->appendMessage(new Message(
+                gettext('Invalid rekey limit option.'),
+                'ssh.rekeylimit'
+            ));
         }
 
         /* 9. Console serial speed validation */
         $validSpeeds = ['1500000', '115200', '57600', '38400', '19200', '14400', '9600'];
         $speed = (string)$this->console->serialspeed;
         if (!empty($speed) && !in_array($speed, $validSpeeds)) {
-            $msgText = gettext('Invalid serial speed.');
-            $messages->appendMessage(new Message($msgText, 'console.serialspeed'));
-            $messages->appendMessage(new Message($msgText, 'serialspeed'));
+            $messages->appendMessage(new Message(
+                gettext('Invalid serial speed.'),
+                'console.serialspeed'
+            ));
         }
 
         /* 10. Shell Inactivity timeout validation (autologout >= 1) */
         $autologout = (string)$this->console->autologout;
         if (!empty($autologout)) {
             if (!is_numeric($autologout) || (int)$autologout < 1 || strpos((string)$autologout, '.') !== false) {
-                $msgText = gettext('Inactivity timeout must be an integer value.');
-                $messages->appendMessage(new Message($msgText, 'console.autologout'));
-                $messages->appendMessage(new Message($msgText, 'autologout'));
+                $messages->appendMessage(new Message(
+                    gettext('Inactivity timeout must be an integer value.'),
+                    'console.autologout'
+                ));
             }
         }
 
@@ -343,18 +214,35 @@ class Admin extends BaseModel
         $compression = (string)$this->webgui->compression;
         $validCompression = ['', '1', '5', '9'];
         if (!in_array($compression, $validCompression)) {
-            $msgText = gettext('Invalid compression value.');
-            $messages->appendMessage(new Message($msgText, 'webgui.compression'));
-            $messages->appendMessage(new Message($msgText, 'compression'));
+            $messages->appendMessage(new Message(
+                gettext('Invalid compression value.'),
+                'webgui.compression'
+            ));
         }
 
         /* 12. Sudo allow wheel validation */
         $sudoWheel = (string)$this->console->sudo_allow_wheel;
         $validWheel = ['', '1', '2'];
         if (!in_array($sudoWheel, $validWheel)) {
-            $msgText = gettext('Invalid sudo allow wheel option.');
-            $messages->appendMessage(new Message($msgText, 'console.sudo_allow_wheel'));
-            $messages->appendMessage(new Message($msgText, 'sudo_allow_wheel'));
+            $messages->appendMessage(new Message(
+                gettext('Invalid sudo allow wheel option.'),
+                'console.sudo_allow_wheel'
+            ));
+        }
+
+        /* 13. WebGUI Authentication Server validation */
+        $authmode = (string)$this->webgui->authmode;
+        if (!empty($authmode)) {
+            $validAuthServers = (new \OPNsense\Auth\AuthenticationFactory())->listServers('WebGui');
+            foreach (explode(',', $authmode) as $server) {
+                $server = trim($server);
+                if (!empty($server) && !isset($validAuthServers[$server])) {
+                    $messages->appendMessage(new Message(
+                        sprintf(gettext('%s is not a valid authentication server'), $server),
+                        'webgui.authmode'
+                    ));
+                }
+            }
         }
 
         return $messages;

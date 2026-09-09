@@ -68,8 +68,41 @@
             }
         });
 
-        // Handle picture file selection via FileReader
-        $('#pictfile').change(function(evt) {
+        // Inject picture controls into the picture row
+        const pictRow = $('#row_general\\.picture');
+        if (pictRow.length > 0) {
+            const customPictHtml = `
+                <tr id="row_custom_picture">
+                    <td>
+                        <div class="control-label">
+                            <a id="help_for_picture" href="#" class="showhelp"><i class="fa fa-info-circle fa-fw"></i></a>
+                            <b>{{ lang._('Picture') }}</b>
+                        </div>
+                    </td>
+                    <td>
+                        <div id="picture_container" style="display:none; padding: 5px; position: relative; max-width: 250px;">
+                            <button type="button" id="remove_picture" class="btn btn-xs btn-danger" style="position: absolute; top: 8px; left: 8px; z-index: 10;" title="{{ lang._('Remove picture') }}">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                            <a id="picture_link" href="/api/core/general/picture" target="_blank">
+                                <img id="picture_preview" style="border: 1px solid #ccc; max-width: 200px; max-height: 200px; border-radius: 4px;" src="" alt="Picture Preview" />
+                            </a>
+                        </div>
+                        <div id="picture_upload_ctrl">
+                            <input type="file" id="pictfile" accept="image/*" class="form-control" />
+                        </div>
+                        <div class="hidden" data-for="help_for_picture">
+                            <small>{{ lang._('Upload a picture, to be displayed in the Picture widget on the dashboard.') }}</small>
+                        </div>
+                    </td>
+                    <td></td>
+                </tr>
+            `;
+            pictRow.after(customPictHtml);
+        }
+
+        // Handle picture file selection via FileReader (delegated)
+        $(document).on('change', '#pictfile', function(evt) {
             if (evt.target.files && evt.target.files[0]) {
                 const file = evt.target.files[0];
                 if (file.size > 10 * 1024 * 1024) {
@@ -105,8 +138,8 @@
             }
         });
 
-        // Handle picture deletion
-        $('#remove_picture').click(function(event) {
+        // Handle picture deletion (delegated)
+        $(document).on('click', '#remove_picture', function(event) {
             event.preventDefault();
             $('#general\\.picture').val('');
             $('#general\\.picture_filename').val('');
@@ -114,39 +147,6 @@
             $('#picture_container').hide();
             $('#picture_upload_ctrl').show();
         });
-
-        // Inject picture controls into the picture row
-        const pictRow = $('#row_general\\.picture');
-        if (pictRow.length > 0) {
-            const customPictHtml = `
-                <tr id="row_custom_picture">
-                    <td>
-                        <div class="control-label">
-                            <a id="help_for_picture" href="#" class="showhelp"><i class="fa fa-info-circle fa-fw"></i></a>
-                            <b>{{ lang._('Picture') }}</b>
-                        </div>
-                    </td>
-                    <td>
-                        <div id="picture_container" style="display:none; padding: 5px; position: relative; max-width: 250px;">
-                            <button type="button" id="remove_picture" class="btn btn-xs btn-danger" style="position: absolute; top: 8px; left: 8px; z-index: 10;" title="{{ lang._('Remove picture') }}">
-                                <i class="fa fa-trash"></i>
-                            </button>
-                            <a id="picture_link" href="/api/core/general/picture" target="_blank">
-                                <img id="picture_preview" style="border: 1px solid #ccc; max-width: 200px; max-height: 200px; border-radius: 4px;" src="" alt="Picture Preview" />
-                            </a>
-                        </div>
-                        <div id="picture_upload_ctrl">
-                            <input type="file" id="pictfile" accept="image/*" class="form-control" />
-                        </div>
-                        <div class="hidden" data-for="help_for_picture">
-                            <small>{{ lang._('Upload a picture, to be displayed in the Picture widget on the dashboard.') }}</small>
-                        </div>
-                    </td>
-                    <td></td>
-                </tr>
-            `;
-            pictRow.after(customPictHtml);
-        }
 
         // Action button hook for save and reconfigure
         $('#reconfigureAct').SimpleActionButton({

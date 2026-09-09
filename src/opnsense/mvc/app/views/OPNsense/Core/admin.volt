@@ -111,13 +111,20 @@
                     'key': '#admin\\.ssh\\.keys',
                     'key-sig': '#admin\\.ssh\\.keysig'
                 };
+                const sshFieldModelMap = {
+                    'kex': 'kex',
+                    'cipher': 'ciphers',
+                    'mac': 'macs',
+                    'key': 'keys',
+                    'key-sig': 'keysig'
+                };
                 Object.keys(sshFieldMap).forEach(function(k) {
                     const $ctrl = $(sshFieldMap[k]);
                     $ctrl.empty();
                     (sshOpts[k] || []).forEach(function(opt) {
                         $ctrl.append(new Option(opt, opt));
                     });
-                    const modelKey = (k === 'cipher') ? 'ciphers' : (k === 'key-sig' ? 'keysig' : k);
+                    const modelKey = sshFieldModelMap[k] || k;
                     if (apiData.admin && apiData.admin.ssh && apiData.admin.ssh[modelKey]) {
                         $ctrl.val(apiData.admin.ssh[modelKey].split(','));
                     }

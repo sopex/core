@@ -265,6 +265,46 @@ class GeneralControllerTest extends \PHPUnit\Framework\TestCase
     }
 
     /**
+     * Test partial General update (e.g. only hostname) does not erase existing DNS servers
+     */
+    public function testPartialSaveDoesNotEraseDnsServers()
+    {
+        // 1. Initial save with DNS servers
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_POST['general'] = [
+            'hostname' => 'fw-initial',
+            'dnsservers' => [
+                ['server' => '8.8.8.8', 'gateway' => 'none'],
+                ['server' => '1.1.1.1', 'gateway' => 'none'],
+            ]
+        ];
+
+        $controller = $this->getController();
+        $result = $controller->setAction();
+        $this->assertEquals('saved', $result['result']);
+
+        $model = $this->getModelFromController($controller);
+        $this->assertCount(2, iterator_to_array($model->dnsservers->iterateItems()));
+
+        // 2. Partial update with only hostname
+        $_POST = [];
+        $_POST['general'] = [
+            'hostname' => 'fw-new-name'
+        ];
+
+        $controller2 = $this->getController();
+        $result2 = $controller2->setAction();
+        $this->assertEquals('saved', $result2['result']);
+
+        $model2 = $this->getModelFromController($controller2);
+        $this->assertEquals('fw-new-name', (string)$model2->hostname);
+        $items = array_values(iterator_to_array($model2->dnsservers->iterateItems()));
+        $this->assertCount(2, $items, 'Existing DNS servers must not be erased on partial save');
+        $this->assertEquals('8.8.8.8', (string)$items[0]->server);
+        $this->assertEquals('1.1.1.1', (string)$items[1]->server);
+    }
+
+    /**
      * Test setAction returns validation errors on invalid input
      */
     public function testSetActionValidationFailure()

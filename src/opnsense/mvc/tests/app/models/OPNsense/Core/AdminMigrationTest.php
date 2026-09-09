@@ -152,51 +152,51 @@ EOF;
         $migration->run($model);
 
         // Verify WebGUI settings
-        $this->assertEquals('https', (string)$model->protocol);
-        $this->assertEquals('8443', (string)$model->port);
-        $this->assertEquals('60a1b2c3d4e5f', (string)$model->ssl_certref);
-        $this->assertEquals('ECDHE-ECDSA-AES256-GCM-SHA384,ECDHE-RSA-AES256-GCM-SHA384', (string)$model->ciphers);
-        $this->assertEquals('1', (string)$model->hsts);
-        $this->assertEquals('1', (string)$model->disablehttpredirect);
-        $this->assertEquals('120', (string)$model->session_timeout);
-        $this->assertEquals('5', (string)$model->compression);
-        $this->assertEquals('1', (string)$model->httpaccesslog);
-        $this->assertEquals('1', (string)$model->nodnsrebindcheck);
-        $this->assertEquals('1', (string)$model->nohttpreferercheck);
-        $this->assertEquals('1', (string)$model->noroot);
-        $this->assertEquals('alt1.example.org alt2.example.org', (string)$model->althostnames);
-        $this->assertEquals('lan,opt1', (string)$model->interfaces);
-        $this->assertEquals('Local Database', (string)$model->authmode);
-        $this->assertEquals('1', (string)$model->quietlogin);
+        $this->assertEquals('https', (string)$model->webgui->protocol);
+        $this->assertEquals('8443', (string)$model->webgui->port);
+        $this->assertEquals('60a1b2c3d4e5f', (string)$model->webgui->{'ssl-certref'});
+        $this->assertEquals('ECDHE-ECDSA-AES256-GCM-SHA384,ECDHE-RSA-AES256-GCM-SHA384', (string)$model->webgui->{'ssl-ciphers'});
+        $this->assertEquals('1', (string)$model->webgui->{'ssl-hsts'});
+        $this->assertEquals('1', (string)$model->webgui->disablehttpredirect);
+        $this->assertEquals('120', (string)$model->webgui->session_timeout);
+        $this->assertEquals('5', (string)$model->webgui->compression);
+        $this->assertEquals('1', (string)$model->webgui->httpaccesslog);
+        $this->assertEquals('1', (string)$model->webgui->nodnsrebindcheck);
+        $this->assertEquals('1', (string)$model->webgui->nohttpreferercheck);
+        $this->assertEquals('1', (string)$model->webgui->noroot);
+        $this->assertEquals('alt1.example.org alt2.example.org', (string)$model->webgui->althostnames);
+        $this->assertEquals('lan,opt1', (string)$model->webgui->interfaces);
+        $this->assertEquals('Local Database', (string)$model->webgui->authmode);
+        $this->assertEquals('1', (string)$model->webgui->quietlogin);
 
         // Verify SSH settings
-        $this->assertEquals('1', (string)$model->ssh_enabled);
-        $this->assertEquals('2222', (string)$model->ssh_port);
-        $this->assertEquals('lan', (string)$model->ssh_interfaces);
-        $this->assertEquals('1', (string)$model->passwordauth);
-        $this->assertEquals('yes', (string)$model->permitrootlogin);
-        $this->assertEquals('curve25519-sha256', (string)$model->kex);
-        $this->assertEquals('chacha20-poly1305@openssh.com', (string)$model->ssh_ciphers);
-        $this->assertEquals('hmac-sha2-512-etm@openssh.com', (string)$model->macs);
-        $this->assertEquals('ssh-ed25519', (string)$model->keys);
-        $this->assertEquals('ssh-ed25519', (string)$model->keysig);
-        $this->assertEquals('512M 1h', (string)$model->rekeylimit);
+        $this->assertEquals('1', (string)$model->ssh->enabled);
+        $this->assertEquals('2222', (string)$model->ssh->port);
+        $this->assertEquals('lan', (string)$model->ssh->interfaces);
+        $this->assertEquals('1', (string)$model->ssh->passwordauth);
+        $this->assertEquals('yes', (string)$model->ssh->permitrootlogin);
+        $this->assertEquals('curve25519-sha256', (string)$model->ssh->kex);
+        $this->assertEquals('chacha20-poly1305@openssh.com', (string)$model->ssh->ciphers);
+        $this->assertEquals('hmac-sha2-512-etm@openssh.com', (string)$model->ssh->macs);
+        $this->assertEquals('ssh-ed25519', (string)$model->ssh->keys);
+        $this->assertEquals('ssh-ed25519', (string)$model->ssh->keysig);
+        $this->assertEquals('512M 1h', (string)$model->ssh->rekeylimit);
 
         // Verify Console & Shell settings
-        $this->assertEquals('1', (string)$model->usevirtualterminal);
-        $this->assertEquals('serial', (string)$model->primaryconsole);
-        $this->assertEquals('video', (string)$model->secondaryconsole);
-        $this->assertEquals('57600', (string)$model->serialspeed);
-        $this->assertEquals('1', (string)$model->serialusb);
-        $this->assertEquals('1', (string)$model->disableconsolemenu);
-        $this->assertEquals('30', (string)$model->autologout);
-        $this->assertEquals('2', (string)$model->sudo_allow_wheel);
-        $this->assertEquals('admins', (string)$model->sudo_allow_group);
-        $this->assertEquals('admins', (string)$model->user_allow_gen_token);
+        $this->assertEquals('1', (string)$model->console->usevirtualterminal);
+        $this->assertEquals('serial', (string)$model->console->primaryconsole);
+        $this->assertEquals('video', (string)$model->console->secondaryconsole);
+        $this->assertEquals('57600', (string)$model->console->serialspeed);
+        $this->assertEquals('1', (string)$model->console->serialusb);
+        $this->assertEquals('1', (string)$model->console->disableconsolemenu);
+        $this->assertEquals('30', (string)$model->console->autologout);
+        $this->assertEquals('2', (string)$model->console->sudo_allow_wheel);
+        $this->assertEquals('admins', (string)$model->console->sudo_allow_group);
+        $this->assertEquals('admins', (string)$model->console->user_allow_gen_token);
 
         // Verify Development & Syslog settings
-        $this->assertEquals('development', (string)$model->deployment);
-        $this->assertEquals('0', (string)$model->loglighttpd);
+        $this->assertEquals('development', (string)$model->development->deployment);
+        $this->assertEquals('1', (string)$model->development->nologlighttpd);
 
         $this->assertCount(0, $model->performValidation());
     }
@@ -212,11 +212,11 @@ EOF;
         $migration = new M1_0_0();
         $migration->run($model);
 
-        $this->assertEquals('https', (string)$model->protocol);
-        $this->assertEquals('115200', (string)$model->serialspeed);
-        $this->assertEquals('video', (string)$model->primaryconsole);
-        $this->assertEquals('no', (string)$model->permitrootlogin);
-        $this->assertEquals('1', (string)$model->loglighttpd);
+        $this->assertEquals('https', (string)$model->webgui->protocol);
+        $this->assertEquals('115200', (string)$model->console->serialspeed);
+        $this->assertEquals('video', (string)$model->console->primaryconsole);
+        $this->assertEquals('no', (string)$model->ssh->permitrootlogin);
+        $this->assertEquals('0', (string)$model->development->nologlighttpd);
 
         $this->assertCount(0, $model->performValidation());
     }
@@ -241,7 +241,7 @@ EOF;
         $migration = new M1_0_0();
         $migration->run($model);
 
-        $this->assertEquals('without-password', (string)$model->permitrootlogin);
+        $this->assertEquals('without-password', (string)$model->ssh->permitrootlogin);
         $this->assertCount(0, $model->performValidation());
     }
 }

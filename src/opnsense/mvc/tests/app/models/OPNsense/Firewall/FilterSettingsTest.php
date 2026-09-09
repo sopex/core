@@ -138,7 +138,7 @@ class FilterSettingsTest extends \PHPUnit\Framework\TestCase
     <system>
         <disablefilter>1</disablefilter>
         <optimization>aggressive</optimization>
-        <state-policy>if-bound</state-policy>
+        <state-policy/>
         <maximumstates>500000</maximumstates>
         <maximumfrags>10000</maximumfrags>
         <maximumtableentries>400000</maximumtableentries>
@@ -241,8 +241,39 @@ EOF;
         $config = Config::getInstance()->object();
         $this->assertEquals('true', (string)$config->system->disablefilter);
         $this->assertEquals('aggressive', (string)$config->system->optimization);
+        $this->assertEquals('1', (string)$config->system->{'state-policy'}, 'if-bound must write 1 to legacy config');
         $this->assertEquals('purenat', (string)$config->system->disablenatreflection);
         $this->assertEquals('true', (string)$config->syslog->nologdefaultblock);
         $this->assertEquals('true', (string)$config->syslog->logoutboundnat);
+    }
+
+    /**
+     * Test legacy config without state-policy migrates to floating, and sync unsets it
+     */
+    public function testMigrationLegacyStatePolicyDisabled()
+    {
+        $xml = <<<EOF
+<opnsense>
+    <system>
+        <optimization>normal</optimization>
+    </system>
+    <interfaces>
+        <lan><descr>LAN</descr></lan>
+    </interfaces>
+</opnsense>
+EOF;
+        $this->setMockConfig($xml);
+
+        $model = new Filter();
+        $migration = new MFP1_0_10();
+        $migration->run($model);
+
+        $s = $model->settings;
+        $this->assertEquals('floating', (string)$s->filter->{'state-policy'});
+
+        // Test syncToLegacyConfig does not set state-policy when floating
+        $model->syncToLegacyConfig();
+        $config = Config::getInstance()->object();
+        $this->assertFalse(isset($config->system->{'state-policy'}), 'floating state-policy must unset legacy config node');
     }
 }

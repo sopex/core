@@ -128,51 +128,8 @@ class AdminController extends ApiMutableModelControllerBase
             $result['consoles'] = $consoles;
             $result['console_types'] = $consoles;
 
-            // 8. Provide flat aliases in result['admin'] for direct field bindings
-            $result[static::$internalModelName]['protocol'] = (string)$mdl->webgui->protocol;
-            $result[static::$internalModelName]['port'] = (string)$mdl->webgui->port;
-            $result[static::$internalModelName]['ssl_certref'] = (string)$mdl->webgui->{'ssl-certref'};
-            $result[static::$internalModelName]['ciphers'] = (string)$mdl->webgui->{'ssl-ciphers'};
-            $result[static::$internalModelName]['hsts'] = (string)$mdl->webgui->{'ssl-hsts'};
-            $result[static::$internalModelName]['disablehttpredirect'] = (string)$mdl->webgui->disablehttpredirect;
-            $result[static::$internalModelName]['httpaccesslog'] = (string)$mdl->webgui->httpaccesslog;
-            $result[static::$internalModelName]['session_timeout'] = (string)$mdl->webgui->session_timeout;
-            $result[static::$internalModelName]['compression'] = (string)$mdl->webgui->compression;
-            $result[static::$internalModelName]['nodnsrebindcheck'] = (string)$mdl->webgui->nodnsrebindcheck;
-            $result[static::$internalModelName]['nohttpreferercheck'] = (string)$mdl->webgui->nohttpreferercheck;
-            $result[static::$internalModelName]['noroot'] = (string)$mdl->webgui->noroot;
-            $result[static::$internalModelName]['althostnames'] = (string)$mdl->webgui->althostnames;
-            $result[static::$internalModelName]['interfaces'] = (string)$mdl->webgui->interfaces;
-            $result[static::$internalModelName]['authmode'] = (string)$mdl->webgui->authmode;
-            $result[static::$internalModelName]['quietlogin'] = (string)$mdl->webgui->quietlogin;
-
-            $result[static::$internalModelName]['ssh_enabled'] = (string)$mdl->ssh->enabled;
-            $result[static::$internalModelName]['ssh_port'] = (string)$mdl->ssh->port;
-            $result[static::$internalModelName]['ssh_interfaces'] = (string)$mdl->ssh->interfaces;
-            $result[static::$internalModelName]['kex'] = (string)$mdl->ssh->kex;
-            $result[static::$internalModelName]['ssh_ciphers'] = (string)$mdl->ssh->ciphers;
-            $result[static::$internalModelName]['macs'] = (string)$mdl->ssh->macs;
-            $result[static::$internalModelName]['keys'] = (string)$mdl->ssh->keys;
-            $result[static::$internalModelName]['keysig'] = (string)$mdl->ssh->keysig;
-            $result[static::$internalModelName]['rekeylimit'] = (string)$mdl->ssh->rekeylimit;
-            $result[static::$internalModelName]['passwordauth'] = (string)$mdl->ssh->passwordauth;
-            $result[static::$internalModelName]['permitrootlogin'] = (string)$mdl->ssh->permitrootlogin;
-
-            $result[static::$internalModelName]['disableconsolemenu'] = (string)$mdl->console->disableconsolemenu;
-            $result[static::$internalModelName]['usevirtualterminal'] = (string)$mdl->console->usevirtualterminal;
-            $result[static::$internalModelName]['sudo_allow_wheel'] = (string)$mdl->console->sudo_allow_wheel;
-            $result[static::$internalModelName]['sudo_allow_group'] = (string)$mdl->console->sudo_allow_group;
-            $result[static::$internalModelName]['user_allow_gen_token'] = (string)$mdl->console->user_allow_gen_token;
-            $result[static::$internalModelName]['serialspeed'] = (string)$mdl->console->serialspeed;
-            $result[static::$internalModelName]['serialusb'] = (string)$mdl->console->serialusb;
-            $result[static::$internalModelName]['primaryconsole'] = (string)$mdl->console->primaryconsole;
-            $result[static::$internalModelName]['secondaryconsole'] = (string)$mdl->console->secondaryconsole;
-            $result[static::$internalModelName]['autologout'] = (string)$mdl->console->autologout;
-
-            $result[static::$internalModelName]['deployment'] = (string)$mdl->development->deployment;
-            $result[static::$internalModelName]['nologlighttpd'] = (string)$mdl->development->nologlighttpd;
-            $result[static::$internalModelName]['loglighttpd'] = (string)$mdl->development->nologlighttpd === '1' ? '0' : '1';
-            $result[static::$internalModelName]['webgui']['loglighttpd'] = $result[static::$internalModelName]['loglighttpd'];
+            // 8. Inverted helper for webgui form
+            $result[static::$internalModelName]['webgui']['loglighttpd'] = (string)$mdl->development->nologlighttpd === '1' ? '0' : '1';
         }
 
         return $result;
@@ -219,87 +176,6 @@ class AdminController extends ApiMutableModelControllerBase
                 unset($postData['loglighttpd']);
             }
 
-            // Map flat properties into container hierarchy if passed flat
-            $flatMap = [
-                'protocol'             => ['webgui', 'protocol'],
-                'webguiproto'          => ['webgui', 'protocol'],
-                'port'                 => ['webgui', 'port'],
-                'webguiport'           => ['webgui', 'port'],
-                'ssl_certref'          => ['webgui', 'ssl-certref'],
-                'ssl-certref'          => ['webgui', 'ssl-certref'],
-                'ciphers'              => ['webgui', 'ssl-ciphers'],
-                'ssl_ciphers'          => ['webgui', 'ssl-ciphers'],
-                'ssl-ciphers'          => ['webgui', 'ssl-ciphers'],
-                'hsts'                 => ['webgui', 'ssl-hsts'],
-                'ssl_hsts'             => ['webgui', 'ssl-hsts'],
-                'ssl-hsts'             => ['webgui', 'ssl-hsts'],
-                'disablehttpredirect'  => ['webgui', 'disablehttpredirect'],
-                'httpaccesslog'        => ['webgui', 'httpaccesslog'],
-                'session_timeout'      => ['webgui', 'session_timeout'],
-                'compression'          => ['webgui', 'compression'],
-                'nodnsrebindcheck'     => ['webgui', 'nodnsrebindcheck'],
-                'nohttpreferercheck'   => ['webgui', 'nohttpreferercheck'],
-                'noroot'               => ['webgui', 'noroot'],
-                'althostnames'         => ['webgui', 'althostnames'],
-                'interfaces'           => ['webgui', 'interfaces'],
-                'webguiinterfaces'     => ['webgui', 'interfaces'],
-                'authmode'             => ['webgui', 'authmode'],
-                'quietlogin'           => ['webgui', 'quietlogin'],
-
-                'ssh_enabled'          => ['ssh', 'enabled'],
-                'enablesshd'           => ['ssh', 'enabled'],
-                'enabled'              => ['ssh', 'enabled'],
-                'ssh_port'             => ['ssh', 'port'],
-                'sshport'              => ['ssh', 'port'],
-                'ssh_interfaces'       => ['ssh', 'interfaces'],
-                'sshinterfaces'        => ['ssh', 'interfaces'],
-                'kex'                  => ['ssh', 'kex'],
-                'ssh_kex'              => ['ssh', 'kex'],
-                'ssh-kex'              => ['ssh', 'kex'],
-                'ssh_ciphers'          => ['ssh', 'ciphers'],
-                'ssh-ciphers'          => ['ssh', 'ciphers'],
-                'macs'                 => ['ssh', 'macs'],
-                'ssh_macs'             => ['ssh', 'macs'],
-                'ssh-macs'             => ['ssh', 'macs'],
-                'keys'                 => ['ssh', 'keys'],
-                'ssh_keys'             => ['ssh', 'keys'],
-                'ssh-keys'             => ['ssh', 'keys'],
-                'keysig'               => ['ssh', 'keysig'],
-                'ssh_keysig'           => ['ssh', 'keysig'],
-                'ssh-keysig'           => ['ssh', 'keysig'],
-                'rekeylimit'           => ['ssh', 'rekeylimit'],
-                'ssh_rekeylimit'       => ['ssh', 'rekeylimit'],
-                'ssh-rekeylimit'       => ['ssh', 'rekeylimit'],
-                'passwordauth'         => ['ssh', 'passwordauth'],
-                'sshpasswordauth'      => ['ssh', 'passwordauth'],
-                'permitrootlogin'      => ['ssh', 'permitrootlogin'],
-                'sshdpermitrootlogin'  => ['ssh', 'permitrootlogin'],
-                'noauto'               => ['ssh', 'noauto'],
-
-                'disableconsolemenu'   => ['console', 'disableconsolemenu'],
-                'usevirtualterminal'   => ['console', 'usevirtualterminal'],
-                'sudo_allow_wheel'     => ['console', 'sudo_allow_wheel'],
-                'sudo_allow_group'     => ['console', 'sudo_allow_group'],
-                'user_allow_gen_token' => ['console', 'user_allow_gen_token'],
-                'serialspeed'          => ['console', 'serialspeed'],
-                'serialusb'            => ['console', 'serialusb'],
-                'primaryconsole'       => ['console', 'primaryconsole'],
-                'secondaryconsole'     => ['console', 'secondaryconsole'],
-                'autologout'           => ['console', 'autologout'],
-
-                'deployment'           => ['development', 'deployment'],
-                'nologlighttpd'        => ['development', 'nologlighttpd'],
-            ];
-
-            foreach ($flatMap as $flatKey => [$container, $field]) {
-                if (array_key_exists($flatKey, $postData)) {
-                    if (!isset($postData[$container])) {
-                        $postData[$container] = [];
-                    }
-                    $postData[$container][$field] = $postData[$flatKey];
-                }
-            }
-
             // Normalize permitrootlogin values (e.g. 1 -> yes, 0 -> no)
             if (isset($postData['ssh']['permitrootlogin'])) {
                 $prl = $postData['ssh']['permitrootlogin'];
@@ -333,30 +209,6 @@ class AdminController extends ApiMutableModelControllerBase
             Config::getInstance()->lock();
             $mdl->setNodes($postData);
             $result = $this->validate();
-
-            // Populate alias keys in validations array for both nested and flat assertion styles
-            if (!empty($result['validations'])) {
-                $aliasValidationPairs = [
-                    'admin.webgui.port'            => 'admin.port',
-                    'admin.webgui.protocol'        => 'admin.protocol',
-                    'admin.webgui.ssl-certref'     => 'admin.ssl_certref',
-                    'admin.webgui.session_timeout' => 'admin.session_timeout',
-                    'admin.webgui.compression'     => 'admin.compression',
-                    'admin.webgui.althostnames'    => 'admin.althostnames',
-                    'admin.ssh.port'               => 'admin.ssh_port',
-                    'admin.ssh.rekeylimit'         => 'admin.rekeylimit',
-                    'admin.ssh.permitrootlogin'    => 'admin.permitrootlogin',
-                    'admin.console.serialspeed'    => 'admin.serialspeed',
-                    'admin.console.autologout'     => 'admin.autologout',
-                ];
-                foreach ($aliasValidationPairs as $longKey => $shortKey) {
-                    if (isset($result['validations'][$longKey]) && !isset($result['validations'][$shortKey])) {
-                        $result['validations'][$shortKey] = $result['validations'][$longKey];
-                    } elseif (isset($result['validations'][$shortKey]) && !isset($result['validations'][$longKey])) {
-                        $result['validations'][$longKey] = $result['validations'][$shortKey];
-                    }
-                }
-            }
 
             if (empty($result['result'])) {
                 $this->setActionHook();
@@ -393,8 +245,6 @@ class AdminController extends ApiMutableModelControllerBase
                             'restart'   => true,
                             'timestamp' => time()
                         ]));
-                    } else {
-                        @unlink(self::$webguiRestartStateFile);
                     }
                 }
             }
@@ -465,7 +315,7 @@ class AdminController extends ApiMutableModelControllerBase
                 $port = (string)($mdl->webgui->port ?: '');
 
                 // Parse client HTTP host handling IPv6 brackets
-                $http_host = $this->request->getHttpHost() ?: 'localhost';
+                $http_host = $this->request->getHeader('Host') ?: ($_SERVER['HTTP_HOST'] ?? 'localhost');
                 if (strstr($http_host, ']')) {
                     $parts = explode(']', $http_host);
                     $host = $parts[0] . ']';

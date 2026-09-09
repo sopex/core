@@ -484,8 +484,8 @@ class Filter extends BaseModel
         }
 
         $config->system->optimization = (string)$f->optimization;
-        if (!empty((string)$f->{'state-policy'})) {
-            $config->system->{'state-policy'} = (string)$f->{'state-policy'};
+        if ((string)$f->{'state-policy'} === 'if-bound') {
+            $config->system->{'state-policy'} = '1';
         } else {
             unset($config->system->{'state-policy'});
         }

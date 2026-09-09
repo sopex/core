@@ -86,22 +86,22 @@ class AdminTest extends \PHPUnit\Framework\TestCase
     {
         $model = new Admin();
 
-        $this->assertEquals('https', (string)$model->protocol);
-        $this->assertEquals('', (string)$model->port);
-        $this->assertEquals('', (string)$model->session_timeout);
-        $this->assertEquals('', (string)$model->compression);
-        $this->assertEquals('0', (string)$model->ssh_enabled);
-        $this->assertEquals('', (string)$model->ssh_port);
-        $this->assertEquals('0', (string)$model->passwordauth);
-        $this->assertEquals('no', (string)$model->permitrootlogin);
-        $this->assertEquals('video', (string)$model->primaryconsole);
-        $this->assertEquals('', (string)$model->secondaryconsole);
-        $this->assertEquals('115200', (string)$model->serialspeed);
-        $this->assertEquals('1', (string)$model->usevirtualterminal);
-        $this->assertEquals('0', (string)$model->disableconsolemenu);
-        $this->assertEquals('', (string)$model->sudo_allow_wheel);
-        $this->assertEquals('', (string)$model->deployment);
-        $this->assertEquals('1', (string)$model->loglighttpd);
+        $this->assertEquals('https', (string)$model->webgui->protocol);
+        $this->assertEquals('', (string)$model->webgui->port);
+        $this->assertEquals('', (string)$model->webgui->session_timeout);
+        $this->assertEquals('', (string)$model->webgui->compression);
+        $this->assertEquals('0', (string)$model->ssh->enabled);
+        $this->assertEquals('', (string)$model->ssh->port);
+        $this->assertEquals('0', (string)$model->ssh->passwordauth);
+        $this->assertEquals('no', (string)$model->ssh->permitrootlogin);
+        $this->assertEquals('video', (string)$model->console->primaryconsole);
+        $this->assertEquals('', (string)$model->console->secondaryconsole);
+        $this->assertEquals('115200', (string)$model->console->serialspeed);
+        $this->assertEquals('1', (string)$model->console->usevirtualterminal);
+        $this->assertEquals('0', (string)$model->console->disableconsolemenu);
+        $this->assertEquals('', (string)$model->console->sudo_allow_wheel);
+        $this->assertEquals('', (string)$model->development->deployment);
+        $this->assertEquals('0', (string)$model->development->nologlighttpd);
 
         $messages = $model->performValidation();
         $this->assertCount(0, $messages);
@@ -115,7 +115,7 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validPorts = ['1', '80', '443', '8080', '65535'];
         foreach ($validPorts as $port) {
             $model = new Admin();
-            $model->port = $port;
+            $model->webgui->port = $port;
             $messages = $model->performValidation();
             $this->assertCount(0, $messages, "Port {$port} should be valid");
         }
@@ -129,7 +129,7 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $invalidPorts = ['0', '-1', '65536', '70000', 'abc', '80.5'];
         foreach ($invalidPorts as $port) {
             $model = new Admin();
-            $model->port = $port;
+            $model->webgui->port = $port;
             $messages = $model->performValidation();
             $this->assertGreaterThan(0, count($messages), "Port {$port} should be invalid");
         }
@@ -141,16 +141,16 @@ class AdminTest extends \PHPUnit\Framework\TestCase
     public function testWebGuiProtocolValidation()
     {
         $model = new Admin();
-        $model->protocol = 'http';
+        $model->webgui->protocol = 'http';
         $this->assertCount(0, $model->performValidation());
 
-        $model->protocol = 'https';
+        $model->webgui->protocol = 'https';
         $this->assertCount(0, $model->performValidation());
 
         $invalidProtos = ['', 'ftp', 'ssh', 'ws'];
         foreach ($invalidProtos as $proto) {
             $m = new Admin();
-            $m->protocol = $proto;
+            $m->webgui->protocol = $proto;
             $this->assertGreaterThan(0, count($m->performValidation()), "Protocol {$proto} should be invalid");
         }
     }
@@ -163,14 +163,14 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validTimeouts = ['', '1', '60', '240'];
         foreach ($validTimeouts as $timeout) {
             $model = new Admin();
-            $model->session_timeout = $timeout;
+            $model->webgui->session_timeout = $timeout;
             $this->assertCount(0, $model->performValidation(), "Timeout {$timeout} should be valid");
         }
 
         $invalidTimeouts = ['0', '-1', '1.5', 'fast'];
         foreach ($invalidTimeouts as $timeout) {
             $model = new Admin();
-            $model->session_timeout = $timeout;
+            $model->webgui->session_timeout = $timeout;
             $this->assertGreaterThan(0, count($model->performValidation()), "Timeout {$timeout} should be invalid");
         }
     }
@@ -183,14 +183,14 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validHostnames = ['', 'opnsense.local', 'fw1.internal backup.internal', 'router.domain.com'];
         foreach ($validHostnames as $hosts) {
             $model = new Admin();
-            $model->althostnames = $hosts;
+            $model->webgui->althostnames = $hosts;
             $this->assertCount(0, $model->performValidation(), "Hostnames {$hosts} should be valid");
         }
 
         $invalidHostnames = ['host_with_underscore.local', 'invalid/name'];
         foreach ($invalidHostnames as $hosts) {
             $model = new Admin();
-            $model->althostnames = $hosts;
+            $model->webgui->althostnames = $hosts;
             $this->assertGreaterThan(0, count($model->performValidation()), "Hostnames {$hosts} should be invalid");
         }
     }
@@ -203,14 +203,14 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validPorts = ['', '22', '2222', '65535'];
         foreach ($validPorts as $port) {
             $model = new Admin();
-            $model->ssh_port = $port;
+            $model->ssh->port = $port;
             $this->assertCount(0, $model->performValidation(), "SSH port {$port} should be valid");
         }
 
         $invalidPorts = ['0', '70000', '-22', 'ssh', '22.5'];
         foreach ($invalidPorts as $port) {
             $model = new Admin();
-            $model->ssh_port = $port;
+            $model->ssh->port = $port;
             $this->assertGreaterThan(0, count($model->performValidation()), "SSH port {$port} should be invalid");
         }
     }
@@ -223,7 +223,7 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validOptions = ['yes', 'no', 'without-password'];
         foreach ($validOptions as $opt) {
             $model = new Admin();
-            $model->permitrootlogin = $opt;
+            $model->ssh->permitrootlogin = $opt;
             $this->assertCount(0, $model->performValidation(), "PermitRootLogin {$opt} should be valid");
         }
 
@@ -241,10 +241,10 @@ class AdminTest extends \PHPUnit\Framework\TestCase
     public function testPasswordAuthValidation()
     {
         $model = new Admin();
-        $model->passwordauth = '0';
+        $model->ssh->passwordauth = '0';
         $this->assertCount(0, $model->performValidation());
 
-        $model->passwordauth = '1';
+        $model->ssh->passwordauth = '1';
         $this->assertCount(0, $model->performValidation());
     }
 
@@ -256,14 +256,14 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validSpeeds = ['1500000', '115200', '57600', '38400', '19200', '14400', '9600'];
         foreach ($validSpeeds as $speed) {
             $model = new Admin();
-            $model->serialspeed = $speed;
+            $model->console->serialspeed = $speed;
             $this->assertCount(0, $model->performValidation(), "Serial speed {$speed} should be valid");
         }
 
         $invalidSpeeds = ['1200', '99999', 'fast'];
         foreach ($invalidSpeeds as $speed) {
             $model = new Admin();
-            $model->serialspeed = $speed;
+            $model->console->serialspeed = $speed;
             $this->assertGreaterThan(0, count($model->performValidation()), "Serial speed {$speed} should be invalid");
         }
     }
@@ -276,14 +276,14 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validDevices = ['video', 'serial', 'efi', 'null'];
         foreach ($validDevices as $dev) {
             $model = new Admin();
-            $model->primaryconsole = $dev;
+            $model->console->primaryconsole = $dev;
             $this->assertCount(0, $model->performValidation(), "Primary console {$dev} should be valid");
         }
 
         $validSecondary = ['', 'video', 'serial', 'efi', 'null'];
         foreach ($validSecondary as $dev) {
             $model = new Admin();
-            $model->secondaryconsole = $dev;
+            $model->console->secondaryconsole = $dev;
             $this->assertCount(0, $model->performValidation(), "Secondary console {$dev} should be valid");
         }
 
@@ -300,14 +300,14 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validCompressions = ['', '1', '5', '9'];
         foreach ($validCompressions as $val) {
             $model = new Admin();
-            $model->compression = $val;
+            $model->webgui->compression = $val;
             $this->assertCount(0, $model->performValidation(), "Compression {$val} should be valid");
         }
 
         $invalidCompressions = ['2', '7', 'invalid'];
         foreach ($invalidCompressions as $val) {
             $model = new Admin();
-            $model->compression = $val;
+            $model->webgui->compression = $val;
             $this->assertGreaterThan(0, count($model->performValidation()), "Compression {$val} should be invalid");
         }
     }
@@ -320,14 +320,14 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validWheel = ['', '1', '2'];
         foreach ($validWheel as $opt) {
             $model = new Admin();
-            $model->sudo_allow_wheel = $opt;
+            $model->console->sudo_allow_wheel = $opt;
             $this->assertCount(0, $model->performValidation(), "Wheel option {$opt} should be valid");
         }
 
         $invalidWheel = ['3', 'wheel', 'all'];
         foreach ($invalidWheel as $opt) {
             $model = new Admin();
-            $model->sudo_allow_wheel = $opt;
+            $model->console->sudo_allow_wheel = $opt;
             $this->assertGreaterThan(0, count($model->performValidation()), "Wheel option {$opt} should be invalid");
         }
     }
@@ -340,13 +340,38 @@ class AdminTest extends \PHPUnit\Framework\TestCase
         $validRekey = ['', 'default 60s', 'default 600s', '512M 60s', '512M 600s', '512M 1h', '1G 60s', '1G 1h'];
         foreach ($validRekey as $opt) {
             $model = new Admin();
-            $model->rekeylimit = $opt;
+            $model->ssh->rekeylimit = $opt;
             $this->assertCount(0, $model->performValidation(), "Rekey limit {$opt} should be valid");
         }
 
         $model = new Admin();
-        $model->rekeylimit = 'arbitrary_limit';
+        $model->ssh->rekeylimit = 'arbitrary_limit';
         $this->assertGreaterThan(0, count($model->performValidation()));
+    }
+
+    /**
+     * Test WebGUI authentication server validation against auth_get_authserver_list
+     */
+    public function testWebGuiAuthmodeValidation()
+    {
+        $model = new Admin();
+        $model->webgui->authmode = '';
+        $this->assertCount(0, $model->performValidation());
+
+        $model->webgui->authmode = 'Local Database';
+        $this->assertCount(0, $model->performValidation());
+
+        $model->webgui->authmode = 'NonExistentLdapServer';
+        $messages = $model->performValidation();
+        $this->assertGreaterThan(0, count($messages));
+        $hasAuthErr = false;
+        foreach ($messages as $msg) {
+            if ($msg->getField() === 'webgui.authmode') {
+                $hasAuthErr = true;
+                break;
+            }
+        }
+        $this->assertTrue($hasAuthErr, 'Should flag invalid auth server');
     }
 
     /**
@@ -355,17 +380,17 @@ class AdminTest extends \PHPUnit\Framework\TestCase
     public function testSyncToLegacyConfig()
     {
         $model = new Admin();
-        $model->protocol = 'https';
-        $model->port = '8443';
-        $model->session_timeout = '120';
-        $model->ssh_enabled = '1';
-        $model->ssh_port = '2222';
-        $model->permitrootlogin = 'without-password';
-        $model->passwordauth = '1';
-        $model->serialspeed = '57600';
-        $model->primaryconsole = 'serial';
-        $model->deployment = 'development';
-        $model->loglighttpd = '0';
+        $model->webgui->protocol = 'https';
+        $model->webgui->port = '8443';
+        $model->webgui->session_timeout = '120';
+        $model->ssh->enabled = '1';
+        $model->ssh->port = '2222';
+        $model->ssh->permitrootlogin = 'without-password';
+        $model->ssh->passwordauth = '1';
+        $model->console->serialspeed = '57600';
+        $model->console->primaryconsole = 'serial';
+        $model->development->deployment = 'development';
+        $model->development->nologlighttpd = '1';
 
         $model->syncToLegacyConfig();
 
