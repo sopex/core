@@ -4028,70 +4028,91 @@ function interfaces_primary_address($interface, $ifconfig_details = null)
 
 function _interfaces_primary_address6($interface, $ifconfig_details = null, $allow_track = true, $link_local = false)
 {
-    $ifcfgipv6 = $networkv6 = $subnetbitsv6 = $devicev6 = null;
+    $interfaces = is_array($interface) ? $interface : [$interface];
 
-    if ($allow_track && !$link_local && interfaces_has_prefix_only($interface)) {
+    if ($allow_track && !$link_local && !is_array($interface) && interfaces_has_prefix_only($interface)) {
         /* extend the search scope for a non-NA mode to tracking interfaces */
-        $interface = array_merge([$interface], array_keys(link_interface_to_track6($interface)));
+        $interfaces = array_merge($interfaces, array_keys(link_interface_to_track6($interface)));
     }
 
-    $lifetime = 0;
+    /*
+     * Interface order takes precedence over lifetime across interfaces so that
+     * the requested interface's own address is preferred over derived tracking
+     * addresses. If only a ULA candidate is found on an earlier interface, keep
+     * it as a fallback while searching remaining interfaces for a global address.
+     */
+    $fallback = null;
 
-    foreach (interfaces_addresses($interface, false, $ifconfig_details) as $addr) {
-        /* XXX consider excluding 'autoconf', but only when it's not in SLAAC mode */
-        if ($addr['family'] != 'inet6' || $addr['deprecated'] || $addr['detached'] || $addr['tentative'] || $addr['alias']) {
-            continue;
-        }
+    foreach ($interfaces as $target_interface) {
+        $ifcfgipv6 = $networkv6 = $subnetbitsv6 = $devicev6 = null;
+        $lifetime = 0;
 
-        if ($link_local && !$addr['scope']) {
-            continue;
-        } elseif (!$link_local && $addr['scope']) {
-            continue;
-        }
-
-        /*
-         * Lifetimes need to be checked now.  To avoid regressions with
-         * previous behaviour enforce strict rules:
-         *
-         * 1. If the top address found has a non-zero lifetime,
-         *    allow lifetime-based deferral and keep the highest lifetime
-         *    address as a candidate.
-         * 2. Go through the list sequentially and find the highest
-         *    remaining liftime.  The idea is that the lifetimes are
-         *    ascending when prefix with dhcp6c shifts although the code
-         *    can skip all lover in-between lifetimes too.
-         * 3. If a lifetime of 0 is encountered down the line use the
-         *    previously found address.
-         */
-        if ($ifcfgipv6 == null && !$lifetime) {
-            /* continue rule 1 */
-            $lifetime = $addr['lifetime'];
-        } elseif ($ifcfgipv6 != null && $lifetime) {
-            if (!$addr['lifetime']) {
-                /* rule 3 */
-                break;
-            }
-            if ($addr['lifetime'] <= $lifetime) {
-                /* continue rule 2 */
+        foreach (interfaces_addresses($target_interface, false, $ifconfig_details) as $addr) {
+            /* XXX consider excluding 'autoconf', but only when it's not in SLAAC mode */
+            if ($addr['family'] != 'inet6' || $addr['deprecated'] || $addr['detached'] || $addr['tentative'] || $addr['alias']) {
                 continue;
             }
-            /* continue rule 1 */
-            $lifetime = $addr['lifetime'];
-        } elseif ($ifcfgipv6 != null && !$lifetime) {
-            /* end rule 1 */
-            break;
+
+            if ($link_local && !$addr['scope']) {
+                continue;
+            } elseif (!$link_local && $addr['scope']) {
+                continue;
+            }
+
+            /*
+             * Lifetimes need to be checked now.  To avoid regressions with
+             * previous behaviour enforce strict rules:
+             *
+             * 1. If the top address found has a non-zero lifetime,
+             *    allow lifetime-based deferral and keep the highest lifetime
+             *    address as a candidate.
+             * 2. Go through the list sequentially and find the highest
+             *    remaining lifetime.  The idea is that the lifetimes are
+             *    ascending when prefix with dhcp6c shifts although the code
+             *    can skip all lower in-between lifetimes too.
+             * 3. If a lifetime of 0 is encountered down the line use the
+             *    previously found address.
+             */
+            if ($ifcfgipv6 == null && !$lifetime) {
+                /* continue rule 1 */
+                $lifetime = $addr['lifetime'];
+            } elseif ($ifcfgipv6 != null && $lifetime) {
+                if (!$addr['lifetime']) {
+                    /* rule 3 */
+                    break;
+                }
+                if ($addr['lifetime'] <= $lifetime) {
+                    /* continue rule 2 */
+                    continue;
+                }
+                /* continue rule 1 */
+                $lifetime = $addr['lifetime'];
+            } elseif ($ifcfgipv6 != null && !$lifetime) {
+                /* end rule 1 */
+                break;
+            }
+
+            $networkv6 = gen_subnetv6($addr['address'], $addr['bits']) . "/{$addr['bits']}";
+            $subnetbitsv6 = $addr['bits'];
+            $ifcfgipv6 = $addr['address'];
+            if ($link_local) {
+                $ifcfgipv6 .= "%{$addr['name']}";
+            }
+            $devicev6 = $addr['name'];
         }
 
-        $networkv6 = gen_subnetv6($addr['address'], $addr['bits']) . "/{$addr['bits']}";
-        $subnetbitsv6 = $addr['bits'];
-        $ifcfgipv6 = $addr['address'];
-        if ($link_local) {
-            $ifcfgipv6 .= "%{$addr['name']}";
+        if ($ifcfgipv6 !== null) {
+            $candidate = [ $ifcfgipv6, $networkv6, $subnetbitsv6, $devicev6 ];
+
+            if ($link_local || !is_uniquelocal($ifcfgipv6)) {
+                return $candidate;
+            }
+
+            $fallback ??= $candidate;
         }
-        $devicev6 = $addr['name'];
     }
 
-    return [ $ifcfgipv6, $networkv6, $subnetbitsv6, $devicev6 ];
+    return $fallback ?? [ null, null, null, null ];
 }
 
 function interfaces_routed_address6($interface, $ifconfig_details = null)
