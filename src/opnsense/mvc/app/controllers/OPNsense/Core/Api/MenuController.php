@@ -34,6 +34,7 @@ use OPNsense\Auth\User;
 use OPNsense\Base\ApiControllerBase;
 use OPNsense\Base\Menu;
 use OPNsense\Core\ACL;
+use OPNsense\Core\AppConfig;
 use OPNsense\Core\Config;
 
 /**
@@ -175,19 +176,198 @@ class MenuController extends ApiControllerBase
     }
 
     /**
-     * search menu items
+     * get settings index from XML forms, cached on disk
+     * @return array
+     */
+    private function getSettingsIndex()
+    {
+        $appconfig = new AppConfig();
+        $cacheFile = $appconfig->application->tempDir . '/opnsense_settings_search_cache.json';
+
+        if (file_exists($cacheFile) && filemtime($cacheFile) > (time() - 3600)) {
+            $data = @json_decode(file_get_contents($cacheFile), true);
+            if (is_array($data)) {
+                return $data;
+            }
+        }
+
+        $controllersDir = $appconfig->application->controllersDir;
+        $settings = [];
+
+        $formUrlMap = [
+            'Core/hasyncSettings' => '/ui/core/hasync',
+            'Core/snapshot' => '/ui/core/snapshots',
+            'Core/tunable' => '/ui/core/tunables',
+            'Diagnostics/dns_diagnostics' => '/ui/diagnostics/dns_diagnostics',
+            'Diagnostics/netflow_capture' => '/ui/diagnostics/netflow',
+            'Diagnostics/packetcapture' => '/ui/diagnostics/packet_capture',
+            'Diagnostics/ping' => '/ui/diagnostics/ping',
+            'Diagnostics/portprobe' => '/ui/diagnostics/portprobe',
+            'Diagnostics/systemhealth' => '/ui/diagnostics/systemhealth',
+            'Diagnostics/traceroute' => '/ui/diagnostics/traceroute',
+            'Dnsmasq/general' => '/ui/dnsmasq/settings#general',
+            'Firewall/geoIPSettings' => '/ui/firewall/alias',
+            'Firewall/settings' => '/ui/firewall/settings',
+            'Hostdiscovery/general' => '/ui/hostdiscovery/settings',
+            'IDS/generalSettings' => '/ui/ids',
+            'IPsec/settings' => '/ui/ipsec/connections/settings',
+            'Kea/agentSettings' => '/ui/kea/dhcp/ctrl_agent',
+            'Kea/ddnsSettings' => '/ui/kea/dhcp/ddns',
+            'Kea/generalSettings4' => '/ui/kea/dhcp/v4',
+            'Kea/generalSettings6' => '/ui/kea/dhcp/v6',
+            'Monit/alerts' => '/ui/monit',
+            'Monit/general' => '/ui/monit',
+            'Monit/services' => '/ui/monit',
+            'Monit/tests' => '/ui/monit',
+            'OpenVPN/export_options' => '/ui/openvpn/export',
+            'Syslog/local' => '/ui/syslog',
+            'Trust/settings' => '/ui/trust/settings',
+            'Unbound/acl' => '/ui/unbound/acl',
+            'Unbound/advanced' => '/ui/unbound/advanced',
+            'Unbound/dnsbl' => '/ui/unbound/dnsbl/index',
+            'Unbound/dnsreporting' => '/ui/unbound/overview',
+            'Unbound/forwarding' => '/ui/unbound/forward',
+            'Unbound/general' => '/ui/unbound/general',
+            'Wireguard/general' => '/ui/wireguard/general#instances',
+        ];
+
+        $formFiles = glob($controllersDir . '/*/*/forms/*.xml');
+        if (is_array($formFiles)) {
+            foreach ($formFiles as $formFile) {
+                $baseName = basename($formFile);
+                if (
+                    str_starts_with($baseName, 'dialog') ||
+                    str_starts_with($baseName, 'wizard') ||
+                    in_array($baseName, ['categoryEdit.xml', 'groupEdit.xml'])
+                ) {
+                    continue;
+                }
+
+                $parts = explode('/', str_replace('\\', '/', $formFile));
+                $formName = substr($baseName, 0, -4);
+                $module = $parts[count($parts) - 3];
+                $key = $module . '/' . $formName;
+
+                $pageUrl = $formUrlMap[$key] ?? null;
+                if ($pageUrl === null) {
+                    $modLower = strtolower($module);
+                    $formLower = strtolower($formName);
+                    if (file_exists($controllersDir . "/OPNsense/{$module}/{$formName}Controller.php")) {
+                        $pageUrl = "/ui/{$modLower}/{$formLower}";
+                    } elseif (file_exists($controllersDir . "/OPNsense/{$module}/IndexController.php")) {
+                        $pageUrl = "/ui/{$modLower}";
+                    } else {
+                        $pageUrl = "/ui/{$modLower}/{$formLower}";
+                    }
+                }
+
+                $pagePath = parse_url($pageUrl, PHP_URL_PATH);
+                $xml = @simplexml_load_file($formFile);
+                if ($xml === false) {
+                    continue;
+                }
+
+                foreach ($xml->xpath('//field') as $field) {
+                    $type = (string)$field->type;
+                    if (in_array($type, ['header', 'subheader', 'buttons', 'ignore'])) {
+                        continue;
+                    }
+                    $id = (string)$field->id;
+                    $label = (string)$field->label;
+                    if (empty($id) || empty($label)) {
+                        continue;
+                    }
+
+                    $help = (string)$field->help;
+                    $helpClean = !empty($help) ? trim(preg_replace('/\s+/', ' ', $help)) : '';
+
+                    $settings[] = [
+                        'id' => $id,
+                        'label' => $label,
+                        'help' => $helpClean,
+                        'url' => $pageUrl . '#row_' . $id,
+                        'path' => $pagePath,
+                        'advanced' => ((string)$field->advanced === 'true'),
+                    ];
+                }
+            }
+        }
+
+        @file_put_contents($cacheFile, json_encode($settings));
+        return $settings;
+    }
+
+    /**
+     * append matching setting items to search results
+     * @param array $items result list of menu and setting items
+     * @param array $allAccessibleItems all accessible menu leaves for current user
+     * @param string|null $query search query
+     */
+    private function appendSettingLeaves(&$items, $allAccessibleItems, $query = null)
+    {
+        $accessibleBreadcrumbs = [];
+        foreach ($allAccessibleItems as $item) {
+            if (!empty($item->Url)) {
+                $path = parse_url($item->Url, PHP_URL_PATH);
+                if ($path && !isset($accessibleBreadcrumbs[$path])) {
+                    $accessibleBreadcrumbs[$path] = $item->breadcrumb;
+                }
+            }
+        }
+
+        $settings = $this->getSettingsIndex();
+        foreach ($settings as $setting) {
+            if (!isset($accessibleBreadcrumbs[$setting['path']])) {
+                continue;
+            }
+
+            $label = gettext($setting['label']);
+            $help = !empty($setting['help']) ? gettext($setting['help']) : '';
+            $pageBreadcrumb = $accessibleBreadcrumbs[$setting['path']];
+
+            if ($query !== null && $query !== '') {
+                if (
+                    stripos($label, $query) === false &&
+                    stripos($help, $query) === false &&
+                    stripos($pageBreadcrumb, $query) === false &&
+                    stripos($setting['id'], $query) === false
+                ) {
+                    continue;
+                }
+            }
+
+            $settingItem = new \stdClass();
+            $settingItem->Url = $setting['url'];
+            $settingItem->VisibleName = $label;
+            $settingItem->breadcrumb = $pageBreadcrumb . ' > ' . $label;
+            $settingItem->keywords = $help;
+            $settingItem->is_setting = true;
+            $items[] = $settingItem;
+        }
+    }
+
+    /**
+     * search menu items and specific settings
      * @return array
      */
     public function searchAction()
     {
-        $menu_items = $this->getMenu(null);
+        $all_menu_items = $this->getMenu(null);
+        $all_accessible_items = [];
+        $this->extractMenuLeaves($all_menu_items, $all_accessible_items);
+
         $query = $this->request->get("q", null, null);
+        $items = [];
         if ($query != null) {
             // only search when a query is provided, otherwise return all entries
+            $menu_items = $this->getMenu(null);
             $this->search($menu_items, $query);
+            $this->extractMenuLeaves($menu_items, $items);
+        } else {
+            $items = $all_accessible_items;
         }
-        $items = array();
-        $this->extractMenuLeaves($menu_items, $items);
+
+        $this->appendSettingLeaves($items, $all_accessible_items, $query);
         return $items;
     }
 

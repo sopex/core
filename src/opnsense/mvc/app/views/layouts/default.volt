@@ -115,6 +115,7 @@
                 initFormHelpUI();
                 initFormAdvancedUI();
                 initFormSearchUI();
+                initSettingTargetUI();
                 addMultiSelectClearUI();
                 initGlobalOpenShortcuts();
 
@@ -151,13 +152,16 @@
                         $.each(data,function(idx, menu_item){
                             if (menu_item.Url != "") {
                                 menusearch_items.push({
-                                    id:$('<div/>').html(menu_item.Url).text(),
-                                    name: $("<div/>").html(menu_item.breadcrumb).text()
+                                    id: $('<div/>').html(menu_item.Url).text(),
+                                    name: $("<div/>").html(menu_item.breadcrumb).text(),
+                                    keywords: menu_item.keywords || '',
+                                    is_setting: menu_item.is_setting || false
                                 });
                             }
                         });
                         $("#menu_search_box").typeahead({
                             source: menusearch_items,
+                            items: 10,
                             matcher: function (item) {
                                 var ar = this.query.trim();
                                 if (ar == "") {
@@ -167,7 +171,7 @@
                                 if (ar.length == 0) {
                                     return false;
                                 }
-                                var it = this.displayText(item).toLowerCase();
+                                var it = (this.displayText(item) + ' ' + (item.keywords || '')).toLowerCase();
                                 for (var i = 0; i < ar.length; i++) {
                                     if (it.indexOf(ar[i]) == -1) {
                                         return false;
@@ -175,11 +179,46 @@
                                 }
                                 return true;
                             },
+                            render: function (items) {
+                                var that = this;
+                                var self = this;
+                                var activeFound = false;
+                                items = $(items).map(function (i, item) {
+                                    var text = self.displayText(item);
+                                    i = $(that.options.item).data('value', item);
+                                    var highlighted = that.highlighter(text);
+                                    if (item.is_setting) {
+                                        highlighted = '<i class="fa fa-cog fa-fw text-muted" aria-hidden="true"></i> ' + highlighted;
+                                    }
+                                    i.find('a').html(highlighted);
+                                    if (text == self.$element.val()) {
+                                        i.addClass('active');
+                                        self.$element.data('active', item);
+                                        activeFound = true;
+                                    }
+                                    return i[0];
+                                });
+
+                                if (this.autoSelect && !activeFound) {
+                                    items.first().addClass('active');
+                                    this.$element.data('active', items.first().data('value'));
+                                }
+                                this.$menu.html(items);
+                                return this;
+                            },
                             afterSelect: function(item){
-                                // (re)load page
-                                if (window.location.href.split("#")[0].indexOf(item.id.split("#")[0]) > -1 ) {
-                                    // same url, different hash marker
-                                    window.location.href = item.id;
+                                var targetBase = item.id.split("#")[0];
+                                var currentBase = window.location.href.split("#")[0];
+                                if (currentBase.indexOf(targetBase) > -1 || window.location.pathname === targetBase) {
+                                    if (item.id.indexOf("#") > -1) {
+                                        var hash = item.id.substring(item.id.indexOf("#"));
+                                        if (window.location.hash !== hash) {
+                                            window.location.hash = hash;
+                                        } else if (typeof highlightSettingTargetUI === 'function') {
+                                            highlightSettingTargetUI(hash);
+                                        }
+                                        return;
+                                    }
                                     window.location.reload();
                                 } else {
                                     window.location.href = item.id;

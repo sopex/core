@@ -688,6 +688,99 @@ function initFormSearchUI() {
 }
 
 /**
+ * Navigate to and highlight setting target specified by URL hash (#row_<id> or #<id>)
+ */
+function highlightSettingTargetUI(targetHash) {
+    const hash = targetHash || window.location.hash;
+    if (!hash || hash.length <= 1) {
+        return;
+    }
+
+    const cleanId = hash.startsWith('#') ? hash.substring(1) : hash;
+    let target = document.getElementById(cleanId);
+    if (!target && !cleanId.startsWith('row_')) {
+        target = document.getElementById('row_' + cleanId);
+    }
+    if (!target && cleanId.startsWith('row_')) {
+        target = document.getElementById(cleanId.substring(4));
+    }
+    if (!target) {
+        return;
+    }
+
+    const $target = $(target);
+    const $row = $target.is('tr') ? $target : $target.closest('tr');
+
+    // Activate tab if target is inside a tab pane or is a tab pane itself
+    if ($target.hasClass('tab-pane')) {
+        $('.nav-tabs a[href="#' + cleanId + '"]').tab('show');
+    }
+    $target.parents('.tab-pane').each(function() {
+        const paneId = $(this).attr('id');
+        if (paneId) {
+            $('.nav-tabs a[href="#' + paneId + '"]').tab('show');
+        }
+    });
+
+    // Expand collapsed section if target is inside collapsible tbody
+    const $tbody = $target.closest('tbody.collapsible');
+    if ($tbody.length && $tbody.is(':hidden')) {
+        $tbody.show();
+        $tbody.prev('thead').find('i.fa-angle-right')
+            .removeClass('fa-angle-right')
+            .addClass('fa-angle-down');
+    }
+
+    // Reveal advanced setting if row is advanced
+    if ($row.length && ($row.data('advanced') === true || $row.attr('data-advanced') === 'true')) {
+        const $advToggle = $row.closest('form').find('[id*="show_advanced"]');
+        if ($advToggle.length && !$advToggle.hasClass('fa-toggle-on')) {
+            $advToggle.click();
+        } else {
+            $row.show();
+        }
+    }
+
+    // Scroll to target setting
+    const scrollTarget = $row.length ? $row : $target;
+    $('html, body').animate({
+        scrollTop: Math.max(0, scrollTarget.offset().top - 120)
+    }, 250);
+
+    // Highlight target setting row temporarily
+    if ($row.length && $row.is('tr')) {
+        $row.addClass('warning');
+        setTimeout(function() {
+            $row.removeClass('warning');
+        }, 3000);
+
+        // Focus the first input element if available
+        const $input = $row.find('input, select, textarea').not(':hidden, button').first();
+        if ($input.length) {
+            $input.focus();
+        }
+    }
+}
+
+/**
+ * Initialize hash-based setting navigation and highlighting on page load and hashchange
+ */
+function initSettingTargetUI() {
+    $(window).on('hashchange', function() {
+        highlightSettingTargetUI();
+    });
+
+    if (window.location.hash && window.location.hash.length > 1) {
+        setTimeout(function() {
+            highlightSettingTargetUI();
+        }, 150);
+        setTimeout(function() {
+            highlightSettingTargetUI();
+        }, 600);
+    }
+}
+
+/**
  * handle keyboard shortcuts for toggling advanced and help
  */
 function initGlobalOpenShortcuts() {
