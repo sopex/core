@@ -144,12 +144,14 @@ class MenuController extends ApiControllerBase
         foreach ($menu_items as $menu_item) {
             if (!isset($menu_item->breadcrumb)) {
                 $menu_item->breadcrumb = strip_tags($menu_item->VisibleName);
+                $menu_item->page_breadcrumb = '';
                 $menu_item->depth = 1;
             }
             if ($menu_item->isVisible) {
                 if (count($menu_item->Children) > 0) {
                     foreach ($menu_item->Children as &$submenu) {
                         $submenu->breadcrumb = $menu_item->breadcrumb . ': ' . strip_tags($submenu->VisibleName);
+                        $submenu->page_breadcrumb = $menu_item->breadcrumb;
                         $submenu->depth = $menu_item->depth + 1;
                     }
                     $this->extractMenuLeaves($menu_item->Children, $items);
@@ -340,6 +342,7 @@ class MenuController extends ApiControllerBase
             $settingItem->Url = $setting['url'];
             $settingItem->VisibleName = $label;
             $settingItem->breadcrumb = $pageBreadcrumb . ' > ' . $label;
+            $settingItem->page_breadcrumb = $pageBreadcrumb;
             $settingItem->keywords = $help;
             $settingItem->is_setting = true;
             $items[] = $settingItem;

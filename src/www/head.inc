@@ -43,8 +43,60 @@ $pagetitle .= html_safe(sprintf(' | %s.%s', $config['system']['hostname'], $conf
         padding-left: 54px !important;
       }
 
-      .typeahead {
-        overflow: hidden;
+      .typeahead.dropdown-menu {
+        min-width: 320px;
+        width: 540px;
+        max-width: calc(100vw - 30px);
+        max-height: 520px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        right: 0 !important;
+        left: auto !important;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+        padding: 4px 0;
+      }
+      .typeahead.dropdown-menu > li > a {
+        padding: 7px 14px;
+        white-space: normal;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        line-height: 1.35;
+      }
+      .typeahead.dropdown-menu > li:last-child > a {
+        border-bottom: none;
+      }
+      .typeahead.dropdown-menu > li > a .menu-search-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: inherit;
+        display: block;
+      }
+      .typeahead.dropdown-menu > li > a .menu-search-path {
+        font-size: 11px;
+        opacity: 0.75;
+        margin-top: 2px;
+        display: block;
+      }
+      .typeahead.dropdown-menu > li > a .menu-search-help {
+        font-size: 11px;
+        opacity: 0.8;
+        margin-top: 2px;
+        display: block;
+      }
+      .typeahead.dropdown-menu > li.active > a,
+      .typeahead.dropdown-menu > li > a:hover {
+        color: #fff !important;
+      }
+      .typeahead.dropdown-menu > li.active > a .text-muted,
+      .typeahead.dropdown-menu > li.active > a .menu-search-path,
+      .typeahead.dropdown-menu > li.active > a .menu-search-help,
+      .typeahead.dropdown-menu > li.active > a i,
+      .typeahead.dropdown-menu > li > a:hover .text-muted,
+      .typeahead.dropdown-menu > li > a:hover .menu-search-path,
+      .typeahead.dropdown-menu > li > a:hover .menu-search-help,
+      .typeahead.dropdown-menu > li > a:hover i {
+        color: #fff !important;
+        opacity: 0.9;
       }
 
       /** jquery-sortable styles **/
@@ -205,31 +257,49 @@ $pagetitle .= html_safe(sprintf(' | %s.%s', $config['system']['hostname'], $conf
           },
           success: function (data) {
               var menusearch_items = [];
-              $.each(data,function(idx, menu_item){
+              $.each(data, function(idx, menu_item){
                   if (menu_item.Url != "") {
+                      var isSetting = menu_item.is_setting || false;
+                      var title = menu_item.VisibleName || "";
+                      var path = menu_item.page_breadcrumb || "";
+                      if (!isSetting && !path && menu_item.breadcrumb) {
+                          var lastSep = menu_item.breadcrumb.lastIndexOf(': ');
+                          if (lastSep > -1) {
+                              title = menu_item.breadcrumb.substring(lastSep + 2);
+                              path = menu_item.breadcrumb.substring(0, lastSep);
+                          } else {
+                              title = menu_item.breadcrumb;
+                          }
+                      }
+
                       menusearch_items.push({
                           id: $('<div/>').html(menu_item.Url).text(),
-                          name: $("<div/>").html(menu_item.breadcrumb).text(),
+                          name: $("<div/>").html(title).text(),
+                          path: $("<div/>").html(path.replace(/: /g, ' › ')).text(),
+                          full_breadcrumb: $("<div/>").html(menu_item.breadcrumb || '').text(),
                           keywords: menu_item.keywords || '',
-                          is_setting: menu_item.is_setting || false
+                          is_setting: isSetting
                       });
                   }
               });
               $("#menu_search_box").typeahead({
                   source: menusearch_items,
                   items: 10,
+                  displayText: function(item) {
+                      return item.full_breadcrumb || item.name;
+                  },
                   matcher: function (item) {
-                      var ar = this.query.trim();
-                      if (ar == "") {
+                      var q = this.query.trim();
+                      if (q === "") {
                           return false;
                       }
-                      ar = ar.toLowerCase().split(/\s+/);
-                      if (ar.length == 0) {
+                      var terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+                      if (terms.length === 0) {
                           return false;
                       }
-                      var it = (this.displayText(item) + ' ' + (item.keywords || '')).toLowerCase();
-                      for (var i = 0; i < ar.length; i++) {
-                          if (it.indexOf(ar[i]) == -1) {
+                      var searchable = (item.name + ' ' + (item.path || '') + ' ' + (item.keywords || '')).toLowerCase();
+                      for (var i = 0; i < terms.length; i++) {
+                          if (searchable.indexOf(terms[i]) === -1) {
                               return false;
                           }
                       }
@@ -239,14 +309,58 @@ $pagetitle .= html_safe(sprintf(' | %s.%s', $config['system']['hostname'], $conf
                       var that = this;
                       var self = this;
                       var activeFound = false;
+
+                      function highlightTerms(text, query) {
+                          if (!text) return '';
+                          var terms = query.trim().split(/\s+/).filter(Boolean);
+                          var escapedText = $('<div/>').text(text).html();
+                          if (terms.length === 0) return escapedText;
+
+                          var escapedTerms = terms.map(function(t) {
+                              return t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                          });
+                          var regex = new RegExp('(' + escapedTerms.join('|') + ')', 'gi');
+                          return escapedText.replace(regex, '<strong>$1</strong>');
+                      }
+
                       items = $(items).map(function (i, item) {
                           var text = self.displayText(item);
                           i = $(that.options.item).data('value', item);
-                          var highlighted = that.highlighter(text);
-                          if (item.is_setting) {
-                              highlighted = '<i class="fa fa-cog fa-fw text-muted" aria-hidden="true"></i> ' + highlighted;
+
+                          var iconHtml = item.is_setting
+                              ? '<i class="fa fa-cog fa-fw text-muted" aria-hidden="true"></i> '
+                              : '<i class="fa fa-folder-open-o fa-fw text-muted" aria-hidden="true"></i> ';
+
+                          var titleHtml = '<span class="menu-search-title">' + iconHtml + highlightTerms(item.name, that.query) + '</span>';
+                          var pathHtml = item.path ? '<span class="menu-search-path text-muted">' + highlightTerms(item.path, that.query) + '</span>' : '';
+
+                          var helpHtml = '';
+                          if (item.keywords) {
+                              var terms = that.query.trim().split(/\s+/).filter(Boolean);
+                              var kwLower = item.keywords.toLowerCase();
+                              var titleLower = item.name.toLowerCase();
+                              var pathLower = (item.path || '').toLowerCase();
+                              var matchIdx = -1;
+
+                              for (var t = 0; t < terms.length; t++) {
+                                  var term = terms[t].toLowerCase();
+                                  var idx = kwLower.indexOf(term);
+                                  if (idx > -1 && titleLower.indexOf(term) === -1 && pathLower.indexOf(term) === -1) {
+                                      if (matchIdx === -1 || idx < matchIdx) {
+                                          matchIdx = idx;
+                                      }
+                                  }
+                              }
+
+                              if (matchIdx > -1) {
+                                  var start = Math.max(0, matchIdx - 20);
+                                  var end = Math.min(item.keywords.length, matchIdx + 50);
+                                  var snippet = (start > 0 ? '…' : '') + item.keywords.substring(start, end).trim() + (end < item.keywords.length ? '…' : '');
+                                  helpHtml = '<span class="menu-search-help text-muted"><small><i class="fa fa-info-circle fa-fw" aria-hidden="true"></i> ' + highlightTerms(snippet, that.query) + '</small></span>';
+                              }
                           }
-                          i.find('a').html(highlighted);
+
+                          i.find('a').html(titleHtml + pathHtml + helpHtml);
                           if (text == self.$element.val()) {
                               i.addClass('active');
                               self.$element.data('active', item);
