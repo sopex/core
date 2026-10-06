@@ -1,0 +1,44 @@
+<form>
+    <field>
+        <id>application.enabled</id>
+        <label>Enabled</label>
+        <type>checkbox</type>
+        <help>Enable this application.</help>
+        <grid_view>
+            <width>6em</width>
+            <type>boolean</type>
+            <formatter>rowtoggle</formatter>
+        </grid_view>
+    </field>
+    <field>
+        <id>application.name</id>
+        <label>Name</label>
+        <type>text</type>
+        <help>Name of the application as offered in the firewall rules.</help>
+    </field>
+    <field>
+        <id>application.category</id>
+        <label>Category</label>
+        <type>dropdown</type>
+        <help>Category of the application, when not set the application is listed as custom.</help>
+    </field>
+    <field>
+        <id>application.risk</id>
+        <label>Risk</label>
+        <type>dropdown</type>
+        <help>Risk rating of the application.</help>
+    </field>
+    <field>
+        <id>application.hosts</id>
+        <label>Hosts</label>
+        <type>select_multiple</type>
+        <style>tokenize</style>
+        <allownew>true</allownew>
+        <help>Host or domain names identifying the application, matched against the requested server name of encrypted (TLS, QUIC) and plain HTTP connections. A domain name also matches its subdomains.</help>
+    </field>
+    <field>
+        <id>application.description</id>
+        <label>Description</label>
+        <type>text</type>
+    </field>
+</form>

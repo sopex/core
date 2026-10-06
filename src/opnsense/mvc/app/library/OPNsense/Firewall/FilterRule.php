@@ -196,6 +196,36 @@ class FilterRule extends Rule
 
 
     /**
+     * Rules matching applications only select candidate flows in pf, which are diverted to appidd using the
+     * port assigned to the rule (appid_port). The daemon classifies the flow and applies the rule action or
+     * the "otherwise" action, the pf rule itself therefore always passes traffic.
+     * When the engine is unavailable and configured to fail open (appid_fallback) the rule passes without
+     * inspection, without a port the rule can not be enforced and is disabled.
+     * @param array $rule rule
+     */
+    protected function convertApplication(&$rule)
+    {
+        if (empty($rule['application']) && empty($rule['application_category'])) {
+            return;
+        }
+        if (empty($rule['appid_fallback']) && empty($rule['appid_port'])) {
+            $rule['disabled'] = true;
+            $this->log("Application control not available");
+            return;
+        }
+        $rule['type'] = 'pass';
+        if (empty($rule['statetype']) || $rule['statetype'] == 'none') {
+            /* appidd needs pf state to remove blocked flows */
+            $rule['statetype'] = 'keep';
+        }
+        if (empty($rule['appid_fallback'])) {
+            $rule['divert-to'] = $rule['appid_port'];
+        } else {
+            unset($rule['divert-to']);
+        }
+    }
+
+    /**
      * preprocess internal rule data to detail level of actual ruleset
      * handles shortcuts, like inet46 and multiple interfaces
      * @return array
@@ -204,6 +234,7 @@ class FilterRule extends Rule
     {
         foreach ($this->reader() as $rule) {
             $this->convertReplyTo($rule);
+            $this->convertApplication($rule);
             $rule['from'] = empty($rule['from']) ? "any" : $rule['from'];
             $rule['to'] = empty($rule['to']) ? "any" : $rule['to'];
             // disable rules when gateway is down and skip_rules_gw_down is set

@@ -1,0 +1,27 @@
+<form>
+    <field>
+        <id>appid.general.enabled</id>
+        <label>Enable</label>
+        <type>checkbox</type>
+        <help>Enable application control. Firewall rules matching applications or application categories divert their traffic to the classification engine.</help>
+    </field>
+    <field>
+        <id>appid.general.failmode</id>
+        <label>Failure mode</label>
+        <type>dropdown</type>
+        <help>Choose what happens to traffic matched by application rules when the classification engine is not running. Failing closed drops the traffic, failing open passes it without inspection after the next firewall reload.</help>
+    </field>
+    <field>
+        <id>appid.general.classify_packets</id>
+        <label>Classification limit</label>
+        <type>text</type>
+        <advanced>true</advanced>
+        <help>Maximum number of packets inspected per flow, flows which could not be identified by then are considered unknown. Packets are passed while a flow is being classified.</help>
+    </field>
+    <field>
+        <id>appid.general.update_url</id>
+        <label>Database update location</label>
+        <type>text</type>
+        <help>Location of the application database update. A detached signature is expected at the same location with a .sig suffix, which should verify against one of the trusted keys installed on this system.</help>
+    </field>
+</form>

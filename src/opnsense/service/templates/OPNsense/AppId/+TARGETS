@@ -1,0 +1,4 @@
+appidd.conf:/usr/local/etc/appidd/appidd.conf
+custom_applications.conf:/usr/local/etc/appidd/custom_applications.conf
+protos.txt:/usr/local/etc/appidd/protos.txt
+rc.conf.d:/etc/rc.conf.d/appidd

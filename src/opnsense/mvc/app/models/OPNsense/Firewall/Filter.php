@@ -33,9 +33,20 @@ use OPNsense\Base\Messages\Message;
 use OPNsense\Base\BaseModel;
 use OPNsense\Firewall\Util;
 use OPNsense\TrafficShaper\TrafficShaper;
+use OPNsense\AppId\AppId;
 
 class Filter extends BaseModel
 {
+    /**
+     * @var AppId|null application control settings, loaded on demand during validation
+     */
+    private $appIdModel = null;
+
+    /**
+     * @var int|null number of enabled rules matching applications, counted on demand during validation
+     */
+    private $appIdRuleCount = null;
+
     /**
      * @inheritDoc
      */
@@ -44,6 +55,7 @@ class Filter extends BaseModel
         $dntargets = (new TrafficShaper())->fetchAllTargets();
         $config = Config::getInstance()->object();
         $port_protos = ['TCP', 'UDP', 'TCP/UDP'];
+        $this->appIdRuleCount = null;
         // standard model validations
         $messages = parent::performValidation($validateFullModel);
         foreach ([$this->rules->rule, $this->snatrules->rule] as $rules) {
@@ -317,6 +329,7 @@ class Filter extends BaseModel
                                 $rule->{'divert-to'}->__reference
                             ));
                         }
+                        $this->validateApplicationRule($rule, $messages);
                         if (!$rule->gateway->isEmpty() && !$rule->replyto->isEmpty()) {
                             $messages->appendMessage(new Message(
                                 gettext('You can not assign a reply-to destination to a rule that uses a gateway.'),
@@ -409,6 +422,79 @@ class Filter extends BaseModel
             }
         }
         return $messages;
+    }
+
+    /**
+     * Validate application control options on a filter rule. Application rules are diverted to appidd
+     * which decides on the application, the constraints below keep the generated pf rule meaningful.
+     * @param $rule filter rule node
+     * @param $messages validation messages
+     */
+    private function validateApplicationRule($rule, $messages)
+    {
+        if (!AppId::isApplicationRule($rule)) {
+            if (!$rule->application_not->isEmpty()) {
+                $messages->appendMessage(new Message(
+                    gettext("Inverting applications requires at least one application or category."),
+                    $rule->application_not->__reference
+                ));
+            }
+            return;
+        }
+
+        if ($this->appIdModel === null) {
+            $this->appIdModel = new AppId();
+        }
+        if ($this->appIdModel->general->enabled->isEmpty()) {
+            $messages->appendMessage(new Message(
+                gettext("Application control is not enabled."),
+                $rule->application->__reference
+            ));
+        }
+        if (!in_array($rule->action->getValue(), ['pass', 'block', 'reject'])) {
+            $messages->appendMessage(new Message(
+                gettext("Applications can only be matched by pass, block or reject rules."),
+                $rule->application->__reference
+            ));
+        }
+        if (!in_array($rule->protocol->getValue(), ['any', 'TCP', 'UDP', 'TCP/UDP'])) {
+            $messages->appendMessage(new Message(
+                gettext("Applications can only be matched for tcp or udp traffic."),
+                $rule->application->__reference
+            ));
+        }
+        if (!$rule->direction->isEqual('in')) {
+            $messages->appendMessage(new Message(
+                gettext("Applications can only be matched on inbound rules."),
+                $rule->application->__reference
+            ));
+        }
+        if (!$rule->{'divert-to'}->isEmpty()) {
+            $messages->appendMessage(new Message(
+                gettext("Divert-to can not be combined with application matching."),
+                $rule->{'divert-to'}->__reference
+            ));
+        }
+        if ($rule->action->isEqual('pass') && $rule->statetype->isEqual('none')) {
+            $messages->appendMessage(new Message(
+                gettext("Application matching requires state tracking."),
+                $rule->statetype->__reference
+            ));
+        }
+        if ($this->appIdRuleCount === null) {
+            $this->appIdRuleCount = 0;
+            foreach ($this->rules->rule->iterateItems() as $node) {
+                if (!$node->enabled->isEmpty() && AppId::isApplicationRule($node)) {
+                    $this->appIdRuleCount++;
+                }
+            }
+        }
+        if ($this->appIdRuleCount > AppId::MAX_RULES) {
+            $messages->appendMessage(new Message(
+                sprintf(gettext("A maximum of %d enabled rules may match applications."), AppId::MAX_RULES),
+                $rule->application->__reference
+            ));
+        }
     }
 
     public function hasSchedule()

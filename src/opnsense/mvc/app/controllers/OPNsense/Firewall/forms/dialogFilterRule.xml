@@ -339,6 +339,53 @@
     </field>
     <field>
         <type>header</type>
+        <label>Application</label>
+    </field>
+    <field>
+        <id>rule.application_not</id>
+        <label>Invert Application</label>
+        <type>checkbox</type>
+        <help>Apply the action to all applications except the ones selected.</help>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.application</id>
+        <label>Application</label>
+        <type>select_multiple</type>
+        <hint>Any</hint>
+        <help>
+            Match traffic on the identified application (requires application control to be enabled).
+            Flows matching the other criteria of this rule are passed while being classified, when classified as one of the
+            selected applications or categories the action of this rule is applied, otherwise the action selected below.
+            Rule evaluation ends at this rule in both cases.
+        </help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.application_category</id>
+        <label>Application category</label>
+        <type>select_multiple</type>
+        <hint>Any</hint>
+        <help>Match all applications in the selected categories.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <id>rule.application_otherwise</id>
+        <label>Otherwise</label>
+        <type>dropdown</type>
+        <help>Action for flows matching this rule which are not classified as one of the selected applications.</help>
+        <grid_view>
+            <visible>false</visible>
+        </grid_view>
+    </field>
+    <field>
+        <type>header</type>
         <label>Normalization</label>
         <advanced>true</advanced>
     </field>

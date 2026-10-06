@@ -95,4 +95,31 @@ class FilterRuleTest extends \PHPUnit\Framework\TestCase
 
         $this->assertEquals(join('', $rules), $this->getConf(__FUNCTION__));
     }
+
+    /**
+     * test application control, rules matching applications divert candidate flows to appidd
+     */
+    public function testApplication()
+    {
+        $rules = [];
+
+        /* block rule diverted to its assigned port, pf passes and keeps state */
+        $rules[] = new FilterRule(self::$ifmap, self::$gwmap, [
+            'type' => 'block', 'statetype' => 'none', 'application' => 'bittorrent', 'appid_port' => 8100
+        ]);
+        /* category match on a pass rule keeps the configured state type */
+        $rules[] = new FilterRule(self::$ifmap, self::$gwmap, [
+            'type' => 'pass', 'statetype' => 'sloppy', 'application_category' => 'p2p', 'appid_port' => 8101
+        ]);
+        /* fail open, pass without diversion */
+        $rules[] = new FilterRule(self::$ifmap, self::$gwmap, [
+            'type' => 'reject', 'application' => 'bittorrent', 'appid_fallback' => true
+        ]);
+        /* application control unavailable, the rule can not be enforced */
+        $rules[] = new FilterRule(self::$ifmap, self::$gwmap, ['type' => 'block', 'application' => 'bittorrent']);
+        /* no application selected, the rule is rendered untouched */
+        $rules[] = new FilterRule(self::$ifmap, self::$gwmap, ['type' => 'block', 'appid_port' => 8102]);
+
+        $this->assertEquals(join('', $rules), $this->getConf(__FUNCTION__));
+    }
 }

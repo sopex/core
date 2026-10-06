@@ -440,6 +440,9 @@ function filter_configure_sync($verbose = false, $load_aliases = true)
 
     unlink('/tmp/rules.debug.error');
 
+    /* let services depending on the loaded ruleset follow up, e.g. appidd divert port assignments */
+    plugins_run('filter_loaded');
+
     service_log('.', $verbose);
 
     /* bring up new instance of filterlog to load new rules */

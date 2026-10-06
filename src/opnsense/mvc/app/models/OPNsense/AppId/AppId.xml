@@ -1,0 +1,70 @@
+<model>
+    <mount>//OPNsense/AppId</mount>
+    <version>1.0.0</version>
+    <description>Application control</description>
+    <items>
+        <general>
+            <enabled type="BooleanField">
+                <Required>Y</Required>
+                <Default>0</Default>
+            </enabled>
+            <failmode type="OptionField">
+                <Required>Y</Required>
+                <Default>closed</Default>
+                <OptionValues>
+                    <closed>Fail closed (drop inspected traffic)</closed>
+                    <open>Fail open (pass inspected traffic)</open>
+                </OptionValues>
+            </failmode>
+            <classify_packets type="IntegerField">
+                <Required>Y</Required>
+                <Default>16</Default>
+                <MinimumValue>1</MinimumValue>
+                <MaximumValue>255</MaximumValue>
+            </classify_packets>
+            <update_url type="UrlField"/>
+        </general>
+        <custom>
+            <application type="ArrayField">
+                <enabled type="BooleanField">
+                    <Required>Y</Required>
+                    <Default>1</Default>
+                </enabled>
+                <name type="TextField">
+                    <Required>Y</Required>
+                    <Mask>/^[a-zA-Z0-9 ._\-]{1,64}$/u</Mask>
+                    <ValidationMessage>The name should be between 1 and 64 characters and may only contain letters, digits, spaces, dots, underscores and dashes.</ValidationMessage>
+                    <Constraints>
+                        <check001>
+                            <ValidationMessage>An application with this name already exists.</ValidationMessage>
+                            <type>UniqueConstraint</type>
+                        </check001>
+                    </Constraints>
+                </name>
+                <category type="JsonKeyValueStoreField">
+                    <ConfigdPopulateAct>appid list categories</ConfigdPopulateAct>
+                    <SourceFile>/tmp/appid_categories.json</SourceFile>
+                    <ValidationMessage>Specify a valid category.</ValidationMessage>
+                </category>
+                <risk type="OptionField">
+                    <Required>Y</Required>
+                    <Default>3</Default>
+                    <OptionValues>
+                        <very_low value="1">1 - Very low</very_low>
+                        <low value="2">2 - Low</low>
+                        <medium value="3">3 - Medium</medium>
+                        <high value="4">4 - High</high>
+                        <very_high value="5">5 - Very high</very_high>
+                    </OptionValues>
+                </risk>
+                <hosts type="CSVListField">
+                    <Required>Y</Required>
+                    <Mask>/^([a-zA-Z0-9_\-]+\.)*[a-zA-Z0-9_\-]+$/u</Mask>
+                    <MaskPerItem>Y</MaskPerItem>
+                    <ValidationMessage>Please specify valid host or domain names.</ValidationMessage>
+                </hosts>
+                <description type="DescriptionField"/>
+            </application>
+        </custom>
+    </items>
+</model>

@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<opnsense>
+    <interfaces>
+        <wan>
+            <if>if001</if>
+            <descr>WAN</descr>
+            <enable>1</enable>
+        </wan>
+        <lan>
+            <if>if002</if>
+            <descr>LAN</descr>
+            <enable>1</enable>
+        </lan>
+    </interfaces>
+    <OPNsense>
+        <AppId version="1.0.0">
+            <general>
+                <enabled>1</enabled>
+                <failmode>closed</failmode>
+                <classify_packets>16</classify_packets>
+            </general>
+        </AppId>
+        <Firewall>
+            <Filter version="1.0.9">
+                <rules>
+                    <rule uuid="c0000000-0000-4000-8000-000000000003">
+                        <enabled>1</enabled>
+                        <sequence>300</sequence>
+                        <action>pass</action>
+                        <interface>lan</interface>
+                        <direction>in</direction>
+                        <protocol>any</protocol>
+                        <application_category>p2p</application_category>
+                        <application_not>1</application_not>
+                        <application_otherwise>block</application_otherwise>
+                        <description>allow everything but peer to peer</description>
+                    </rule>
+                    <rule uuid="c0000000-0000-4000-8000-000000000002">
+                        <enabled>1</enabled>
+                        <sequence>100</sequence>
+                        <action>block</action>
+                        <interface>lan</interface>
+                        <direction>in</direction>
+                        <protocol>any</protocol>
+                        <application>bittorrent,tor</application>
+                        <log>1</log>
+                        <description>block bittorrent and tor</description>
+                    </rule>
+                    <rule uuid="c0000000-0000-4000-8000-000000000001">
+                        <enabled>1</enabled>
+                        <sequence>100</sequence>
+                        <action>reject</action>
+                        <interface>lan</interface>
+                        <direction>in</direction>
+                        <protocol>any</protocol>
+                        <application>unknown</application>
+                        <description>same sequence, ordered by uuid</description>
+                    </rule>
+                    <rule uuid="c0000000-0000-4000-8000-000000000004">
+                        <enabled>0</enabled>
+                        <sequence>50</sequence>
+                        <action>block</action>
+                        <interface>lan</interface>
+                        <direction>in</direction>
+                        <protocol>any</protocol>
+                        <application>bittorrent</application>
+                        <description>disabled</description>
+                    </rule>
+                    <rule uuid="c0000000-0000-4000-8000-000000000005">
+                        <enabled>1</enabled>
+                        <sequence>10</sequence>
+                        <action>pass</action>
+                        <interface>lan</interface>
+                        <direction>in</direction>
+                        <protocol>any</protocol>
+                        <description>no application</description>
+                    </rule>
+                </rules>
+            </Filter>
+        </Firewall>
+    </OPNsense>
+</opnsense>

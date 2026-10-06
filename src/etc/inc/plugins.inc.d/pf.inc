@@ -167,9 +167,22 @@ function pf_firewall($fw)
 
     $mdlFilter = new OPNsense\Firewall\Filter();
 
+    /* rules matching applications divert candidate flows to appidd, unless failing open without the daemon */
+    $mdlAppId = new OPNsense\AppId\AppId();
+    $appid_ports = $mdlAppId->getRulePorts($mdlFilter);
+    $appid_fallback = $mdlAppId->general->failmode->isEqual('open') && !isvalidpid($mdlAppId::PIDFILE);
+
     foreach ($mdlFilter->rules->rule->sortedBy(['sequence']) as $key => $rule) {
+        $uuid = (string)$rule->getAttributes()['uuid'];
         $content = $rule->serialize();
-        $content['#ref'] = 'ui/firewall/filter#' . (string)$rule->getAttributes()['uuid'];
+        $content['#ref'] = 'ui/firewall/filter#' . $uuid;
+        if (isset($appid_ports[$uuid])) {
+            if ($appid_fallback) {
+                $content['appid_fallback'] = true;
+            } else {
+                $content['appid_port'] = $appid_ports[$uuid];
+            }
+        }
         $fw->registerFilterRule($rule->getPriority(), $content);
     }
 

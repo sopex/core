@@ -1,0 +1,8 @@
+<menu>
+    <Firewall>
+        <AppId order="150" VisibleName="Application Control" cssClass="fa fa-cubes fa-fw">
+            <Settings order="10" url="/ui/appid"/>
+            <LogFile order="100" VisibleName="Log File" url="/ui/diagnostics/log/core/appidd"/>
+        </AppId>
+    </Firewall>
+</menu>

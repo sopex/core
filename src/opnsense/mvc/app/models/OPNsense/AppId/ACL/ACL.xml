@@ -1,0 +1,18 @@
+<acl>
+    <page-firewall-application-control>
+        <name>Firewall: Application Control</name>
+        <description>Allow access to application control settings and the application database</description>
+        <patterns>
+            <pattern>ui/appid/*</pattern>
+            <pattern>api/appid/*</pattern>
+        </patterns>
+    </page-firewall-application-control>
+    <page-diagnostics-logs-appidd>
+        <name>Firewall: Application Control: Log File</name>
+        <description>Allow access to the application control log file</description>
+        <patterns>
+            <pattern>ui/diagnostics/log/core/appidd/*</pattern>
+            <pattern>api/diagnostics/log/core/appidd/*</pattern>
+        </patterns>
+    </page-diagnostics-logs-appidd>
+</acl>

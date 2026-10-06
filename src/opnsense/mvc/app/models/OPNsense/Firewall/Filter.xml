@@ -220,6 +220,30 @@
                     <ConfigdPopulateAct>filter list diverts</ConfigdPopulateAct>
                     <ValidationMessage>Specify a valid divert-to target.</ValidationMessage>
                 </divert-to>
+                <application type="JsonKeyValueStoreField">
+                    <Multiple>Y</Multiple>
+                    <ConfigdPopulateAct>appid list applications</ConfigdPopulateAct>
+                    <SourceFile>/tmp/appid_applications.json</SourceFile>
+                    <ValidationMessage>Specify a valid application.</ValidationMessage>
+                </application>
+                <application_category type="JsonKeyValueStoreField">
+                    <Multiple>Y</Multiple>
+                    <ConfigdPopulateAct>appid list categories</ConfigdPopulateAct>
+                    <SourceFile>/tmp/appid_categories.json</SourceFile>
+                    <ValidationMessage>Specify a valid application category.</ValidationMessage>
+                </application_category>
+                <application_not type="BooleanField">
+                    <Default>0</Default>
+                    <Required>Y</Required>
+                </application_not>
+                <application_otherwise type="OptionField">
+                    <Default>pass</Default>
+                    <Required>Y</Required>
+                    <OptionValues>
+                        <pass>Pass</pass>
+                        <block>Block</block>
+                    </OptionValues>
+                </application_otherwise>
                 <gateway type="JsonKeyValueStoreField">
                     <ConfigdPopulateAct>interface gateways list -g</ConfigdPopulateAct>
                     <ValidationMessage>Specify a valid gateway from the list matching the networks ip protocol.</ValidationMessage>
