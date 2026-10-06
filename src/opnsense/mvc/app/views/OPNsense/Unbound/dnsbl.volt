@@ -46,7 +46,15 @@
             history.pushState(null, null, e.target.hash);
         });
 
-        $("#reconfigureAct").SimpleActionButton();
+        mapDataToFormUI({'frm_blockpage': '/api/unbound/settings/get'});
+
+        $("#reconfigureAct").SimpleActionButton({
+            onPreAction: function () {
+                const dfObj = new $.Deferred();
+                saveFormToEndpoint('/api/unbound/settings/set', 'frm_blockpage', function () { dfObj.resolve(); }, true, function () { dfObj.reject(); });
+                return dfObj;
+            }
+        });
 
         $("#tester_exec").click(function() {
             $("#tester_exec_spinner").show();
@@ -71,12 +79,17 @@
 
 <ul class="nav nav-tabs" data-tabs="tabs" id="maintabs">
     <li><a data-toggle="tab" href="#blocklists" id="blocklists_tab">{{ lang._('Blocklists') }}</a></li>
+    <li><a data-toggle="tab" href="#blockpage" id="blockpage_tab">{{ lang._('Block page') }}</a></li>
     <li><a data-toggle="tab" href="#blocklist_tester" id="blocklist_tester_tab">{{ lang._('Tester') }}</a></li>
 </ul>
 
 <div class="tab-content content-box">
     <div id="blocklists" class="tab-pane fade in active">
         {{ partial('layout_partials/base_bootgrid_table', formGridDnsbl)}}
+    </div>
+
+    <div id="blockpage" class="tab-pane fade in">
+        {{ partial('layout_partials/base_form', ['fields': formBlockpage, 'id': 'frm_blockpage']) }}
     </div>
 
     <div id="blocklist_tester" class="tab-pane fade in">

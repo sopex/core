@@ -49,6 +49,7 @@ class ServiceController extends ApiMutableServiceControllerBase
         $backend = new Backend();
         /* XXX currently hardcoded to not cause side effect of $internalServiceTemplate use */
         $backend->configdRun('template reload OPNsense/Unbound/*');
+        $backend->configdRun(static::$internalServiceName . ' blockpage');
         $response = $backend->configdRun(static::$internalServiceName . ' dnsbl');
 
         return ['status' => $response];

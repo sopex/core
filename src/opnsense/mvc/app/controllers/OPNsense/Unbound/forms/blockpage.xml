@@ -1,0 +1,31 @@
+<form>
+    <field>
+        <id>unbound.dnsbl.blockpage.enabled</id>
+        <label>Enable block page</label>
+        <type>checkbox</type>
+        <help>
+            Serve a simple page explaining that the requested site has been blocked. Blocklists without an
+            explicit destination address will resolve blocked domains to the address below.
+            Only plain HTTP requests can show this page, connections to HTTPS sites will fail with a browser error.
+        </help>
+    </field>
+    <field>
+        <id>unbound.dnsbl.blockpage.address</id>
+        <label>Listen address</label>
+        <type>text</type>
+        <help>
+            Dedicated IPv4 address on this firewall to serve the block page on (ports 80 and 443), for example a
+            virtual IP. Do not use an address used by the web GUI or other services listening on these ports.
+        </help>
+    </field>
+    <field>
+        <id>unbound.dnsbl.blockpage.title</id>
+        <label>Title</label>
+        <type>text</type>
+    </field>
+    <field>
+        <id>unbound.dnsbl.blockpage.message</id>
+        <label>Message</label>
+        <type>textbox</type>
+    </field>
+</form>

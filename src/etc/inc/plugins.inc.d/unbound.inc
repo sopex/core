@@ -43,9 +43,15 @@ function unbound_configure()
         'early' => ['unbound_cache_flush'],
         'local' => ['unbound_configure_do'],
         'newwanip' => ['unbound_configure_do:2'],
+        'unbound_blockpage' => ['unbound_blockpage_configure'],
         'unbound_start' => ['unbound_configure_do'],
         'unbound_stop' => ['unbound_service_stop'],
     ];
+}
+
+function unbound_blockpage_enabled()
+{
+    return unbound_enabled() && !(new \OPNsense\Unbound\Unbound())->dnsbl->blockpage->enabled->isEmpty();
 }
 
 function unbound_services()
@@ -67,6 +73,19 @@ function unbound_services()
     $pconfig['php']['stop'] = ['unbound_service_stop'];
     $pconfig['pidfile'] = '/var/run/unbound.pid';
     $services[] = $pconfig;
+
+    if (unbound_blockpage_enabled()) {
+        $services[] = [
+            'description' => gettext('Unbound block page'),
+            'php' => [
+                'restart' => ['unbound_blockpage_configure'],
+                'start' => ['unbound_blockpage_configure'],
+                'stop' => ['unbound_blockpage_stop'],
+            ],
+            'pidfile' => '/var/run/lighttpd-unbound-blockpage.pid',
+            'name' => 'unbound-blockpage',
+        ];
+    }
 
     return $services;
 }
@@ -161,9 +180,32 @@ function unbound_service_stop()
         unbound_cache_flush();
     }
 
+    unbound_blockpage_stop();
+
     killbypid('/var/run/unbound_logger.pid');
     killbypid('/var/run/unbound_dhcpd.pid');
     killbypid('/var/run/unbound.pid');
+}
+
+function unbound_blockpage_stop()
+{
+    killbypid('/var/run/lighttpd-unbound-blockpage.pid');
+}
+
+function unbound_blockpage_configure($verbose = false)
+{
+    unbound_blockpage_stop();
+
+    if (!unbound_blockpage_enabled()) {
+        return;
+    }
+
+    service_log('Starting Unbound block page...', $verbose);
+
+    /* configuration and page content are rendered by the OPNsense/Unbound/* templates */
+    mwexecf('/usr/local/sbin/lighttpd -f %s', ['/var/etc/lighttpd-unbound-blockpage.conf']);
+
+    service_log("done.\n", $verbose);
 }
 
 function unbound_generate_config()
@@ -489,6 +531,8 @@ function unbound_configure_do($verbose = false, $interface_map = null)
     waitforpid('/var/run/unbound.pid', 10);
 
     service_log("done.\n", $verbose);
+
+    unbound_blockpage_configure($verbose);
 }
 
 function unbound_add_host_entries($ifconfig_details)

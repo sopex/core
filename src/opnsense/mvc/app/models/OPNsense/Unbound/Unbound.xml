@@ -272,6 +272,32 @@
                     <ValidationMessage>To keep track of which policies are applicable to source networks, a description should be provided. It should be a string between 1 and 255 characters.</ValidationMessage>
                 </description>
             </blocklist>
+            <blockpage>
+                <enabled type="BooleanField"/>
+                <address type="NetworkField">
+                    <NetMaskAllowed>N</NetMaskAllowed>
+                    <AddressFamily>ipv4</AddressFamily>
+                    <Constraints>
+                        <check001>
+                            <ValidationMessage>An address is required to serve the block page.</ValidationMessage>
+                            <type>SetIfConstraint</type>
+                            <field>enabled</field>
+                            <check>1</check>
+                        </check001>
+                    </Constraints>
+                </address>
+                <title type="TextField">
+                    <Required>Y</Required>
+                    <Default>This page has been blocked</Default>
+                    <Mask>/\A[^\r\n]{1,128}\z/u</Mask>
+                    <ValidationMessage>The title should be a single line of at most 128 characters.</ValidationMessage>
+                </title>
+                <message type="TextField">
+                    <Default>Access to this site has been blocked by the network policy. Please contact your administrator if you believe this is a mistake.</Default>
+                    <Mask>/\A.{0,1024}\z/su</Mask>
+                    <ValidationMessage>The message should be at most 1024 characters.</ValidationMessage>
+                </message>
+            </blockpage>
         </dnsbl>
         <forwarding>
             <enabled type="BooleanField"/>

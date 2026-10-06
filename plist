@@ -506,6 +506,7 @@
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Unbound/StatsController.php
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Unbound/forms/acl.xml
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Unbound/forms/advanced.xml
+/usr/local/opnsense/mvc/app/controllers/OPNsense/Unbound/forms/blockpage.xml
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Unbound/forms/dialogAcl.xml
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Unbound/forms/dialogDot.xml
 /usr/local/opnsense/mvc/app/controllers/OPNsense/Unbound/forms/dialogHostAlias.xml
@@ -1648,6 +1649,8 @@
 /usr/local/opnsense/service/templates/OPNsense/Unbound/core/access_lists.conf
 /usr/local/opnsense/service/templates/OPNsense/Unbound/core/advanced.conf
 /usr/local/opnsense/service/templates/OPNsense/Unbound/core/blocklists.conf
+/usr/local/opnsense/service/templates/OPNsense/Unbound/core/blockpage.html
+/usr/local/opnsense/service/templates/OPNsense/Unbound/core/blockpage_lighttpd.conf
 /usr/local/opnsense/service/templates/OPNsense/Unbound/core/domainoverrides.conf
 /usr/local/opnsense/service/templates/OPNsense/Unbound/core/dot.conf
 /usr/local/opnsense/service/templates/OPNsense/Unbound/core/private_domains.conf

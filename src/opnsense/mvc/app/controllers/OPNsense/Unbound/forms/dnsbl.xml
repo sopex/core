@@ -98,7 +98,8 @@
         <type>text</type>
         <advanced>true</advanced>
         <help>
-            Destination ip address for entries in the blocklist (leave empty to use default: 0.0.0.0).
+            Destination ip address for entries in the blocklist (leave empty to use default: 0.0.0.0,
+            or the block page address when the block page is enabled).
             Not used when "Return NXDOMAIN" is checked.
         </help>
         <grid_view>
