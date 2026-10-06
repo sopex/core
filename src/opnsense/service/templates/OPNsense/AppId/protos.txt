@@ -1,8 +1,9 @@
 # user defined applications, matched on (tls server name or http) host names
+{# nDPI truncates protocol names (31 characters), identifiers use the first 16 hex digits of the uuid #}
 {% for application in helpers.toList('OPNsense.AppId.custom.application') %}
 {%   if application.enabled == '1' %}
 {%     for host in application.hosts.split(',') %}
-host:"{{ host }}"@custom_{{ application['@uuid']|replace('-', '') }}
+host:"{{ host }}"@custom_{{ (application['@uuid']|replace('-', ''))[:16] }}
 {%     endfor %}
 {%   endif %}
 {% endfor %}
