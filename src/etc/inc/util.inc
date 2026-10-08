@@ -601,7 +601,7 @@ function is_ipaddrv6($ipaddr)
     } elseif (strpos($ipaddr, "/") !== false) {
         return false; // subnet is not an address
     } else {
-        return Net_IPv6::checkIPv6($ipaddr);
+        return filter_var($ipaddr, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false;
     }
 }
 

@@ -147,6 +147,9 @@ $hwifs = array_keys(get_interface_list());
 $a_interfaces = &config_read_array('interfaces');
 $a_ppps = &config_read_array('ppps', 'ppp');
 
+/* address fields that are trimmed before type detection and validation */
+$trim_fieldnames = ['ipaddr', 'ipaddrv6', 'alias-address', 'gateway-6rd', 'prefix-6rd', 'prefix-6rd-v4addr'];
+
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (!empty($_GET['if']) && !empty($a_interfaces[$_GET['if']])) {
         $if = $_GET['if'];
@@ -251,6 +254,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     foreach ($std_copy_fieldnames as $fieldname) {
         $pconfig[$fieldname] = isset($a_interfaces[$if][$fieldname]) ? $a_interfaces[$if][$fieldname] : null;
     }
+    /* older versions stored untrimmed addresses, keep is_ipaddrv6() type detection below working for them */
+    foreach ($trim_fieldnames as $fieldname) {
+        if (isset($pconfig[$fieldname]) && is_string($pconfig[$fieldname])) {
+            $pconfig[$fieldname] = trim($pconfig[$fieldname]);
+        }
+    }
     $pconfig['enable'] = isset($a_interfaces[$if]['enable']);
     $pconfig['lock'] = isset($a_interfaces[$if]['lock']);
     $pconfig['blockpriv'] = !empty($a_interfaces[$if]['blockpriv']);
@@ -299,6 +308,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
 } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pconfig = $_POST;
+    foreach ($trim_fieldnames as $fieldname) {
+        if (isset($pconfig[$fieldname]) && is_string($pconfig[$fieldname])) {
+            $pconfig[$fieldname] = trim($pconfig[$fieldname]);
+        }
+    }
+    if (isset($pconfig['dhcprejectfrom']) && is_string($pconfig['dhcprejectfrom'])) {
+        $pconfig['dhcprejectfrom'] = implode(',', array_map('trim', explode(',', $pconfig['dhcprejectfrom'])));
+    }
 
     $input_errors = array();
     if (!empty($_POST['if']) && !empty($a_interfaces[$_POST['if']])) {
