@@ -54,8 +54,7 @@ class ScheduleController extends ApiMutableModelControllerBase
         foreach ($result['rows'] as &$record) {
             $node = $model->getNodeByReference('schedules.schedule.' . $record['uuid']);
             $ranges = $node != null ? $node->timeranges->asArray() : [];
-            $isActive = !empty((string)$record['enabled']) && Schedule::isTimeBasedRuleActive(['timerange' => $ranges]);
-            $record['status'] = $isActive ? '1' : '0';
+            $record['status'] = Schedule::isTimeBasedRuleActive(['timerange' => $ranges]) ? '1' : '0';
             $record['timeranges_text'] = $node != null ? $node->timeranges->getDescription() : '';
         }
         return $result;
@@ -131,17 +130,6 @@ class ScheduleController extends ApiMutableModelControllerBase
         }
 
         return $this->delBase('schedules.schedule', $uuid);
-    }
-
-    /**
-     * Toggle schedule enabled state
-     * @param string $uuid
-     * @param string|null $enabled
-     * @return array
-     */
-    public function toggleItemAction($uuid, $enabled = null)
-    {
-        return $this->toggleBase('schedules.schedule', $uuid, $enabled);
     }
 
     /**

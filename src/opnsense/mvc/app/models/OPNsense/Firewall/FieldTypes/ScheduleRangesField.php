@@ -81,46 +81,18 @@ class ScheduleRangesField extends BaseField implements IStructuredInput
     public function setValue($value)
     {
         if (is_a($value, 'SimpleXMLElement')) {
-            if (isset($value->timerange)) {
-                $ranges = [];
-                foreach ($value->timerange as $tr) {
-                    $ranges[] = [
-                        'position' => (string)($tr->position ?? ''),
-                        'month' => (string)($tr->month ?? ''),
-                        'day' => (string)($tr->day ?? ''),
-                        'hour' => (string)($tr->hour ?? ''),
-                        'rangedescr' => (string)($tr->rangedescr ?? ''),
-                    ];
-                }
-                $this->internalValue = json_encode($this->normalizeRanges($ranges));
-                return;
-            }
             $value = (string)$value;
         }
 
         if (is_string($value)) {
+            /* stored as JSON in config.xml, anything else is invalid and caught by validation */
             $trimmed = trim($value);
-            if (empty($trimmed)) {
+            if ($trimmed === '') {
                 $this->internalValue = json_encode([]);
                 return;
             }
-            if (str_starts_with($trimmed, '[') || str_starts_with($trimmed, '{')) {
-                $decoded = json_decode($trimmed, true);
-                if (is_array($decoded)) {
-                    $this->internalValue = json_encode($this->normalizeRanges($decoded));
-                    return;
-                }
-            } else {
-                $b64 = base64_decode($trimmed, true);
-                if ($b64 !== false && (str_starts_with($b64, '[') || str_starts_with($b64, '{'))) {
-                    $decoded = json_decode($b64, true);
-                    if (is_array($decoded)) {
-                        $this->internalValue = json_encode($this->normalizeRanges($decoded));
-                        return;
-                    }
-                }
-            }
-            $this->internalValue = $value;
+            $decoded = json_decode($trimmed, true);
+            $this->internalValue = is_array($decoded) ? json_encode($this->normalizeRanges($decoded)) : $value;
             return;
         }
 
@@ -196,73 +168,102 @@ class ScheduleRangesField extends BaseField implements IStructuredInput
         return implode('; ', $lines);
     }
 
+    /**
+     * Parse "H:MM-H:MM" into start and stop minutes since midnight, 24:00 being the end of the day
+     * @param string $hour
+     * @return array|null [start, stop] or null when malformed
+     */
+    public static function parseHour(string $hour): ?array
+    {
+        if (!preg_match('/^([0-9]{1,2}):([0-9]{2})-([0-9]{1,2}):([0-9]{2})$/', $hour, $matches)) {
+            return null;
+        }
+        $result = [];
+        foreach ([[$matches[1], $matches[2]], [$matches[3], $matches[4]]] as [$hh, $mm]) {
+            if ((int)$hh > 24 || (int)$mm > 59 || ((int)$hh == 24 && (int)$mm != 0)) {
+                return null;
+            }
+            $result[] = ((int)$hh * 60) + (int)$mm;
+        }
+        return $result;
+    }
+
+    /**
+     * Validate a list of time ranges, shared with the legacy migration
+     * @param array $ranges
+     * @return array validation messages
+     */
+    public static function validateRanges(array $ranges): array
+    {
+        $result = [];
+        if (empty($ranges)) {
+            $result[] = gettext('The schedule must have at least one time range configured.');
+            return $result;
+        }
+        foreach ($ranges as $idx => $range) {
+            $lineNum = $idx + 1;
+            $hasRepeating = !empty($range['position']);
+            $hasDates = !empty($range['month']) || !empty($range['day']);
+
+            if ($hasRepeating === $hasDates) {
+                $result[] = sprintf(
+                    gettext('Range %d: specify either repeating days of the week or calendar dates.'),
+                    $lineNum
+                );
+            }
+
+            if ($hasRepeating) {
+                foreach (explode(',', $range['position']) as $day) {
+                    if (!ctype_digit($day) || (int)$day < 1 || (int)$day > 7) {
+                        $result[] = sprintf(gettext('Range %d: invalid day of week "%s".'), $lineNum, $day);
+                    }
+                }
+            }
+
+            if ($hasDates) {
+                $months = explode(',', $range['month'] ?? '');
+                $days = explode(',', $range['day'] ?? '');
+                if (count($months) !== count($days)) {
+                    $result[] = sprintf(gettext('Range %d: month and day counts do not match.'), $lineNum);
+                } else {
+                    foreach ($months as $i => $month) {
+                        if (
+                            !ctype_digit($month) || !ctype_digit($days[$i]) ||
+                            !checkdate((int)$month, (int)$days[$i], 2000)
+                        ) {
+                            $result[] = sprintf(
+                                gettext('Range %d: invalid date "%s/%s".'),
+                                $lineNum,
+                                $month,
+                                $days[$i]
+                            );
+                        }
+                    }
+                }
+            }
+
+            $hour = $range['hour'] ?? '';
+            $minutes = self::parseHour($hour);
+            if ($minutes === null) {
+                $result[] = sprintf(
+                    gettext('Range %d: invalid time "%s". Expected HH:MM-HH:MM.'),
+                    $lineNum,
+                    $hour
+                );
+            } elseif ($minutes[0] >= $minutes[1]) {
+                $result[] = sprintf(gettext('Range %d: start time must be before stop time.'), $lineNum);
+            }
+        }
+        return $result;
+    }
+
     public function getValidators()
     {
         $validators = parent::getValidators();
         $validators[] = new CallbackValidator(
             [
                 "callback" => function ($value) {
-                    $ranges = $this->asArray();
-                    $result = [];
-                    if (empty($ranges)) {
-                        $result[] = gettext('The schedule must have at least one time range configured.');
-                        return $result;
-                    }
-                    foreach ($ranges as $idx => $range) {
-                        $lineNum = $idx + 1;
-                        $hasRepeating = !empty($range['position']);
-                        $hasDates = !empty($range['month']) && !empty($range['day']);
-
-                        if (!$hasRepeating && !$hasDates) {
-                            $result[] = sprintf(
-                                gettext('Range %d: specify either repeating days of the week or calendar dates.'),
-                                $lineNum
-                            );
-                        }
-
-                        if ($hasRepeating) {
-                            $days = explode(',', $range['position']);
-                            foreach ($days as $day) {
-                                if (!in_array((int)$day, [1, 2, 3, 4, 5, 6, 7])) {
-                                    $result[] = sprintf(
-                                        gettext('Range %d: invalid day of week "%s".'),
-                                        $lineNum,
-                                        $day
-                                    );
-                                }
-                            }
-                        }
-
-                        if ($hasDates) {
-                            $months = explode(',', $range['month']);
-                            $days = explode(',', $range['day']);
-                            if (count($months) !== count($days)) {
-                                $result[] = sprintf(
-                                    gettext('Range %d: month and day counts do not match.'),
-                                    $lineNum
-                                );
-                            }
-                        }
-
-                        $hour = $range['hour'] ?? '';
-                        if (!preg_match('/^([0-9]{1,2}):([0-9]{2})-([0-9]{1,2}):([0-9]{2})$/', $hour, $matches)) {
-                            $result[] = sprintf(
-                                gettext('Range %d: invalid time format "%s". Expected HH:MM-HH:MM.'),
-                                $lineNum,
-                                $hour
-                            );
-                        } else {
-                            $startMinutes = ((int)$matches[1] * 60) + (int)$matches[2];
-                            $stopMinutes = ((int)$matches[3] * 60) + (int)$matches[4];
-                            if ($startMinutes > $stopMinutes) {
-                                $result[] = sprintf(
-                                    gettext('Range %d: start time cannot be greater than stop time.'),
-                                    $lineNum
-                                );
-                            }
-                        }
-                    }
-                    return $result;
+                    return self::validateRanges($this->asArray());
                 }
             ]
         );

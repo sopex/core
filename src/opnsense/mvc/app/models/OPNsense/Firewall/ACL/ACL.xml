@@ -42,4 +42,13 @@
             <pattern>api/firewall/schedule/*</pattern>
         </patterns>
     </page-firewall-schedules>
+    <page-firewall-schedules-edit>
+        <!-- kept for privileges assigned to the former firewall_schedule_edit.php page -->
+        <name>Firewall: Schedules: Edit</name>
+        <patterns>
+            <pattern>ui/firewall/schedule</pattern>
+            <pattern>ui/firewall/schedule/*</pattern>
+            <pattern>api/firewall/schedule/*</pattern>
+        </patterns>
+    </page-firewall-schedules-edit>
 </acl>

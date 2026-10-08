@@ -6,10 +6,6 @@
     <items>
         <schedules>
             <schedule type="ArrayField">
-                <enabled type="BooleanField">
-                    <Default>1</Default>
-                    <Required>Y</Required>
-                </enabled>
                 <name type=".\ScheduleNameField">
                     <Required>Y</Required>
                     <Constraints>

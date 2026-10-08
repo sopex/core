@@ -1,19 +1,8 @@
 <form>
     <field>
-        <id>schedule.enabled</id>
-        <label>Enabled</label>
-        <type>checkbox</type>
-        <help>Enable or disable this schedule.</help>
-        <grid_view>
-            <width>50</width>
-            <type>boolean</type>
-            <formatter>rowtoggle</formatter>
-        </grid_view>
-    </field>
-    <field>
-        <id>status</id>
+        <id>schedule.status</id>
         <label>Status</label>
-        <type>text</type>
+        <type>ignore</type>
         <grid_view>
             <width>80</width>
             <formatter>status</formatter>
@@ -29,9 +18,9 @@
         </grid_view>
     </field>
     <field>
-        <id>timeranges_text</id>
+        <id>schedule.timeranges_text</id>
         <label>Time Range(s)</label>
-        <type>text</type>
+        <type>ignore</type>
         <grid_view>
             <width>350</width>
         </grid_view>
@@ -45,6 +34,10 @@
     <field>
         <id>schedule.timeranges</id>
         <label>Time Ranges</label>
+        <style>json-data</style>
         <type>hidden</type>
+        <grid_view>
+            <ignore>true</ignore>
+        </grid_view>
     </field>
 </form>

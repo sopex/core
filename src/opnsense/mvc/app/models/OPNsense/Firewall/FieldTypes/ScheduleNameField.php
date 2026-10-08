@@ -39,27 +39,37 @@ class ScheduleNameField extends BaseField
 {
     protected $internalIsContainer = false;
 
+    /**
+     * Validate a schedule name, shared with the legacy migration
+     * @param string $value
+     * @return array validation messages
+     */
+    public static function validateName(string $value): array
+    {
+        $result = [];
+        if ($value === '') {
+            $result[] = gettext('Schedule may not use a blank name.');
+            return $result;
+        }
+        if (in_array(strtolower($value), ['lan', 'wan'])) {
+            $result[] = sprintf(gettext('Schedule may not be named %s.'), strtoupper($value));
+        }
+        if (!preg_match('/^[a-zA-Z0-9_\-]{1,32}$/', $value)) {
+            $result[] = sprintf(
+                gettext('The schedule name may not exceed 32 characters and may only consist of the following characters: %s'),
+                'a-z, A-Z, 0-9, _, -'
+            );
+        }
+        return $result;
+    }
+
     public function getValidators()
     {
         $validators = parent::getValidators();
         $validators[] = new CallbackValidator(
             [
                 "callback" => function ($value) {
-                    $result = [];
-                    if (empty($value)) {
-                        $result[] = gettext('Schedule may not use a blank name.');
-                        return $result;
-                    }
-                    if (in_array(strtolower($value), ['lan', 'wan'])) {
-                        $result[] = sprintf(gettext('Schedule may not be named %s.'), strtoupper($value));
-                    }
-                    if (!preg_match('/^[a-zA-Z0-9_\-]{1,32}$/', $value)) {
-                        $result[] = sprintf(
-                            gettext('The schedule name must be less than 32 characters long and may only consist of the following characters: %s'),
-                            'a-z, A-Z, 0-9, _, -'
-                        );
-                    }
-                    return $result;
+                    return self::validateName((string)$value);
                 }
             ]
         );

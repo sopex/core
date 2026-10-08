@@ -117,8 +117,13 @@ class Schedule extends BaseModel
      */
     public static function isTimeBasedRuleActive(array $schedule): bool
     {
-        if (empty($schedule) || empty($schedule['timerange'])) {
+        /* no schedule? rule should be installed */
+        if (empty($schedule)) {
             return true;
+        }
+        /* a schedule without ranges never matches (legacy behaviour) */
+        if (empty($schedule['timerange'])) {
+            return false;
         }
 
         $now = time();
@@ -161,28 +166,32 @@ class Schedule extends BaseModel
     }
 
     /**
-     * Check if a specific schedule is active by name
-     * @param string $name
-     * @return bool
+     * Read the time ranges of a legacy <schedule> node
+     * @param \SimpleXMLElement $node legacy schedule node
+     * @return array
      */
-    public function isScheduleActive(string $name): bool
+    public static function legacyRanges($node): array
     {
-        foreach ($this->schedules->schedule->iterateItems() as $item) {
-            if ((string)$item->name === $name) {
-                if (empty((string)$item->enabled)) {
-                    return false;
-                }
-                return self::isTimeBasedRuleActive([
-                    'timerange' => $item->timeranges->asArray()
-                ]);
-            }
+        $ranges = [];
+        if (!isset($node->timerange)) {
+            return $ranges;
         }
-        return false;
+        foreach ($node->timerange as $tr) {
+            $ranges[] = [
+                'position' => (string)($tr->position ?? ''),
+                'month' => (string)($tr->month ?? ''),
+                'day' => (string)($tr->day ?? ''),
+                'hour' => (string)($tr->hour ?? ''),
+                'rangedescr' => (string)($tr->rangedescr ?? ''),
+            ];
+        }
+        return $ranges;
     }
 
     /**
-     * Retrieve all schedules in a structured format for filter configuration,
-     * with fallback to legacy config if model is unpopulated.
+     * Retrieve all schedules in a structured format for filter configuration.
+     * Legacy <schedules> entries the migration could not convert remain in place
+     * and are merged by name, so rules referencing them keep their behaviour.
      * @return array
      */
     public static function getAllSchedules(): array
@@ -190,41 +199,29 @@ class Schedule extends BaseModel
         $schedules = [];
         $mdl = new static();
         foreach ($mdl->schedules->schedule->iterateItems() as $item) {
-            if (!empty((string)$item->enabled)) {
-                $name = (string)$item->name;
-                $schedules[$name] = [
-                    'name' => $name,
-                    'descr' => (string)$item->descr,
-                    'timerange' => $item->timeranges->asArray(),
-                ];
-            }
+            $name = (string)$item->name;
+            $schedules[$name] = [
+                'name' => $name,
+                'descr' => (string)$item->descr,
+                'timerange' => $item->timeranges->asArray(),
+            ];
         }
 
-        // Fallback to legacy config if model is empty (e.g. before migration runs)
-        if (empty($schedules)) {
-            $legacy = Config::getInstance()->object();
-            if (!empty($legacy->schedules->schedule)) {
-                foreach ($legacy->schedules->schedule as $item) {
-                    $name = (string)$item->name;
-                    $ranges = [];
-                    if (!empty($item->timerange)) {
-                        foreach ($item->timerange as $tr) {
-                            $ranges[] = [
-                                'position' => (string)($tr->position ?? ''),
-                                'month' => (string)($tr->month ?? ''),
-                                'day' => (string)($tr->day ?? ''),
-                                'hour' => (string)($tr->hour ?? ''),
-                                'rangedescr' => (string)($tr->rangedescr ?? ''),
-                            ];
-                        }
-                    }
-                    $schedules[$name] = [
-                        'name' => $name,
-                        'descr' => (string)($item->descr ?? ''),
-                        'timerange' => $ranges,
-                    ];
-                }
+        $legacy = Config::getInstance()->object();
+        if (!isset($legacy->schedules->schedule)) {
+            return $schedules;
+        }
+        foreach ($legacy->schedules->schedule as $item) {
+            $name = (string)$item->name;
+            /* first match wins, as in the legacy filter code */
+            if ($name === '' || isset($schedules[$name])) {
+                continue;
             }
+            $schedules[$name] = [
+                'name' => $name,
+                'descr' => (string)($item->descr ?? ''),
+                'timerange' => self::legacyRanges($item),
+            ];
         }
 
         return $schedules;

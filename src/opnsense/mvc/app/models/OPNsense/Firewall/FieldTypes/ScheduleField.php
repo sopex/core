@@ -29,7 +29,7 @@
 namespace OPNsense\Firewall\FieldTypes;
 
 use OPNsense\Base\FieldTypes\BaseListField;
-use OPNsense\Core\Config;
+use OPNsense\Firewall\Schedule;
 
 class ScheduleField extends BaseListField
 {
@@ -38,25 +38,11 @@ class ScheduleField extends BaseListField
     protected function actionPostLoadingEvent()
     {
         if (empty(self::$schedules)) {
-            $mdl = new \OPNsense\Firewall\Schedule();
-            foreach ($mdl->schedules->schedule->iterateItems() as $node) {
-                if (!empty((string)$node->name)) {
-                    self::$schedules[(string)$node->name] = (string)$node->name;
-                }
-            }
-            if (empty(self::$schedules)) {
-                $cnf = Config::getInstance()->object();
-                if (isset($cnf->schedules->schedule)) {
-                    foreach ($cnf->schedules->schedule as $node) {
-                        if (!empty((string)$node->name)) {
-                            self::$schedules[(string)$node->name] = (string)$node->name;
-                        }
-                    }
-                }
+            foreach (array_keys(Schedule::getAllSchedules()) as $name) {
+                self::$schedules[$name] = $name;
             }
         }
         $this->internalOptionList = self::$schedules;
         return parent::actionPostLoadingEvent();
     }
 }
-

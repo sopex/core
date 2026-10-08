@@ -87,22 +87,23 @@
         }
 
         function syncRangesToField() {
-            $('#schedule\\.timeranges').val(JSON.stringify(currentRanges));
+            $('#schedule\\.timeranges').data('data', currentRanges);
         }
 
         function loadRangesFromField() {
-            let raw = $('#schedule\\.timeranges').val();
+            let ranges = $('#schedule\\.timeranges').data('data');
             currentRanges = [];
-            if (raw) {
-                try {
-                    let parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed)) {
-                        currentRanges = parsed;
-                    }
-                } catch (e) {
-                    currentRanges = [];
-                }
+            if (Array.isArray(ranges)) {
+                // API output is html escaped, json-data fields are not decoded by setFormData()
+                currentRanges = ranges.map(function(range) {
+                    let decoded = {};
+                    $.each(range, function(key, value) {
+                        decoded[key] = typeof value === 'string' ? htmlDecode(value) : value;
+                    });
+                    return decoded;
+                });
             }
+            syncRangesToField();
             renderRangesTable();
         }
 
@@ -112,26 +113,21 @@
             set: '/api/firewall/schedule/set_item/',
             add: '/api/firewall/schedule/add_item/',
             del: '/api/firewall/schedule/del_item/',
-            toggle: '/api/firewall/schedule/toggle_item/',
             options: {
                 formatters: {
                     status: function(column, row) {
                         if (row.status === '1') {
-                            return '<span class="fa fa-clock-o text-success" data-toggle="tooltip" title="{{ lang._('Active') }}"></span> <span class="text-success">{{ lang._('Active') }}</span>';
+                            return '<span class="fa fa-clock-o text-success"></span> <span class="text-success">{{ lang._('Active') }}</span>';
                         }
-                        return '<span class="fa fa-clock-o text-muted" data-toggle="tooltip" title="{{ lang._('Inactive') }}"></span> <span class="text-muted">{{ lang._('Inactive') }}</span>';
-                    },
-                    commands: function(column, row) {
-                        return '<button type="button" class="btn btn-xs btn-default command-edit bootgrid-tooltip" data-row-id="' + row.uuid + '"><span class="fa fa-fw fa-pencil"></span></button> ' +
-                            '<button type="button" class="btn btn-xs btn-default command-copy bootgrid-tooltip" data-row-id="' + row.uuid + '"><span class="fa fa-fw fa-clone"></span></button> ' +
-                            '<button type="button" class="btn btn-xs btn-default command-delete bootgrid-tooltip" data-row-id="' + row.uuid + '"><span class="fa fa-fw fa-trash-o"></span></button>';
+                        return '<span class="fa fa-clock-o text-muted"></span> <span class="text-muted">{{ lang._('Inactive') }}</span>';
                     }
+                },
+                onBeforeRenderDialog: function(payload) {
+                    // form data is mapped at this point, render the ranges editor from it
+                    loadRangesFromField();
+                    return (new $.Deferred()).resolve();
                 }
             }
-        });
-
-        $('#{{formGridSchedule['edit_dialog_id']}}').on('shown.bs.modal', function() {
-            setTimeout(loadRangesFromField, 200);
         });
 
         // Day of week toggle buttons
@@ -163,10 +159,10 @@
             let startMinutes = (parseInt(startHour, 10) * 60) + parseInt(startMin, 10);
             let stopMinutes = (parseInt(stopHour, 10) * 60) + parseInt(stopMin, 10);
 
-            if (startMinutes > stopMinutes) {
+            if (startMinutes >= stopMinutes) {
                 BootstrapDialog.alert({
                     title: "{{ lang._('Validation Error') }}",
-                    message: "{{ lang._('Start time cannot be greater than stop time.') }}",
+                    message: "{{ lang._('Start time must be before stop time.') }}",
                     type: BootstrapDialog.TYPE_WARNING
                 });
                 return;
