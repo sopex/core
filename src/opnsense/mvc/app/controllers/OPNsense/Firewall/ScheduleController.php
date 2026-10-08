@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (C) 2025 Deciso B.V.
+ * Copyright (C) 2026 Konstantinos Spartalis
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,37 +26,20 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-namespace OPNsense\Firewall\FieldTypes;
+namespace OPNsense\Firewall;
 
-use OPNsense\Base\FieldTypes\BaseListField;
-use OPNsense\Core\Config;
+use OPNsense\Base\IndexController;
 
-class ScheduleField extends BaseListField
+/**
+ * Class ScheduleController
+ * @package OPNsense\Firewall
+ */
+class ScheduleController extends IndexController
 {
-    private static $schedules = [];
-
-    protected function actionPostLoadingEvent()
+    public function indexAction()
     {
-        if (empty(self::$schedules)) {
-            $mdl = new \OPNsense\Firewall\Schedule();
-            foreach ($mdl->schedules->schedule->iterateItems() as $node) {
-                if (!empty((string)$node->name)) {
-                    self::$schedules[(string)$node->name] = (string)$node->name;
-                }
-            }
-            if (empty(self::$schedules)) {
-                $cnf = Config::getInstance()->object();
-                if (isset($cnf->schedules->schedule)) {
-                    foreach ($cnf->schedules->schedule as $node) {
-                        if (!empty((string)$node->name)) {
-                            self::$schedules[(string)$node->name] = (string)$node->name;
-                        }
-                    }
-                }
-            }
-        }
-        $this->internalOptionList = self::$schedules;
-        return parent::actionPostLoadingEvent();
+        $this->view->formDialogEdit = $this->getForm('scheduleEdit');
+        $this->view->formGridSchedule = $this->getFormGrid('scheduleEdit');
+        $this->view->pick('OPNsense/Firewall/schedule');
     }
 }
-

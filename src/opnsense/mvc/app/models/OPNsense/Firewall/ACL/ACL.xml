@@ -34,4 +34,12 @@
             <pattern>api/firewall/one_to_one/*</pattern>
         </patterns>
     </page-firewall-nat-1-1-edit>
+    <page-firewall-schedules>
+        <name>Firewall: Schedules</name>
+        <patterns>
+            <pattern>ui/firewall/schedule</pattern>
+            <pattern>ui/firewall/schedule/*</pattern>
+            <pattern>api/firewall/schedule/*</pattern>
+        </patterns>
+    </page-firewall-schedules>
 </acl>

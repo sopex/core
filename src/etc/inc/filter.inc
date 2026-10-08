@@ -242,23 +242,22 @@ function filter_configure_sync($verbose = false, $load_aliases = true)
      * without increasing impact.
      */
     $sched_kill_states = [];
+    $schedules = \OPNsense\Firewall\Schedule::getAllSchedules();
     foreach ($fw->iterateFilterRules() as $rule) {
         $rrule = $rule->getRawRule();
         if (!empty($rrule['sched'])) {
             $descr = $rrule['descr'] ?? '';
             $descr .= " ({$rrule['sched']})";
             $rule->updateDescription($descr);
-            foreach ($config['schedules']['schedule'] as $sched) {
-                if ($sched['name'] == $rrule['sched']) {
-                    if (!filter_get_time_based_rule_status($sched)) {
-                        if (!isset($config['system']['schedule_states'])) {
-                            $sched_kill_states[] = $rrule['label'];
-                        }
-                        /* disable rule, suffix label to mark end of schedule */
-                        $rule->disable();
-                        $rule->updateDescription("[FIN] " . $descr);
+            if (isset($schedules[$rrule['sched']])) {
+                $sched = $schedules[$rrule['sched']];
+                if (!filter_get_time_based_rule_status($sched)) {
+                    if (!isset($config['system']['schedule_states'])) {
+                        $sched_kill_states[] = $rrule['label'];
                     }
-                    break;
+                    /* disable rule, suffix label to mark end of schedule */
+                    $rule->disable();
+                    $rule->updateDescription("[FIN] " . $descr);
                 }
             }
         }
@@ -609,47 +608,7 @@ function filter_rules_legacy(&$FilterIflist)
 */
 function filter_get_time_based_rule_status($schedule)
 {
-    /* no schedule? rule should be installed */
-    if (empty($schedule)) {
-        return true;
-    }
-    /*
-     * iterate through time blocks and determine
-     * if the rule should be installed or not.
-     */
-    foreach ($schedule['timerange'] as $timeday) {
-        $matched_time = true; /* keep original behavior, no time set allows the whole day */
-        if (!empty($timeday['hour'])) {
-            $tmp = explode("-", $timeday['hour']);
-            $now = strtotime("now");
-            $matched_time = $now >= strtotime($tmp[0]) && $now < strtotime($tmp[1]);
-        }
-        if ($matched_time) {
-            if (!empty($timeday['position'])) {
-                $this_weekday = date('w') == 0 ? 7 : date('w');
-
-                foreach (explode(",", $timeday['position']) as $day) {
-                    if ($day == $this_weekday) {
-                        return true;
-                    }
-                }
-            } else {
-                $months = explode(',', $timeday['month'] ?? '');
-                $days = explode(',', $timeday['day'] ?? '');
-                if (empty($months) || empty($days) || count($days) != count($months)) {
-                    /* invalid data */
-                    continue;
-                }
-                $today = date("dm");
-                for ($i = 0; $i < count($days); ++$i) {
-                    if (sprintf("%02d%02d", $days[$i], $months[$i]) == $today) {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    return false;
+    return \OPNsense\Firewall\Schedule::isTimeBasedRuleActive($schedule);
 }
 
 function filter_current_table_entries()

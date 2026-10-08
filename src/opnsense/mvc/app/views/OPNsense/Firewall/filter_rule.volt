@@ -619,7 +619,7 @@
                         }
                         return `
                             ${row[column.id]} &nbsp;
-                            <a href="/firewall_schedule_edit.php?name=${row[column.id]}" data-toggle="tooltip" title="{{ lang._('Edit') }}">
+                            <a href="/ui/firewall/schedule/#search=${encodeURIComponent(row[column.id])}" data-toggle="tooltip" title="{{ lang._('Edit') }}">
                                 <i class="fa fa-calendar text-muted"></i>
                             </a>
                         `;

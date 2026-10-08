@@ -1,0 +1,29 @@
+<model>
+    <mount>//OPNsense/Firewall/Schedule</mount>
+    <version>1.0.0</version>
+    <description>Firewall schedules</description>
+    <migration_prefix>MS</migration_prefix>
+    <items>
+        <schedules>
+            <schedule type="ArrayField">
+                <enabled type="BooleanField">
+                    <Default>1</Default>
+                    <Required>Y</Required>
+                </enabled>
+                <name type=".\ScheduleNameField">
+                    <Required>Y</Required>
+                    <Constraints>
+                        <check001>
+                            <ValidationMessage>A schedule with this name already exists.</ValidationMessage>
+                            <type>UniqueConstraint</type>
+                        </check001>
+                    </Constraints>
+                </name>
+                <descr type="DescriptionField"/>
+                <timeranges type=".\ScheduleRangesField">
+                    <Required>Y</Required>
+                </timeranges>
+            </schedule>
+        </schedules>
+    </items>
+</model>

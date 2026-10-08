@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (C) 2025 Deciso B.V.
+ * Copyright (C) 2026 Konstantinos Spartalis
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,35 +28,41 @@
 
 namespace OPNsense\Firewall\FieldTypes;
 
-use OPNsense\Base\FieldTypes\BaseListField;
-use OPNsense\Core\Config;
+use OPNsense\Base\FieldTypes\BaseField;
+use OPNsense\Base\Validators\CallbackValidator;
 
-class ScheduleField extends BaseListField
+/**
+ * Class ScheduleNameField
+ * @package OPNsense\Firewall\FieldTypes
+ */
+class ScheduleNameField extends BaseField
 {
-    private static $schedules = [];
+    protected $internalIsContainer = false;
 
-    protected function actionPostLoadingEvent()
+    public function getValidators()
     {
-        if (empty(self::$schedules)) {
-            $mdl = new \OPNsense\Firewall\Schedule();
-            foreach ($mdl->schedules->schedule->iterateItems() as $node) {
-                if (!empty((string)$node->name)) {
-                    self::$schedules[(string)$node->name] = (string)$node->name;
-                }
-            }
-            if (empty(self::$schedules)) {
-                $cnf = Config::getInstance()->object();
-                if (isset($cnf->schedules->schedule)) {
-                    foreach ($cnf->schedules->schedule as $node) {
-                        if (!empty((string)$node->name)) {
-                            self::$schedules[(string)$node->name] = (string)$node->name;
-                        }
+        $validators = parent::getValidators();
+        $validators[] = new CallbackValidator(
+            [
+                "callback" => function ($value) {
+                    $result = [];
+                    if (empty($value)) {
+                        $result[] = gettext('Schedule may not use a blank name.');
+                        return $result;
                     }
+                    if (in_array(strtolower($value), ['lan', 'wan'])) {
+                        $result[] = sprintf(gettext('Schedule may not be named %s.'), strtoupper($value));
+                    }
+                    if (!preg_match('/^[a-zA-Z0-9_\-]{1,32}$/', $value)) {
+                        $result[] = sprintf(
+                            gettext('The schedule name must be less than 32 characters long and may only consist of the following characters: %s'),
+                            'a-z, A-Z, 0-9, _, -'
+                        );
+                    }
+                    return $result;
                 }
-            }
-        }
-        $this->internalOptionList = self::$schedules;
-        return parent::actionPostLoadingEvent();
+            ]
+        );
+        return $validators;
     }
 }
-

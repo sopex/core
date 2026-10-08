@@ -221,7 +221,7 @@ function pf_xmlrpc_sync()
     $result[] = [
         'description' => gettext('Firewall Schedules'),
         'help' => gettext('Synchronize the firewall schedules to the other HA host.'),
-        'section' => 'schedules',
+        'section' => 'schedules,OPNsense.Firewall.Schedule',
         'id' => 'schedules',
         'services' => ['pf'],
     ];

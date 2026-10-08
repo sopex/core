@@ -1,0 +1,50 @@
+<form>
+    <field>
+        <id>schedule.enabled</id>
+        <label>Enabled</label>
+        <type>checkbox</type>
+        <help>Enable or disable this schedule.</help>
+        <grid_view>
+            <width>50</width>
+            <type>boolean</type>
+            <formatter>rowtoggle</formatter>
+        </grid_view>
+    </field>
+    <field>
+        <id>status</id>
+        <label>Status</label>
+        <type>text</type>
+        <grid_view>
+            <width>80</width>
+            <formatter>status</formatter>
+        </grid_view>
+    </field>
+    <field>
+        <id>schedule.name</id>
+        <label>Name</label>
+        <type>text</type>
+        <help>The schedule name may not exceed 32 characters and may only contain alphanumeric characters, underscores, and hyphens.</help>
+        <grid_view>
+            <width>150</width>
+        </grid_view>
+    </field>
+    <field>
+        <id>timeranges_text</id>
+        <label>Time Range(s)</label>
+        <type>text</type>
+        <grid_view>
+            <width>350</width>
+        </grid_view>
+    </field>
+    <field>
+        <id>schedule.descr</id>
+        <label>Description</label>
+        <type>text</type>
+        <help>You may enter a description here for your reference.</help>
+    </field>
+    <field>
+        <id>schedule.timeranges</id>
+        <label>Time Ranges</label>
+        <type>hidden</type>
+    </field>
+</form>
