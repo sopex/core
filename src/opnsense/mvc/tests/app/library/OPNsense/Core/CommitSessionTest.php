@@ -60,6 +60,7 @@ class CommitSessionTest extends \PHPUnit\Framework\TestCase
     public function testGetGuiUrlFromXml()
     {
         $cs = CommitSession::getInstance();
+        unset($_SERVER['HTTP_HOST'], $_SERVER['SERVER_ADDR']);
         $xmlStr = '<opnsense><system><webgui><protocol>https</protocol><port>8443</port></webgui></system><interfaces><lan><ipaddr>192.168.1.1</ipaddr></lan></interfaces></opnsense>';
         $xml = simplexml_load_string($xmlStr);
         $url = $cs->getGuiUrl($xml);
@@ -69,6 +70,28 @@ class CommitSessionTest extends \PHPUnit\Framework\TestCase
         $xmlHttp = simplexml_load_string($xmlHttpStr);
         $urlHttp = $cs->getGuiUrl($xmlHttp);
         $this->assertEquals('http://10.0.0.1', $urlHttp);
+    }
+
+    public function testGetGuiUrlPrefersHttpHostOverLanIp()
+    {
+        $cs = CommitSession::getInstance();
+        $_SERVER['HTTP_HOST'] = 'firewall.wan.example.com:443';
+        $xmlStr = '<opnsense><system><webgui><protocol>https</protocol><port>443</port></webgui></system><interfaces><lan><ipaddr>192.168.1.1</ipaddr></lan></interfaces></opnsense>';
+        $xml = simplexml_load_string($xmlStr);
+        $url = $cs->getGuiUrl($xml);
+        $this->assertEquals('https://firewall.wan.example.com', $url);
+        unset($_SERVER['HTTP_HOST']);
+    }
+
+    public function testGetGuiUrlIgnoresDhcpLanIp()
+    {
+        $cs = CommitSession::getInstance();
+        unset($_SERVER['HTTP_HOST'], $_SERVER['SERVER_ADDR']);
+        $xmlDhcp = '<opnsense><system><webgui><protocol>https</protocol><port></port></webgui></system><interfaces><lan><ipaddr>dhcp</ipaddr></lan></interfaces></opnsense>';
+        $xml = simplexml_load_string($xmlDhcp);
+        $url = $cs->getGuiUrl($xml);
+        $this->assertEquals('https://127.0.0.1', $url);
+        $this->assertStringNotContainsString('dhcp', $url);
     }
 
     public function testNoticeLifecycle()

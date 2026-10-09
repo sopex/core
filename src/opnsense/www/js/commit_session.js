@@ -35,15 +35,46 @@ class CommitSessionManager {
         this.localRemainingSeconds = 0;
         this.failCount = 0;
         this.connectionLost = false;
+        this.revertingNoticeShown = false;
     }
 
     init() {
-        this.checkStatus();
         this.checkNotice();
-        // Poll status every 8 seconds
+        // Check once if a session is currently active
+        this.checkStatus();
+
+        // Listen for announcements from the system status framework
+        // to avoid constant polling when no session is active.
+        if (typeof statusObj !== 'undefined' && typeof statusObj.attach === 'function') {
+            statusObj.attach({
+                update: (status) => {
+                    if (status && status.subsystems && status.subsystems.commitsession) {
+                        // System status framework announced an active session or notice
+                        if (!this.active) {
+                            this.checkStatus();
+                        }
+                    } else if (this.active) {
+                        // System status framework no longer reports commitsession
+                        this.syncStatus();
+                    }
+                }
+            });
+        }
+    }
+
+    startPolling() {
+        this.stopPolling();
+        // Poll status every 5 seconds ONLY WHILE A SESSION IS ACTIVE
         this.pollInterval = setInterval(() => {
             this.syncStatus();
-        }, 8000);
+        }, 5000);
+    }
+
+    stopPolling() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
+            this.pollInterval = null;
+        }
     }
 
     formatTime(seconds) {
@@ -74,35 +105,42 @@ class CommitSessionManager {
     }
 
     checkStatus() {
-        ajaxGet('/api/core/commit_session/status', {}, (data, status) => {
-            if (status === 'success' && data && data.active) {
-                this.sessionData = data;
-                this.active = true;
-                this.localRemainingSeconds = data.remaining_seconds || 0;
-                this.failCount = 0;
-                this.connectionLost = false;
-                this.renderBanner();
-                this.startTimer();
-            } else {
+        $.ajax({
+            url: '/api/core/commit_session/status',
+            type: 'GET',
+            dataType: 'json',
+            timeout: 5000,
+            success: (data) => {
+                if (data && data.active) {
+                    this.sessionData = data;
+                    this.active = true;
+                    this.localRemainingSeconds = data.remaining_seconds || 0;
+                    this.failCount = 0;
+                    this.connectionLost = false;
+                    this.renderBanner();
+                    this.startTimer();
+                    if (!this.pollInterval) {
+                        this.startPolling();
+                    }
+                } else {
+                    this.active = false;
+                    this.removeBanner();
+                    this.stopTimer();
+                    this.stopPolling();
+                }
+            },
+            error: () => {
                 this.active = false;
                 this.removeBanner();
                 this.stopTimer();
+                this.stopPolling();
             }
         });
     }
 
     syncStatus() {
         if (!this.active) {
-            // Check once in a while if a session was started elsewhere
-            ajaxGet('/api/core/commit_session/status', {}, (data, status) => {
-                if (status === 'success' && data && data.active) {
-                    this.sessionData = data;
-                    this.active = true;
-                    this.localRemainingSeconds = data.remaining_seconds || 0;
-                    this.renderBanner();
-                    this.startTimer();
-                }
-            });
+            this.stopPolling();
             return;
         }
 
@@ -124,9 +162,15 @@ class CommitSessionManager {
                     this.active = false;
                     this.removeBanner();
                     this.stopTimer();
+                    this.stopPolling();
                 }
             },
-            error: () => {
+            error: (xhr) => {
+                if (xhr && xhr.status === 403) {
+                    // Unauthorized; stop polling immediately to avoid repeated 403 errors
+                    this.stopPolling();
+                    return;
+                }
                 this.failCount++;
                 if (this.failCount >= 2 && !this.connectionLost) {
                     this.connectionLost = true;
@@ -149,9 +193,12 @@ class CommitSessionManager {
                         this.revertingNoticeShown = true;
                         let guiUrl = (this.sessionData && this.sessionData.gui_url) ? this.sessionData.gui_url : window.location.origin;
                         $('#cs-banner-msg').html(
-                            '<strong>Automatic rollback triggered.</strong> Reverting to snapshot... After the revert, reconnect at <a href="' +
-                            guiUrl + '" class="alert-link" style="text-decoration:underline;">' + guiUrl + '</a>.'
+                            '<strong>Countdown expired!</strong> Configuration is reverting automatically to pre-session snapshot. ' +
+                            'Reconnecting at <a href="' + guiUrl + '" class="alert-link">' + guiUrl + '</a> in a few moments...'
                         );
+                        setTimeout(() => {
+                            window.location.href = guiUrl;
+                        }, 5000);
                     }
                 }
             }
@@ -166,44 +213,59 @@ class CommitSessionManager {
     }
 
     renderBanner() {
-        if (this.connectionLost) {
-            this.renderConnectionLostBanner();
-            return;
-        }
-
         let $container = this.getContainer();
-        let user = (this.sessionData && this.sessionData.username) ? this.sessionData.username : 'admin';
-        let countdownActive = this.sessionData && this.sessionData.countdown_active;
-        let extCount = (this.sessionData && this.sessionData.extensions_count) || 0;
-        let maxExt = (this.sessionData && this.sessionData.max_extensions) || 6;
-        let canExtend = countdownActive && (extCount < maxExt);
+        let data = this.sessionData || {};
 
-        let statusText = '';
-        if (countdownActive) {
-            statusText = 'Automatic rollback in <strong><span id="cs-timer-val">' + this.formatTime(this.localRemainingSeconds) + '</span></strong>.';
-        } else {
-            statusText = '<em>No changes yet.</em>';
-        }
+        let isCountdown = !!data.countdown_active;
+        let alertClass = isCountdown ? 'alert-warning' : 'alert-info';
+        let remainingStr = this.formatTime(this.localRemainingSeconds);
+        let savesCount = data.saves_count || 0;
+        let extensionsCount = data.extensions_count || 0;
+        let maxExtensions = data.max_extensions || 6;
+        let extensionsRemaining = Math.max(0, maxExtensions - extensionsCount);
+        let userStr = data.username || 'admin';
+        let sourceStr = data.source || 'gui';
 
         let html = `
-            <div id="commit-session-banner" class="alert alert-warning" style="margin: 10px 15px; padding: 12px 18px; border-left: 6px solid #f0ad4e; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                    <div id="cs-banner-msg" style="font-size:14px;">
-                        <i class="fa fa-shield fa-lg" style="margin-right:6px; color:#c07d0a;"></i>
-                        <strong>Protected change session</strong> by <strong>${user}</strong>. ${statusText}
+            <div id="commit-session-banner" class="alert ${alertClass}" style="margin: 10px 15px; padding: 10px 15px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
+                <div class="row" style="display:flex; align-items:center; flex-wrap:wrap;">
+                    <div class="col-md-7 col-sm-12" style="margin-bottom: 5px;">
+                        <span id="cs-banner-icon" class="fa fa-shield fa-lg" style="margin-right:8px;"></span>
+                        <strong style="text-transform:uppercase; letter-spacing:0.5px;">Protected Change Session</strong>
+                        <span style="margin: 0 8px;">|</span>
+                        <span id="cs-banner-msg">
+        `;
+
+        if (isCountdown) {
+            html += `
+                Rollback in <strong id="cs-timer-val" style="font-size:1.15em; color:#d9534f; background:#fff; padding:2px 6px; border-radius:3px; border:1px solid #d9534f;">${remainingStr}</strong>
+                &nbsp;(${savesCount} saved change${savesCount === 1 ? '' : 's'})
+            `;
+        } else {
+            html += `
+                <span>Changes not yet saved. Countdown will start on first save.</span>
+            `;
+        }
+
+        html += `
+                        </span>
+                        <div style="font-size: 0.85em; opacity: 0.85; margin-top: 2px;">
+                            Session by <strong>${userStr}</strong> via <strong>${sourceStr}</strong>.
+                            Extensions remaining: <strong>${extensionsRemaining} of ${maxExtensions}</strong>.
+                        </div>
                     </div>
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" id="cs-btn-confirm" class="btn btn-success" title="Keep all changes and end session">
-                            <i class="fa fa-check"></i> Confirm
+                    <div class="col-md-5 col-sm-12 text-right" style="margin-bottom: 5px;">
+                        <button id="cs-btn-confirm" class="btn btn-success btn-xs" style="margin-right:5px;" title="Keep changes permanently and end protected session">
+                            <i class="fa fa-check"></i> Confirm Changes
                         </button>
-                        <button type="button" id="cs-btn-extend" class="btn btn-default" ${canExtend ? '' : 'disabled="disabled"'} title="Add 5 minutes to countdown (${extCount}/${maxExt} used)">
-                            <i class="fa fa-clock-o"></i> Extend +5 min
+                        <button id="cs-btn-extend" class="btn btn-default btn-xs" style="margin-right:5px;" ${(!isCountdown || extensionsRemaining <= 0) ? 'disabled' : ''} title="Add 5 minutes to countdown">
+                            <i class="fa fa-clock-o"></i> Extend (+5m)
                         </button>
-                        <button type="button" id="cs-btn-revert" class="btn btn-danger" title="Discard changes and restore snapshot now">
-                            <i class="fa fa-undo"></i> Revert now
+                        <button id="cs-btn-revert" class="btn btn-danger btn-xs" style="margin-right:5px;" title="Discard changes and restore pre-session snapshot immediately">
+                            <i class="fa fa-undo"></i> Revert Now
                         </button>
-                        <button type="button" id="cs-btn-diff" class="btn btn-default" title="View configuration differences">
-                            <i class="fa fa-file-text-o"></i> View diff
+                        <button id="cs-btn-diff" class="btn btn-info btn-xs" title="View configuration differences against pre-session snapshot">
+                            <i class="fa fa-exchange"></i> Diff
                         </button>
                     </div>
                 </div>
@@ -211,30 +273,29 @@ class CommitSessionManager {
         `;
 
         $container.html(html);
-        this.bindBannerEvents();
+        this.bindBannerActions();
     }
 
     renderConnectionLostBanner() {
         let $container = this.getContainer();
-        let revertTime = '';
-        if (this.sessionData && this.sessionData.expire_epoch) {
-            revertTime = this.formatEpochTime(this.sessionData.expire_epoch);
-        } else if (this.localRemainingSeconds > 0) {
-            let exp = Math.round(Date.now() / 1000) + this.localRemainingSeconds;
-            revertTime = this.formatEpochTime(exp);
-        } else {
-            revertTime = 'shortly';
-        }
-
         let guiUrl = (this.sessionData && this.sessionData.gui_url) ? this.sessionData.gui_url : window.location.origin;
 
         let html = `
-            <div id="commit-session-banner" class="alert alert-danger" style="margin: 10px 15px; padding: 15px 20px; border-left: 6px solid #d9534f; box-shadow: 0 4px 8px rgba(0,0,0,0.15);">
-                <div id="cs-banner-msg" style="font-size:15px; line-height:1.5;">
-                    <i class="fa fa-exclamation-triangle fa-lg" style="margin-right:8px;"></i>
-                    <strong>Connection lost.</strong> The firewall will revert at <strong>${revertTime}</strong> (<span id="cs-timer-val">${this.formatTime(this.localRemainingSeconds)}</span> remaining) if not confirmed.
-                    <br/>
-                    After the revert, reconnect at <a href="${guiUrl}" class="alert-link" style="text-decoration:underline; font-weight:bold;">${guiUrl}</a>.
+            <div id="commit-session-banner" class="alert alert-danger" style="margin: 10px 15px; padding: 12px 15px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+                <div class="row" style="display:flex; align-items:center;">
+                    <div class="col-xs-12">
+                        <i class="fa fa-exclamation-triangle fa-2x pull-left" style="margin-right:15px; color:#d9534f;"></i>
+                        <div>
+                            <strong>Connection Lost During Protected Change Session!</strong>
+                            <div style="margin-top:4px;">
+                                The firewall did not respond to status checks. The commit-watchdog is continuing its countdown locally and will
+                                automatically revert configuration and reload services if changes are not confirmed before expiration.
+                                <br/>
+                                If you applied network or firewall changes that blocked your connection, wait for rollback or reconnect at:
+                                <a href="${guiUrl}" class="alert-link" style="text-decoration:underline; font-weight:bold;">${guiUrl}</a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -243,10 +304,10 @@ class CommitSessionManager {
     }
 
     removeBanner() {
-        $('#commit-session-banner').remove();
+        $('#commit-session-banner-area').empty();
     }
 
-    bindBannerEvents() {
+    bindBannerActions() {
         $('#cs-btn-confirm').off('click').on('click', () => {
             BootstrapDialog.confirm({
                 title: 'Confirm Configuration Changes',
@@ -261,6 +322,7 @@ class CommitSessionManager {
                                 this.active = false;
                                 this.removeBanner();
                                 this.stopTimer();
+                                this.stopPolling();
                                 BootstrapDialog.show({
                                     title: 'Session Confirmed',
                                     message: 'The protected change session has been ended. Your changes are confirmed.',
@@ -308,6 +370,8 @@ class CommitSessionManager {
                 callback: (result) => {
                     if (result) {
                         ajaxCall('/api/core/commit_session/revert', {}, (data) => {
+                            this.stopPolling();
+                            this.stopTimer();
                             let targetUrl = (data && data.gui_url) ? data.gui_url : guiUrl;
                             $('#cs-banner-msg').html(
                                 '<strong>Reverting configuration now.</strong> Reconnecting to <a href="' +

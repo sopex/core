@@ -37,7 +37,7 @@ import xml.etree.ElementTree as ET
 script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'system'))
 sys.path.insert(0, script_dir)
 
-from commit_watchdog import CommitWatchdog
+from commit_watchdog import CommitWatchdog, check_watchdog_supervisor
 
 
 class TestCommitWatchdog(unittest.TestCase):
@@ -49,7 +49,22 @@ class TestCommitWatchdog(unittest.TestCase):
         self.socket_file = os.path.join(self.test_dir, 'watchdog.sock')
         self.config_file = os.path.join(self.test_dir, 'config.xml')
         self.backup_dir = os.path.join(self.test_dir, 'backup')
-        self.reload_script = os.path.join(self.test_dir, 'mock_reload.sh')
+        if sys.platform == 'win32':
+            self.reload_script = os.path.join(self.test_dir, 'mock_reload.bat')
+            with open(self.reload_script, 'w') as f:
+                f.write("@exit /b 0\n")
+            self.mock_shutdown = os.path.join(self.test_dir, 'mock_shutdown.bat')
+            with open(self.mock_shutdown, 'w') as f:
+                f.write("@exit /b 0\n")
+        else:
+            self.reload_script = os.path.join(self.test_dir, 'mock_reload.sh')
+            with open(self.reload_script, 'w') as f:
+                f.write("#!/bin/sh\nexit 0\n")
+            os.chmod(self.reload_script, 0o755)
+            self.mock_shutdown = os.path.join(self.test_dir, 'mock_shutdown.sh')
+            with open(self.mock_shutdown, 'w') as f:
+                f.write("#!/bin/sh\nexit 0\n")
+            os.chmod(self.mock_shutdown, 0o755)
 
         # Create dummy config and snapshot
         self.dummy_snapshot = b'<opnsense><system><hostname>firewall-snap</hostname></system></opnsense>'
@@ -80,17 +95,21 @@ class TestCommitWatchdog(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def get_watchdog(self):
-        return CommitWatchdog(
-            marker_file=self.marker_file,
-            snapshot_file=self.snapshot_file,
-            socket_file=self.socket_file,
-            notice_file=self.notice_file,
-            config_file=self.config_file,
-            backup_dir=self.backup_dir,
-            reload_script=self.reload_script,
-            idle_timeout=3600.0
-        )
+    def get_watchdog(self, **kwargs):
+        defaults = {
+            'marker_file': self.marker_file,
+            'snapshot_file': self.snapshot_file,
+            'socket_file': self.socket_file,
+            'notice_file': self.notice_file,
+            'config_file': self.config_file,
+            'backup_dir': self.backup_dir,
+            'reload_script': self.reload_script,
+            'idle_timeout': 3600.0,
+            'shutdown_bin': self.mock_shutdown,
+            'reboot_bin': self.mock_shutdown
+        }
+        defaults.update(kwargs)
+        return CommitWatchdog(**defaults)
 
     def test_load_marker_initial_state(self):
         wd = self.get_watchdog()
@@ -113,12 +132,13 @@ class TestCommitWatchdog(unittest.TestCase):
     def test_handle_command_save_starts_countdown(self):
         wd = self.get_watchdog()
         t_before = time.monotonic()
-        res = json.loads(wd.handle_command('SAVE'))
+        res = json.loads(wd.handle_command('SAVE config-1791532743.6206.xml 1'))
         t_after = time.monotonic()
 
         self.assertEqual(res['status'], 'ok')
         self.assertTrue(wd.countdown_active)
         self.assertEqual(wd.saves_count, 1)
+        self.assertIn('config-1791532743.6206.xml', wd.revisions)
         self.assertGreaterEqual(wd.deadline_monotonic, t_before + 180)
         self.assertLessEqual(wd.deadline_monotonic, t_after + 180 + 0.1)
 
@@ -127,17 +147,55 @@ class TestCommitWatchdog(unittest.TestCase):
         self.assertTrue(st['countdown_active'])
         self.assertGreater(st['remaining_seconds'], 170)
 
-    def test_multiple_saves_restart_countdown(self):
+        # Check sidecar index
+        sidecar_file = os.path.join(self.backup_dir, 'session_tags.json')
+        self.assertTrue(os.path.exists(sidecar_file))
+        with open(sidecar_file, 'r', encoding='utf-8') as f:
+            tags = json.load(f)
+        self.assertEqual(tags.get('config-1791532743.6206.xml'), 'Pending')
+
+    def test_multiple_user_saves_restart_countdown(self):
         wd = self.get_watchdog()
-        wd.handle_command('SAVE')
+        wd.handle_command('SAVE config-1.xml 1')
         deadline1 = wd.deadline_monotonic
 
         time.sleep(0.05)
-        wd.handle_command('SAVE')
+        wd.handle_command('SAVE config-2.xml 1')
         deadline2 = wd.deadline_monotonic
 
         self.assertEqual(wd.saves_count, 2)
         self.assertGreater(deadline2, deadline1)
+
+    def test_background_save_does_not_push_countdown_out(self):
+        wd = self.get_watchdog()
+        wd.handle_command('SAVE config-1.xml 1')
+        deadline_user = wd.deadline_monotonic
+
+        time.sleep(0.05)
+        # Background save with is_user=0
+        res = json.loads(wd.handle_command('SAVE config-bg.xml 0'))
+        self.assertEqual(res['status'], 'ok')
+        self.assertEqual(wd.saves_count, 2)
+        self.assertIn('config-bg.xml', wd.revisions)
+        # Monotonic deadline should NOT have moved forward!
+        self.assertEqual(wd.deadline_monotonic, deadline_user)
+
+    def test_absolute_session_ceiling_enforced(self):
+        # 10s countdown, 5s extension, max 2 extensions => ceiling is at most 20s
+        self.marker_data['countdown_seconds'] = 10
+        self.marker_data['extension_seconds'] = 5
+        self.marker_data['max_extensions'] = 2
+        with open(self.marker_file, 'w', encoding='utf-8') as f:
+            json.dump(self.marker_data, f)
+
+        wd = self.get_watchdog()
+        wd.handle_command('SAVE config-1.xml 1')
+        ceiling = wd.absolute_ceiling_monotonic
+
+        # Repeated saves cannot push deadline past ceiling
+        for i in range(5):
+            wd.handle_command(f'SAVE config-{i+2}.xml 1')
+            self.assertLessEqual(wd.deadline_monotonic, ceiling)
 
     def test_extend_countdown(self):
         wd = self.get_watchdog()
@@ -146,7 +204,7 @@ class TestCommitWatchdog(unittest.TestCase):
         self.assertEqual(res0['status'], 'failed')
 
         # Save first
-        wd.handle_command('SAVE')
+        wd.handle_command('SAVE config-1.xml 1')
         deadline_orig = wd.deadline_monotonic
 
         # Now extend
@@ -157,7 +215,7 @@ class TestCommitWatchdog(unittest.TestCase):
 
     def test_max_extensions_enforced(self):
         wd = self.get_watchdog()
-        wd.handle_command('SAVE')
+        wd.handle_command('SAVE config-1.xml 1')
 
         # max_extensions is 3
         res1 = json.loads(wd.handle_command('EXTEND'))
@@ -204,7 +262,7 @@ class TestCommitWatchdog(unittest.TestCase):
             self.assertEqual(notice['gui_url'], 'https://192.168.1.1')
 
         # Reverted backup XML must be created in backup dir
-        backups = os.listdir(self.backup_dir)
+        backups = [b for b in os.listdir(self.backup_dir) if b.endswith('.xml')]
         self.assertGreater(len(backups), 0)
         backup_xml = os.path.join(self.backup_dir, backups[0])
         tree = ET.parse(backup_xml)
@@ -214,9 +272,53 @@ class TestCommitWatchdog(unittest.TestCase):
         self.assertIsNotNone(tag)
         self.assertEqual(tag.text, 'Reverted')
 
+        # Sidecar index must record Reverted
+        sidecar_file = os.path.join(self.backup_dir, 'session_tags.json')
+        self.assertTrue(os.path.exists(sidecar_file))
+        with open(sidecar_file, 'r', encoding='utf-8') as f:
+            tags = json.load(f)
+        self.assertEqual(tags.get(backups[0]), 'Reverted')
+
         # Marker and snapshot must be deleted
         self.assertFalse(os.path.exists(self.marker_file))
         self.assertFalse(os.path.exists(self.snapshot_file))
+
+    def test_failed_revert_preserves_snapshot_and_marker(self):
+        # Point config_file to an uncreatable / directory path to trigger write error
+        bad_config_file = os.path.join(self.test_dir, 'nonexistent_sub', 'cannot_write.xml')
+        wd = self.get_watchdog(config_file=bad_config_file)
+
+        success = wd.execute_revert(reason='test_failure')
+        self.assertFalse(success)
+
+        # Snapshot and marker MUST be preserved on failure!
+        self.assertTrue(os.path.exists(self.marker_file))
+        self.assertTrue(os.path.exists(self.snapshot_file))
+
+    def test_failed_boot_revert_preserves_snapshot_and_marker(self):
+        bad_config_file = os.path.join(self.test_dir, 'nonexistent_sub', 'cannot_write.xml')
+        wd = self.get_watchdog(config_file=bad_config_file)
+
+        success = wd.execute_boot_revert()
+        self.assertFalse(success)
+
+        # Snapshot and marker MUST be preserved on boot failure!
+        self.assertTrue(os.path.exists(self.marker_file))
+        self.assertTrue(os.path.exists(self.snapshot_file))
+
+    def test_load_marker_resumes_remaining_time(self):
+        # Emulate watchdog restart: countdown was active with 42s remaining
+        now = time.time()
+        self.marker_data['countdown_active'] = True
+        self.marker_data['expire_epoch'] = now + 42.0
+        with open(self.marker_file, 'w', encoding='utf-8') as f:
+            json.dump(self.marker_data, f)
+
+        wd = self.get_watchdog()
+        self.assertTrue(wd.countdown_active)
+        rem = wd.deadline_monotonic - time.monotonic()
+        # Must be approximately 42s, NOT 180s!
+        self.assertAlmostEqual(rem, 42.0, delta=1.5)
 
     def test_idle_timeout_monotonic_tracking(self):
         wd = self.get_watchdog()
@@ -232,12 +334,12 @@ class TestCommitWatchdog(unittest.TestCase):
 
     def test_revert_updates_prior_session_revisions_to_reverted(self):
         os.makedirs(self.backup_dir, exist_ok=True)
-        prior_backup = os.path.join(self.backup_dir, 'config-1728460100.50.xml')
-        prior_xml = b'<opnsense><revision><time>1728460100.50</time><session_tag>Pending</session_tag></revision></opnsense>'
+        prior_backup = os.path.join(self.backup_dir, 'config-1728460100.5012.xml')
+        prior_xml = b'<opnsense><revision><time>1728460100.5012</time><session_tag>Pending</session_tag></revision></opnsense>'
         with open(prior_backup, 'wb') as f:
             f.write(prior_xml)
 
-        self.marker_data['revisions'] = ['1728460100.50']
+        self.marker_data['revisions'] = ['config-1728460100.5012.xml']
         with open(self.marker_file, 'w', encoding='utf-8') as f:
             json.dump(self.marker_data, f)
 
@@ -245,7 +347,7 @@ class TestCommitWatchdog(unittest.TestCase):
         success = wd.execute_revert(reason='countdown_expired')
         self.assertTrue(success)
 
-        # Prior revision must now be tagged Reverted
+        # Prior revision XML must now be tagged Reverted
         tree = ET.parse(prior_backup)
         rev = tree.find('revision')
         self.assertIsNotNone(rev)
@@ -253,14 +355,20 @@ class TestCommitWatchdog(unittest.TestCase):
         self.assertIsNotNone(stag)
         self.assertEqual(stag.text, 'Reverted')
 
+        # Sidecar index must also record Reverted
+        sidecar_file = os.path.join(self.backup_dir, 'session_tags.json')
+        with open(sidecar_file, 'r', encoding='utf-8') as f:
+            tags = json.load(f)
+        self.assertEqual(tags.get('config-1728460100.5012.xml'), 'Reverted')
+
     def test_confirm_updates_prior_session_revisions_to_confirmed(self):
         os.makedirs(self.backup_dir, exist_ok=True)
-        prior_backup = os.path.join(self.backup_dir, 'config-1728460111.22.xml')
-        prior_xml = b'<opnsense><revision><time>1728460111.22</time><session_tag>Pending</session_tag></revision></opnsense>'
+        prior_backup = os.path.join(self.backup_dir, 'config-1728460111.2234.xml')
+        prior_xml = b'<opnsense><revision><time>1728460111.2234</time><session_tag>Pending</session_tag></revision></opnsense>'
         with open(prior_backup, 'wb') as f:
             f.write(prior_xml)
 
-        self.marker_data['revisions'] = ['1728460111.22']
+        self.marker_data['revisions'] = ['config-1728460111.2234.xml']
         with open(self.marker_file, 'w', encoding='utf-8') as f:
             json.dump(self.marker_data, f)
 
@@ -276,16 +384,22 @@ class TestCommitWatchdog(unittest.TestCase):
         self.assertIsNotNone(stag)
         self.assertEqual(stag.text, 'Confirmed')
 
+        # Sidecar index must also record Confirmed
+        sidecar_file = os.path.join(self.backup_dir, 'session_tags.json')
+        with open(sidecar_file, 'r', encoding='utf-8') as f:
+            tags = json.load(f)
+        self.assertEqual(tags.get('config-1728460111.2234.xml'), 'Confirmed')
+
     def test_execute_boot_revert(self):
         os.makedirs(self.backup_dir, exist_ok=True)
-        prior_backup = os.path.join(self.backup_dir, 'config-1728460200.00.xml')
-        prior_xml = b'<opnsense><revision><time>1728460200.00</time><session_tag>Pending</session_tag></revision></opnsense>'
+        prior_backup = os.path.join(self.backup_dir, 'config-1728460200.0011.xml')
+        prior_xml = b'<opnsense><revision><time>1728460200.0011</time><session_tag>Pending</session_tag></revision></opnsense>'
         with open(prior_backup, 'wb') as f:
             f.write(prior_xml)
 
         self.marker_data['username'] = 'bob'
         self.marker_data['source'] = 'api'
-        self.marker_data['revisions'] = ['1728460200.00']
+        self.marker_data['revisions'] = ['config-1728460200.0011.xml']
         with open(self.marker_file, 'w', encoding='utf-8') as f:
             json.dump(self.marker_data, f)
 
@@ -331,7 +445,7 @@ class TestCommitWatchdog(unittest.TestCase):
             json.dump(self.marker_data, f)
 
         wd = self.get_watchdog()
-        wd.handle_command('SAVE')
+        wd.handle_command('SAVE config-1.xml 1')
         res = json.loads(wd.handle_command('EXTEND'))
         self.assertEqual(res['status'], 'failed')
         self.assertEqual(res['error'], 'max_extensions_reached')

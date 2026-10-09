@@ -48,6 +48,8 @@ class CommitSession extends Singleton
     public const NOTICE_FILE = '/conf/commit_rollback_notice.json';
     public const SOCKET_FILE = '/var/run/commit_watchdog.sock';
     public const PID_FILE = '/var/run/commit_watchdog.pid';
+    public const SUPERVISOR_PID_FILE = '/var/run/commit_watchdog_sup.pid';
+    public const SIDECAR_TAGS_FILE = '/conf/backup/session_tags.json';
     public const RELOAD_SCRIPT = '/usr/local/etc/rc.reload_all';
     public const WATCHDOG_SCRIPT = '/usr/local/opnsense/scripts/system/commit_watchdog.py';
 
@@ -92,7 +94,7 @@ class CommitSession extends Singleton
     }
 
     /**
-     * Determine GUI reconnection URL from configuration
+     * Determine GUI reconnection URL from snapshot configuration and request context
      * @param \SimpleXMLElement|null $xml
      * @return string
      */
@@ -109,18 +111,35 @@ class CommitSession extends Singleton
 
         $port = '';
         if (isset($xml->system->webgui->port) && !empty((string)$xml->system->webgui->port)) {
-            $port = ':' . (string)$xml->system->webgui->port;
+            $portVal = (string)$xml->system->webgui->port;
+            if ($portVal !== ($protocol === 'https' ? '443' : '80')) {
+                $port = ':' . $portVal;
+            }
         }
 
+        // 1. Capture host user actually used to connect
         $host = '';
-        if (isset($xml->interfaces->lan->ipaddr) && !empty((string)$xml->interfaces->lan->ipaddr)) {
-            $host = (string)$xml->interfaces->lan->ipaddr;
-        } elseif (!empty($_SERVER['HTTP_HOST'])) {
+        if (!empty($_SERVER['HTTP_HOST'])) {
             $host = explode(':', $_SERVER['HTTP_HOST'])[0];
         } elseif (!empty($_SERVER['SERVER_ADDR'])) {
             $host = $_SERVER['SERVER_ADDR'];
-        } else {
+        }
+
+        // 2. Fallback for console / CLI: use LAN IP only if valid IP (not "dhcp"), otherwise 127.0.0.1
+        if (empty($host)) {
+            if (isset($xml->interfaces->lan->ipaddr)) {
+                $lanIp = (string)$xml->interfaces->lan->ipaddr;
+                if (filter_var($lanIp, FILTER_VALIDATE_IP)) {
+                    $host = $lanIp;
+                }
+            }
+        }
+        if (empty($host)) {
             $host = '127.0.0.1';
+        }
+
+        if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $host = '[' . $host . ']';
         }
 
         return sprintf('%s://%s%s', $protocol, $host, $port);
@@ -159,7 +178,7 @@ class CommitSession extends Singleton
     }
 
     /**
-     * Get current session state
+     * Get current session state (read-only query; watchdog manages timeouts and lifecycle)
      * @return array
      */
     public function getState(): array
@@ -171,7 +190,7 @@ class CommitSession extends Singleton
             ];
         }
 
-        $data = @json_decode(file_get_contents(self::MARKER_FILE), true);
+        $data = @json_decode(@file_get_contents(self::MARKER_FILE), true);
         if (!is_array($data)) {
             return [
                 'active' => true,
@@ -180,31 +199,17 @@ class CommitSession extends Singleton
             ];
         }
 
-        // Fallback check: 60-minute idle session timeout with no saves
-        if (empty($data['countdown_active']) && !empty($data['created_at'])) {
-            if ((time() - (int)$data['created_at']) >= 3600) {
-                $this->stopWatchdogProcess();
-                @unlink(self::MARKER_FILE);
-                @unlink(self::SNAPSHOT_FILE);
-                @unlink(self::SOCKET_FILE);
-                @unlink(self::PID_FILE);
-                openlog('audit', LOG_ODELAY, LOG_AUTH);
-                syslog(LOG_NOTICE, 'commit-session: session closed due to 60-minute idle timeout with no changes.');
-                return [
-                    'active' => false,
-                    'has_notice' => $this->hasRevertNotice(),
-                ];
-            }
-        }
-
-        // Try getting live status from the watchdog process
+        // Live status query from the detached watchdog
         $watchdogStatus = $this->sendWatchdogCommand('STATUS');
         if (!empty($watchdogStatus) && isset($watchdogStatus['remaining_seconds'])) {
             $data['remaining_seconds'] = max(0, (int)$watchdogStatus['remaining_seconds']);
             $data['countdown_active'] = !empty($watchdogStatus['countdown_active']);
             $data['extensions_count'] = (int)($watchdogStatus['extensions_count'] ?? $data['extensions_count'] ?? 0);
+            $data['saves_count'] = (int)($watchdogStatus['saves_count'] ?? $data['saves_count'] ?? 0);
+            $data['watchdog_alive'] = true;
         } else {
-            // Fallback calculation based on epoch if watchdog socket query didn't respond
+            // Watchdog not answering; fallback computation from expire_epoch
+            $data['watchdog_alive'] = false;
             if (!empty($data['countdown_active']) && !empty($data['expire_epoch'])) {
                 $data['remaining_seconds'] = max(0, (int)round($data['expire_epoch'] - time()));
             } else {
@@ -242,7 +247,7 @@ class CommitSession extends Singleton
             ];
         }
 
-        // Create dedicated snapshot directory outside /conf/backup/
+        // Dedicated snapshot directory outside /conf/backup/
         if (!file_exists(self::SNAPSHOT_DIR)) {
             @mkdir(self::SNAPSHOT_DIR, 0750, true);
         }
@@ -262,6 +267,9 @@ class CommitSession extends Singleton
 
         $sessionId = bin2hex(random_bytes(16));
         $now = time();
+        $countdownSec = $settings['countdown'] * 60;
+        $extensionSec = $settings['extension'] * 60;
+        $maxTotalSec = $countdownSec + ($settings['max_extensions'] * $extensionSec);
 
         $markerData = [
             'session_id' => $sessionId,
@@ -270,8 +278,8 @@ class CommitSession extends Singleton
             'created_at' => $now,
             'created_at_iso' => date('c', $now),
             'snapshot_file' => self::SNAPSHOT_FILE,
-            'countdown_seconds' => $settings['countdown'] * 60,
-            'extension_seconds' => $settings['extension'] * 60,
+            'countdown_seconds' => $countdownSec,
+            'extension_seconds' => $extensionSec,
             'max_extensions' => $settings['max_extensions'],
             'extensions_count' => 0,
             'saves_count' => 0,
@@ -279,21 +287,48 @@ class CommitSession extends Singleton
             'status' => 'pending',
             'countdown_active' => false,
             'expire_epoch' => null,
+            'absolute_ceiling_epoch' => $now + $maxTotalSec,
             'revisions' => [],
         ];
 
         File::file_put_contents(self::MARKER_FILE, json_encode($markerData, JSON_PRETTY_PRINT), 0640);
 
-        // Spawn detached watchdog daemon using /usr/sbin/daemon
+        // Single spawn path: spawn detached watchdog daemon supervised by daemon -r
         $pythonBin = '/usr/local/bin/python3';
         if (file_exists('/usr/sbin/daemon') && file_exists(self::WATCHDOG_SCRIPT)) {
             Shell::shell_safe(
-                '/usr/sbin/daemon -f -p %s %s %s',
-                [self::PID_FILE, $pythonBin, self::WATCHDOG_SCRIPT]
+                '/usr/sbin/daemon -f -r -P %s -p %s %s %s',
+                [self::SUPERVISOR_PID_FILE, self::PID_FILE, $pythonBin, self::WATCHDOG_SCRIPT]
             );
         }
-        if (!file_exists(self::SOCKET_FILE)) {
-            (new Backend())->configdRun('commit_session start_watchdog');
+
+        // Wait for socket with timeout (up to 3 seconds)
+        $socketReady = false;
+        for ($i = 0; $i < 30; $i++) {
+            usleep(100000); // 100ms
+            if (file_exists(self::SOCKET_FILE)) {
+                $status = $this->sendWatchdogCommand('STATUS');
+                if ($status && isset($status['status']) && $status['status'] === 'ok') {
+                    $socketReady = true;
+                    break;
+                }
+            }
+        }
+
+        if (!$socketReady) {
+            // Watchdog failed to start; abort session immediately to prevent unprotected state
+            $this->stopWatchdogProcess();
+            @unlink(self::MARKER_FILE);
+            @unlink(self::SNAPSHOT_FILE);
+            @unlink(self::SOCKET_FILE);
+
+            openlog('audit', LOG_ODELAY, LOG_AUTH);
+            syslog(LOG_ERR, 'commit-session: failed to start watchdog daemon within timeout; session aborted.');
+
+            return [
+                'status' => 'failed',
+                'message' => gettext('Failed to start commit watchdog daemon within timeout.'),
+            ];
         }
 
         // System log
@@ -318,46 +353,39 @@ class CommitSession extends Singleton
     }
 
     /**
-     * Hook called on every configuration save while a session is active
+     * Hook called on every configuration save while a session is active.
+     * The watchdog daemon is the sole writer of the marker and sidecar index.
+     * @param string|null $backupFilename
      * @param array|null $revision
      */
-    public function onConfigSave(?array &$revision): void
+    public function onConfigSave(?string $backupFilename = null, ?array &$revision = null): void
     {
         if (!$this->isActive()) {
             return;
         }
 
-        $markerContent = @file_get_contents(self::MARKER_FILE);
-        $data = @json_decode($markerContent, true);
-        if (!is_array($data)) {
-            return;
+        // Determine if this save was initiated by a real user context
+        $isUser = false;
+        if (!empty($_SESSION['Username']) || !empty($_SERVER['PHP_AUTH_USER'])) {
+            $isUser = true;
+        } elseif (isset($revision['username'])) {
+            $u = $revision['username'];
+            if ($u !== '(root)' && $u !== 'system' && $u !== '(system)' && !str_starts_with($u, '(root)@')) {
+                $isUser = true;
+            }
         }
 
-        $countdownSeconds = (int)($data['countdown_seconds'] ?? 180);
-        $now = time();
-
-        $data['saves_count'] = ($data['saves_count'] ?? 0) + 1;
-        $data['countdown_active'] = true;
-        $data['expire_epoch'] = $now + $countdownSeconds;
-        $data['last_save_time'] = $now;
-
-        // Track revision timestamp
-        if (!empty($revision['time'])) {
-            $data['revisions'][] = (string)$revision['time'];
+        // Command format: SAVE [filename] [is_user: 0|1]
+        $cmd = 'SAVE';
+        if (!empty($backupFilename)) {
+            $cmd .= ' ' . $backupFilename . ' ' . ($isUser ? '1' : '0');
+        } else {
+            $cmd .= ' none ' . ($isUser ? '1' : '0');
         }
 
-        // Tag revision
-        if (is_array($revision)) {
-            $revision['session_tag'] = 'Pending';
-            $revision['session_id'] = $data['session_id'] ?? '';
-        }
+        $this->sendWatchdogCommand($cmd);
 
-        File::file_put_contents(self::MARKER_FILE, json_encode($data, JSON_PRETTY_PRINT), 0640);
-
-        // Signal the watchdog daemon to restart monotonic countdown
-        $this->sendWatchdogCommand('SAVE');
-
-        $username = $revision['username'] ?? (!empty($_SESSION['Username']) ? $_SESSION['Username'] : ($data['username'] ?? 'unknown'));
+        $username = $revision['username'] ?? (!empty($_SESSION['Username']) ? $_SESSION['Username'] : 'unknown');
         $source = 'console';
         if (!empty($_SERVER['REQUEST_URI'])) {
             if (str_starts_with($_SERVER['REQUEST_URI'], '/api/') || !empty($_SERVER['HTTP_X_CLIENT_TYPE'])) {
@@ -371,16 +399,16 @@ class CommitSession extends Singleton
         syslog(
             LOG_NOTICE,
             sprintf(
-                'commit-session: configuration saved by %s via %s; countdown restarted (%ds)',
+                'commit-session: configuration saved by %s via %s (user action: %s)',
                 $username,
                 $source,
-                $countdownSeconds
+                $isUser ? 'yes' : 'no'
             )
         );
     }
 
     /**
-     * Extend countdown
+     * Extend countdown via watchdog
      * @param string $username
      * @param string $source
      * @return array
@@ -394,63 +422,41 @@ class CommitSession extends Singleton
             ];
         }
 
-        $data = @json_decode(file_get_contents(self::MARKER_FILE), true);
-        if (!is_array($data)) {
-            return [
-                'status' => 'failed',
-                'message' => gettext('Invalid session marker.'),
-            ];
-        }
-
-        if (empty($data['countdown_active'])) {
-            return [
-                'status' => 'failed',
-                'message' => gettext('No countdown is currently running (no changes saved yet).'),
-            ];
-        }
-
-        $extensionsCount = (int)($data['extensions_count'] ?? 0);
-        $maxExtensions = (int)($data['max_extensions'] ?? 6);
-
-        if ($extensionsCount >= $maxExtensions) {
-            return [
-                'status' => 'failed',
-                'message' => sprintf(gettext('Maximum number of extensions (%d) reached.'), $maxExtensions),
-            ];
-        }
-
-        $extensionSeconds = (int)($data['extension_seconds'] ?? 300);
-
-        // Update watchdog
+        // Send EXTEND to watchdog; watchdog validates and updates marker
         $resp = $this->sendWatchdogCommand('EXTEND');
-        if ($resp && isset($resp['status']) && $resp['status'] === 'ok') {
-            $data['extensions_count'] = (int)($resp['extensions_count'] ?? ($extensionsCount + 1));
-            $data['expire_epoch'] = ($data['expire_epoch'] ?? time()) + $extensionSeconds;
-        } else {
-            $data['extensions_count'] = $extensionsCount + 1;
-            $data['expire_epoch'] = ($data['expire_epoch'] ?? time()) + $extensionSeconds;
+        if (!empty($resp) && isset($resp['status'])) {
+            if ($resp['status'] === 'ok') {
+                openlog('audit', LOG_ODELAY, LOG_AUTH);
+                syslog(
+                    LOG_NOTICE,
+                    sprintf(
+                        'commit-session: countdown extended by %s via %s (extension %d/%d)',
+                        $username,
+                        $source,
+                        $resp['extensions_count'] ?? 1,
+                        $resp['max_extensions'] ?? 6
+                    )
+                );
+                return $resp;
+            } else {
+                $err = $resp['error'] ?? 'extension_failed';
+                if ($err === 'max_extensions_reached') {
+                    $msg = gettext('Maximum number of extensions reached.');
+                } elseif ($err === 'not_counting') {
+                    $msg = gettext('No countdown is currently running (no changes saved yet).');
+                } else {
+                    $msg = gettext('Failed to extend countdown.');
+                }
+                return [
+                    'status' => 'failed',
+                    'message' => $msg,
+                ];
+            }
         }
-
-        File::file_put_contents(self::MARKER_FILE, json_encode($data, JSON_PRETTY_PRINT), 0640);
-
-        openlog('audit', LOG_ODELAY, LOG_AUTH);
-        syslog(
-            LOG_NOTICE,
-            sprintf(
-                'commit-session: countdown extended by %ds by %s via %s (extension %d/%d)',
-                $extensionSeconds,
-                $username,
-                $source,
-                $data['extensions_count'],
-                $maxExtensions
-            )
-        );
 
         return [
-            'status' => 'ok',
-            'extensions_count' => $data['extensions_count'],
-            'max_extensions' => $maxExtensions,
-            'extension_seconds' => $extensionSeconds,
+            'status' => 'failed',
+            'message' => gettext('Watchdog daemon is unreachable.'),
         ];
     }
 
@@ -469,23 +475,14 @@ class CommitSession extends Singleton
             ];
         }
 
-        $data = @json_decode(file_get_contents(self::MARKER_FILE), true);
-        $revisions = is_array($data) ? ($data['revisions'] ?? []) : [];
-
-        // Notify watchdog to exit cleanly
+        // Notify watchdog to update revisions to Confirmed, cleanup, and exit cleanly
         $this->sendWatchdogCommand('CONFIRM');
 
-        // Kill watchdog PID if still running
+        // Stop supervisor and clean any remaining artifacts
         $this->stopWatchdogProcess();
-
-        // Update session revision tags in backup history to "Confirmed"
-        $this->tagRevisionsInHistory($revisions, 'Confirmed');
-
-        // Delete marker and snapshot
         @unlink(self::MARKER_FILE);
         @unlink(self::SNAPSHOT_FILE);
         @unlink(self::SOCKET_FILE);
-        @unlink(self::PID_FILE);
 
         openlog('audit', LOG_ODELAY, LOG_AUTH);
         syslog(LOG_NOTICE, sprintf('commit-session: session confirmed by %s via %s', $username, $source));
@@ -497,7 +494,8 @@ class CommitSession extends Singleton
     }
 
     /**
-     * Revert configuration to snapshot and reload services
+     * Revert configuration to snapshot and reload services.
+     * Uses detached execution to prevent web GUI restarts from terminating the rollback mid-flight.
      * @param string $username
      * @param string $source
      * @param string $reason
@@ -513,10 +511,9 @@ class CommitSession extends Singleton
         }
 
         $data = @json_decode(@file_get_contents(self::MARKER_FILE), true);
-        $revisions = is_array($data) ? ($data['revisions'] ?? []) : [];
         $guiUrl = $data['gui_url'] ?? $this->getGuiUrl();
 
-        // Instruct the detached watchdog to execute the revert in its detached process
+        // 1. Try instructing the running detached watchdog via socket
         $resp = $this->sendWatchdogCommand('REVERT');
         if ($resp && isset($resp['status']) && $resp['status'] === 'ok') {
             openlog('audit', LOG_ODELAY, LOG_AUTH);
@@ -531,119 +528,53 @@ class CommitSession extends Singleton
             ];
         }
 
-        // Fallback: If watchdog was not running, stop watchdog process and execute direct revert in PHP
+        // 2. Fallback: If watchdog was unreachable, start a one-shot detached revert process.
+        // Never run rc.reload_all inside PHP-CGI; restarting lighttpd kills PHP mid-reload.
         $this->stopWatchdogProcess();
 
-        // Restore snapshot to config.xml atomically
-        $app = new AppConfig();
-        $targetFile = $app->application->configDir . '/config.xml';
-        $tmpFile = $app->application->configDir . '/config.xml.revert_tmp';
-
-        if (!file_exists(self::SNAPSHOT_FILE)) {
-            return [
-                'status' => 'failed',
-                'message' => gettext('Snapshot file missing.'),
-            ];
-        }
-
-        $snapshotContent = file_get_contents(self::SNAPSHOT_FILE);
-        if (empty($snapshotContent)) {
-            return [
-                'status' => 'failed',
-                'message' => gettext('Snapshot file is empty.'),
-            ];
-        }
-
-        // Atomically write temp file and rename
-        File::file_put_contents($tmpFile, $snapshotContent, 0640, 0, $app->globals->owner);
-        if (!rename($tmpFile, $targetFile)) {
-            @unlink($tmpFile);
-            return [
-                'status' => 'failed',
-                'message' => gettext('Atomic rename of restored configuration failed.'),
-            ];
-        }
-
-        // Record a history revision marked as Reverted
-        $revertTime = sprintf('%0.2f', microtime(true));
-        $backupDir = $app->application->configDir . '/backup/';
-        if (!file_exists($backupDir)) {
-            @mkdir($backupDir, 0750, true);
-        }
-        $backupFile = $backupDir . 'config-' . $revertTime . '.xml';
-
-        // Add Reverted revision tag to the restored config backup
-        $revertedXml = @simplexml_load_string($snapshotContent);
-        if ($revertedXml) {
-            if (!isset($revertedXml->revision)) {
-                $revNode = $revertedXml->addChild('revision');
-            } else {
-                $revNode = $revertedXml->revision;
-            }
-            $revNode->username = $username;
-            $revNode->time = $revertTime;
-            $revNode->description = sprintf('Reverted to snapshot from protected session (%s)', $reason);
-            $revNode->session_tag = 'Reverted';
-            File::file_put_contents($backupFile, $revertedXml->asXML(), 0640, 0, $app->globals->owner);
+        $pythonBin = '/usr/local/bin/python3';
+        if (file_exists('/usr/sbin/daemon') && file_exists(self::WATCHDOG_SCRIPT)) {
+            Shell::shell_safe(
+                '/usr/sbin/daemon -f %s %s --revert %s',
+                [$pythonBin, self::WATCHDOG_SCRIPT, escapeshellarg($reason)]
+            );
         } else {
-            File::file_put_contents($backupFile, $snapshotContent, 0640, 0, $app->globals->owner);
+            Shell::shell_safe(
+                '%s %s --revert %s > /dev/null 2>&1 &',
+                [$pythonBin, self::WATCHDOG_SCRIPT, escapeshellarg($reason)]
+            );
         }
-
-        // Tag previous session revisions as Reverted
-        $this->tagRevisionsInHistory($revisions, 'Reverted');
-
-        // Create login notice file
-        $noticeData = [
-            'reverted_at' => time(),
-            'reverted_at_iso' => date('c'),
-            'username' => $username,
-            'source' => $source,
-            'reason' => $reason,
-            'backup_id' => 'config-' . $revertTime . '.xml',
-            'gui_url' => $guiUrl,
-        ];
-        File::file_put_contents(self::NOTICE_FILE, json_encode($noticeData, JSON_PRETTY_PRINT), 0640);
-
-        // Delete marker and snapshot
-        @unlink(self::MARKER_FILE);
-        @unlink(self::SNAPSHOT_FILE);
-        @unlink(self::SOCKET_FILE);
-        @unlink(self::PID_FILE);
 
         openlog('audit', LOG_ODELAY, LOG_AUTH);
         syslog(
             LOG_WARNING,
-            sprintf('commit-session: configuration reverted to snapshot by %s via %s (reason: %s)', $username, $source, $reason)
+            sprintf('commit-session: configuration revert initiated in detached fallback by %s via %s (reason: %s)', $username, $source, $reason)
         );
-
-        // Reload all services or reboot if reload fails
-        $reloadSuccess = false;
-        if (file_exists(self::RELOAD_SCRIPT)) {
-            $exitCode = Shell::run_safe(self::RELOAD_SCRIPT);
-            $reloadSuccess = ($exitCode === 0);
-        }
-
-        if (!$reloadSuccess) {
-            syslog(LOG_ERR, 'commit-session: service reload failed following configuration revert; initiating reboot!');
-            if (file_exists('/sbin/shutdown')) {
-                Shell::shell_safe('/sbin/shutdown -r now');
-            } elseif (file_exists('/sbin/reboot')) {
-                Shell::shell_safe('/sbin/reboot');
-            }
-        }
 
         return [
             'status' => 'ok',
-            'message' => gettext('Configuration successfully reverted to snapshot.'),
+            'message' => gettext('Configuration revert initiated in detached background process.'),
             'gui_url' => $guiUrl,
         ];
     }
 
     /**
-     * Stop the watchdog process if running
+     * Stop supervisor and watchdog processes
      */
     private function stopWatchdogProcess(): void
     {
+        if (file_exists(self::SUPERVISOR_PID_FILE)) {
+            $supPid = trim(@file_get_contents(self::SUPERVISOR_PID_FILE));
+            if (is_numeric($supPid) && (int)$supPid > 0) {
+                if (function_exists('posix_kill') && defined('SIGTERM')) {
+                    @posix_kill((int)$supPid, SIGTERM);
+                } else {
+                    Shell::shell_safe('/bin/kill -TERM %s', [$supPid]);
+                }
+            }
+            @unlink(self::SUPERVISOR_PID_FILE);
+        }
+
         if (file_exists(self::PID_FILE)) {
             $pid = trim(@file_get_contents(self::PID_FILE));
             if (is_numeric($pid) && (int)$pid > 0) {
@@ -659,16 +590,35 @@ class CommitSession extends Singleton
     }
 
     /**
-     * Update session tag in backup files
+     * Update session tag in sidecar index and backup XML files
      * @param array $revisions
      * @param string $tag
      */
-    private function tagRevisionsInHistory(array $revisions, string $tag): void
+    public function tagRevisionsInHistory(array $revisions, string $tag): void
     {
+        if (empty($revisions)) {
+            return;
+        }
+
         $backupDir = (new AppConfig())->application->configDir . '/backup/';
-        foreach ($revisions as $revTime) {
-            $revTimeClean = preg_replace('/[^0-9.]/', '', $revTime);
-            $bckFile = $backupDir . 'config-' . $revTimeClean . '.xml';
+        $tagsFile = $backupDir . 'session_tags.json';
+        $tags = [];
+        if (file_exists($tagsFile)) {
+            $tags = @json_decode(file_get_contents($tagsFile), true) ?: [];
+        }
+
+        foreach ($revisions as $rev) {
+            $revStr = trim((string)$rev);
+            if (str_starts_with($revStr, 'config-') && str_ends_with($revStr, '.xml')) {
+                $filename = $revStr;
+            } else {
+                $cleanTime = preg_replace('/[^0-9.]/', '', $revStr);
+                $filename = 'config-' . $cleanTime . '.xml';
+            }
+
+            $tags[$filename] = $tag;
+
+            $bckFile = $backupDir . $filename;
             if (file_exists($bckFile)) {
                 $xml = @simplexml_load_file($bckFile);
                 if ($xml && isset($xml->revision)) {
@@ -677,6 +627,9 @@ class CommitSession extends Singleton
                 }
             }
         }
+
+        @file_put_contents($tagsFile . '.tmp', json_encode($tags, JSON_PRETTY_PRINT));
+        @rename($tagsFile . '.tmp', $tagsFile);
     }
 
     /**

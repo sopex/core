@@ -50,7 +50,14 @@ class CommitSessionStatus extends AbstractStatus
     public function collectStatus()
     {
         $cs = CommitSession::getInstance();
-        if ($cs->hasRevertNotice()) {
+        if ($cs->isActive()) {
+            $this->internalStatus = SystemStatusCode::NOTICE;
+            $this->internalTitle = gettext('Protected Change Session');
+            $this->internalMessage = gettext('A commit-confirmed protected change session is active.');
+            $this->internalTimestamp = time();
+            $this->internalLocation = null;
+            $this->internalIsBanner = false;
+        } elseif ($cs->hasRevertNotice()) {
             $notice = $cs->getRevertNotice();
             $timeStr = !empty($notice['reverted_at_iso']) ? $notice['reverted_at_iso'] : date('c');
             $reason = !empty($notice['reason']) ? $notice['reason'] : 'countdown expired';
@@ -62,6 +69,8 @@ class CommitSessionStatus extends AbstractStatus
                 $reason
             );
             $this->internalTimestamp = !empty($notice['reverted_at']) ? (int)$notice['reverted_at'] : time();
+            $this->internalLocation = '/ui/core/backup/history';
+            $this->internalIsBanner = false;
         }
     }
 

@@ -757,8 +757,7 @@ class Config extends Singleton
             if (!is_array($revision)) {
                 $revision = $this->getRevisionContext();
             }
-            $revision['time'] = sprintf('%0.2f', $time);
-            $commitSession->onConfigSave($revision);
+            $revision['session_tag'] = 'Pending';
         }
 
         // update revision information ROOT.revision tag, align timestamp to backup output
@@ -780,6 +779,9 @@ class Config extends Singleton
                     // last processed event itself. (it's merely added for debug purposes)
                     $logger = new Syslog('config', null, LOG_LOCAL5);
                     $logger->info("config-event: new_config " . $backup_filename);
+                }
+                if ($commitSession->isActive()) {
+                    $commitSession->onConfigSave($backup_filename ? basename($backup_filename) : null, $revision);
                 }
                 flock($this->config_file_handle, LOCK_UN);
                 $this->mtime = fstat($this->config_file_handle)['mtime'];

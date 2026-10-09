@@ -47,9 +47,13 @@ if [ -f "${MARKER}" -a -f "${SNAPSHOT}" ]; then
 
 	# Prefer Python implementation for full XML parsing and revision history tagging
 	if [ -x "${PYTHON_BIN}" -a -f "${WATCHDOG_SCRIPT}" ]; then
-		${PYTHON_BIN} "${WATCHDOG_SCRIPT}" --boot-revert
-		echo ">>> Configuration successfully restored to pre-session snapshot."
-		exit 0
+		if ${PYTHON_BIN} "${WATCHDOG_SCRIPT}" --boot-revert; then
+			echo ">>> Configuration successfully restored to pre-session snapshot."
+			exit 0
+		else
+			logger -t config -p local5.err "commit-session: Python boot-revert failed, falling back to shell revert..."
+			echo ">>> Python boot-revert failed, falling back to shell revert..."
+		fi
 	fi
 
 	# Fallback shell implementation
@@ -59,18 +63,15 @@ if [ -f "${MARKER}" -a -f "${SNAPSHOT}" ]; then
 	[ -z "${SOURCE}" ] && SOURCE="boot"
 
 	# Atomically restore snapshot before any services or templates read config.xml
-	cp "${SNAPSHOT}" "${TMP_TARGET}"
-	chmod 640 "${TMP_TARGET}"
-	mv -f "${TMP_TARGET}" "${TARGET}"
+	if cp "${SNAPSHOT}" "${TMP_TARGET}" && chmod 640 "${TMP_TARGET}" && mv -f "${TMP_TARGET}" "${TARGET}"; then
+		# Record backup revision
+		REVERT_TIME=$(date +%s)
+		mkdir -p "${BACKUP_DIR}"
+		cp "${SNAPSHOT}" "${BACKUP_DIR}/config-${REVERT_TIME}.00.xml"
+		chmod 640 "${BACKUP_DIR}/config-${REVERT_TIME}.00.xml"
 
-	# Record backup revision
-	REVERT_TIME=$(date +%s)
-	mkdir -p "${BACKUP_DIR}"
-	cp "${SNAPSHOT}" "${BACKUP_DIR}/config-${REVERT_TIME}.00.xml"
-	chmod 640 "${BACKUP_DIR}/config-${REVERT_TIME}.00.xml"
-
-	# Create login notice
-	cat <<EOF > "${NOTICE}"
+		# Create login notice
+		cat <<EOF > "${NOTICE}"
 {
   "reverted_at": ${REVERT_TIME},
   "reverted_at_iso": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
@@ -80,16 +81,23 @@ if [ -f "${MARKER}" -a -f "${SNAPSHOT}" ]; then
   "backup_id": "config-${REVERT_TIME}.00.xml"
 }
 EOF
-	chmod 640 "${NOTICE}"
+		chmod 640 "${NOTICE}"
 
-	# Clean up marker and snapshot
-	rm -f "${MARKER}"
-	rm -f "${SNAPSHOT}"
-	rm -f /var/run/commit_watchdog.pid
-	rm -f /var/run/commit_watchdog.sock
+		# Clean up marker and snapshot ONLY on restore success
+		rm -f "${MARKER}"
+		rm -f "${SNAPSHOT}"
+		rm -f /var/run/commit_watchdog.pid
+		rm -f /var/run/commit_watchdog.sock
+		rm -f /var/run/commit_watchdog_sup.pid
 
-	logger -t config -p local5.notice "commit-session: boot-time revert: unconfirmed protected session by ${USER} via ${SOURCE} reverted to snapshot."
-	echo ">>> Configuration successfully restored to pre-session snapshot."
+		logger -t config -p local5.notice "commit-session: boot-time revert: unconfirmed protected session by ${USER} via ${SOURCE} reverted to snapshot."
+		echo ">>> Configuration successfully restored to pre-session snapshot."
+		exit 0
+	else
+		logger -t config -p local5.crit "commit-session: boot-time shell restore failed! Keeping snapshot and marker for manual recovery."
+		echo ">>> CRITICAL: Configuration revert failed! Keeping snapshot and marker."
+		exit 1
+	fi
 fi
 
 exit 0
