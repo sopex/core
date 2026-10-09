@@ -1,0 +1,118 @@
+#!/bin/sh
+
+# Copyright (c) 2026 Konstantinos Spartalis
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+
+MARKER="/conf/commit_rollback_pending.json"
+SNAPSHOT="/conf/commit_rollback/snapshot.xml"
+TARGET="/conf/config.xml"
+NOTICE="/conf/commit_rollback_notice.json"
+TMP_TARGET="/conf/config.xml.boot_tmp"
+BACKUP_DIR="/conf/backup"
+PYTHON_BIN="/usr/local/bin/python3"
+WATCHDOG_SCRIPT="/usr/local/opnsense/scripts/system/commit_watchdog.py"
+
+# Handle orphan marker if snapshot is missing
+if [ -f "${MARKER}" -a ! -f "${SNAPSHOT}" ]; then
+	logger -t config -p local5.err "commit-session: boot-time revert failed: snapshot missing; removing orphan marker."
+	rm -f "${MARKER}" /var/run/commit_watchdog.pid /var/run/commit_watchdog.sock
+	exit 0
+fi
+
+if [ -f "${MARKER}" -a -f "${SNAPSHOT}" ]; then
+	echo ">>> Protected change session was pending at boot. Reverting configuration to snapshot..."
+
+	# Prefer Python implementation for full XML parsing and revision history tagging
+	if [ -x "${PYTHON_BIN}" -a -f "${WATCHDOG_SCRIPT}" ]; then
+		if ${PYTHON_BIN} "${WATCHDOG_SCRIPT}" --boot-revert; then
+			echo ">>> Configuration successfully restored to pre-session snapshot."
+			exit 0
+		else
+			logger -t config -p local5.err "commit-session: Python boot-revert failed, falling back to shell revert..."
+			echo ">>> Python boot-revert failed, falling back to shell revert..."
+		fi
+	fi
+
+	# Fallback shell implementation
+	USER=$(awk -F'"' '/"username"[[:space:]]*:/ {print $4}' "${MARKER}")
+	SOURCE=$(awk -F'"' '/"source"[[:space:]]*:/ {print $4}' "${MARKER}")
+	[ -z "${USER}" ] && USER="system"
+	[ -z "${SOURCE}" ] && SOURCE="boot"
+
+	# Atomically restore snapshot before any services or templates read config.xml
+	if cp "${SNAPSHOT}" "${TMP_TARGET}" && chmod 640 "${TMP_TARGET}" && mv -f "${TMP_TARGET}" "${TARGET}"; then
+		# Record backup revision
+		REVERT_TIME=$(date +%s)
+		mkdir -p "${BACKUP_DIR}"
+		cp "${SNAPSHOT}" "${BACKUP_DIR}/config-${REVERT_TIME}.00.xml"
+		chmod 640 "${BACKUP_DIR}/config-${REVERT_TIME}.00.xml"
+
+		# Update sidecar index
+		if [ -x "${PYTHON_BIN}" ]; then
+			${PYTHON_BIN} -c "
+import json, os
+p = '${BACKUP_DIR}/session_tags.json'
+try:
+    with open(p, 'r') as f: d = json.load(f)
+except Exception: d = {}
+d['config-${REVERT_TIME}.00.xml'] = 'Reverted'
+with open(p + '.tmp', 'w') as f: json.dump(d, f, indent=2)
+os.replace(p + '.tmp', p)
+" 2>/dev/null || true
+		fi
+
+		# Create login notice
+		cat <<EOF > "${NOTICE}"
+{
+  "reverted_at": ${REVERT_TIME},
+  "reverted_at_iso": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "username": "${USER}",
+  "source": "${SOURCE}",
+  "reason": "unconfirmed_at_boot",
+  "backup_id": "config-${REVERT_TIME}.00.xml"
+}
+EOF
+		chmod 640 "${NOTICE}"
+
+		# Clean up marker and snapshot ONLY on restore success
+		rm -f "${MARKER}"
+		rm -f "${SNAPSHOT}"
+		rm -f /var/run/commit_watchdog.pid
+		rm -f /var/run/commit_watchdog.sock
+		rm -f /var/run/commit_watchdog_sup.pid
+
+		logger -t config -p local5.notice "commit-session: boot-time revert: unconfirmed protected session by ${USER} via ${SOURCE} reverted to snapshot."
+		echo ">>> Configuration successfully restored to pre-session snapshot."
+		exit 0
+	else
+		rm -f "${TMP_TARGET}"
+		logger -t config -p local5.crit "commit-session: boot-time shell restore failed! Keeping snapshot and marker for manual recovery."
+		echo ">>> CRITICAL: Configuration revert failed! Keeping snapshot and marker."
+		exit 1
+	fi
+fi
+
+exit 0

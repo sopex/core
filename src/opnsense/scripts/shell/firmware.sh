@@ -27,6 +27,11 @@
 
 set -e
 
+if [ -f /conf/commit_rollback_pending.json ]; then
+	echo "Firmware updates are disabled during an active protected change session."
+	exit 1
+fi
+
 # From this shell script never execute any remote work prior to user
 # consent.  The first action is the unconditional changelog fetch after
 # script invoke.  After that we opportunistically run the selected major
