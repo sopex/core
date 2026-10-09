@@ -62,6 +62,11 @@ $aclObj = new \OPNsense\Core\ACL();
           <li id="menu_messages"><?= get_menu_user() ?></li>
           <li>
             <span class="navbar-text" style="margin-left: 0">
+              <i id="btn-start-commit-session" data-toggle="tooltip" data-placement="left" title="<?= html_safe(gettext('Start protected change session')) ?>" style="cursor:pointer" class="fa fa-shield text-muted"></i>
+            </span>
+          </li>
+          <li>
+            <span class="navbar-text" style="margin-left: 0">
               <i id="system_status" data-toggle="tooltip left" title="<?= html_safe(gettext('Show system status')) ?>" style="cursor:pointer" class="fa fa-circle text-muted"></i>
             </span>
           </li>

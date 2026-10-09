@@ -27,6 +27,7 @@
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -294,6 +295,41 @@ class TestCommitWatchdog(unittest.TestCase):
         # Snapshot and marker MUST be preserved on failure!
         self.assertTrue(os.path.exists(self.marker_file))
         self.assertTrue(os.path.exists(self.snapshot_file))
+
+    def test_failed_reload_preserves_snapshot_and_marker(self):
+        # Create a reload script that exits with non-zero status
+        if sys.platform == 'win32':
+            failing_reload = os.path.join(self.test_dir, 'failing_reload.bat')
+            with open(failing_reload, 'w') as f:
+                f.write("@exit /b 1\n")
+        else:
+            failing_reload = os.path.join(self.test_dir, 'failing_reload.sh')
+            with open(failing_reload, 'w') as f:
+                f.write("#!/bin/sh\nexit 1\n")
+            os.chmod(failing_reload, 0o755)
+
+        wd = self.get_watchdog(reload_script=failing_reload)
+        success = wd.execute_revert(reason='test_reload_failure')
+        self.assertFalse(success)
+
+        # Snapshot and marker MUST be preserved when reload fails so boot syshook can recover!
+        self.assertTrue(os.path.exists(self.marker_file))
+        self.assertTrue(os.path.exists(self.snapshot_file))
+
+    def test_reload_subprocess_flags(self):
+        from unittest.mock import patch, MagicMock
+        wd = self.get_watchdog()
+        with patch('subprocess.run') as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            success = wd.execute_revert(reason='test_flags')
+            self.assertTrue(success)
+            mock_run.assert_called_once_with(
+                [self.reload_script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True,
+                timeout=180
+            )
 
     def test_failed_boot_revert_preserves_snapshot_and_marker(self):
         bad_config_file = os.path.join(self.test_dir, 'nonexistent_sub', 'cannot_write.xml')

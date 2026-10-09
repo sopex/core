@@ -360,6 +360,33 @@ class CommitSession extends Singleton
     }
 
     /**
+     * Determine if a configuration save was initiated by a user action
+     * @param array|null $revision
+     * @param string $source
+     * @return bool
+     */
+    public function isUserAction(?array $revision = null, string $source = 'console'): bool
+    {
+        if (!empty($_SESSION['Username']) || !empty($_SERVER['PHP_AUTH_USER'])) {
+            return true;
+        }
+        if (php_sapi_name() === 'cli' && function_exists('posix_isatty') && defined('STDIN') && @posix_isatty(STDIN)) {
+            return true;
+        }
+        if (isset($revision['username'])) {
+            $u = trim((string)$revision['username']);
+            if ($u !== '' && $u !== 'system' && $u !== '(system)') {
+                return true;
+            }
+            return false;
+        }
+        if ($source === 'console') {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Hook called on every configuration save while a session is active.
      * The watchdog daemon is the sole writer of the marker and sidecar index.
      * @param string|null $backupFilename
@@ -371,18 +398,18 @@ class CommitSession extends Singleton
             return;
         }
 
-        // Determine if this save was initiated by a real user context
-        $isUser = false;
-        if (!empty($_SESSION['Username']) || !empty($_SERVER['PHP_AUTH_USER'])) {
-            $isUser = true;
-        } elseif (php_sapi_name() === 'cli' && function_exists('posix_isatty') && @posix_isatty(STDIN)) {
-            $isUser = true;
-        } elseif (isset($revision['username'])) {
-            $u = $revision['username'];
-            if ($u !== '(root)' && $u !== 'system' && $u !== '(system)' && !str_starts_with($u, '(root)@')) {
-                $isUser = true;
+        $username = $revision['username'] ?? (!empty($_SESSION['Username']) ? $_SESSION['Username'] : 'unknown');
+        $source = 'console';
+        if (!empty($_SERVER['REQUEST_URI'])) {
+            if (str_starts_with($_SERVER['REQUEST_URI'], '/api/') || !empty($_SERVER['HTTP_X_CLIENT_TYPE'])) {
+                $source = 'api';
+            } else {
+                $source = 'gui';
             }
         }
+
+        // Determine if this save was initiated by a real user context
+        $isUser = $this->isUserAction($revision, $source);
 
         // Command format: SAVE [filename] [is_user: 0|1]
         $cmd = 'SAVE';
@@ -393,16 +420,6 @@ class CommitSession extends Singleton
         }
 
         $this->sendWatchdogCommand($cmd);
-
-        $username = $revision['username'] ?? (!empty($_SESSION['Username']) ? $_SESSION['Username'] : 'unknown');
-        $source = 'console';
-        if (!empty($_SERVER['REQUEST_URI'])) {
-            if (str_starts_with($_SERVER['REQUEST_URI'], '/api/') || !empty($_SERVER['HTTP_X_CLIENT_TYPE'])) {
-                $source = 'api';
-            } else {
-                $source = 'gui';
-            }
-        }
 
         openlog('audit', LOG_ODELAY, LOG_AUTH);
         syslog(

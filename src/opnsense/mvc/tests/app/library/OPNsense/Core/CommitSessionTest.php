@@ -171,4 +171,72 @@ class CommitSessionTest extends \PHPUnit\Framework\TestCase
 
         @unlink($testFile);
     }
+
+    public function testOnConfigSaveInactiveDoesNothing()
+    {
+        $cs = CommitSession::getInstance();
+        @unlink(CommitSession::MARKER_FILE);
+        $rev = ['username' => 'root'];
+        $cs->onConfigSave('config-test.xml', $rev);
+        $this->assertFalse($cs->isActive());
+    }
+
+    public function testIsUserActionDetection()
+    {
+        $cs = CommitSession::getInstance();
+        unset($_SESSION['Username']);
+        unset($_SERVER['REQUEST_URI']);
+        unset($_SERVER['PHP_AUTH_USER']);
+
+        // Console saves with root, (root), or (root)@ip must be detected as user actions
+        $this->assertTrue($cs->isUserAction(['username' => '(root)'], 'console'));
+        $this->assertTrue($cs->isUserAction(['username' => '(root)@192.168.1.1'], 'console'));
+        $this->assertTrue($cs->isUserAction(['username' => 'root'], 'console'));
+        $this->assertTrue($cs->isUserAction(['username' => 'admin'], 'console'));
+
+        // Console saves without username must count as user action
+        $this->assertTrue($cs->isUserAction(null, 'console'));
+        $this->assertTrue($cs->isUserAction([], 'console'));
+
+        // Automated system saves must NOT count as user actions
+        $this->assertFalse($cs->isUserAction(['username' => 'system'], 'console'));
+        $this->assertFalse($cs->isUserAction(['username' => '(system)'], 'console'));
+        $this->assertFalse($cs->isUserAction(['username' => 'system'], 'gui'));
+        $this->assertFalse($cs->isUserAction(['username' => '(system)'], 'gui'));
+
+        // Non-console saves without username or session must not count as user action
+        $this->assertFalse($cs->isUserAction(null, 'gui'));
+        $this->assertFalse($cs->isUserAction([], 'gui'));
+
+        // Logged in web session must count as user action
+        $_SESSION['Username'] = 'admin';
+        $this->assertTrue($cs->isUserAction(null, 'gui'));
+        unset($_SESSION['Username']);
+
+        // HTTP auth user must count as user action
+        $_SERVER['PHP_AUTH_USER'] = 'root';
+        $this->assertTrue($cs->isUserAction(null, 'api'));
+        unset($_SERVER['PHP_AUTH_USER']);
+    }
+
+    public function testOnConfigSaveConsoleRootUserDetection()
+    {
+        $cs = CommitSession::getInstance();
+        file_put_contents(CommitSession::MARKER_FILE, json_encode(['session_id' => 'test']));
+        $this->assertTrue($cs->isActive());
+
+        @unlink(CommitSession::SOCKET_FILE);
+        unset($_SESSION['Username']);
+        unset($_SERVER['REQUEST_URI']);
+
+        $rev = ['username' => '(root)'];
+        $cs->onConfigSave('config-test.xml', $rev);
+        $this->assertTrue($cs->isUserAction($rev, 'console'));
+
+        $revSystem = ['username' => '(system)'];
+        $cs->onConfigSave('config-test.xml', $revSystem);
+        $this->assertFalse($cs->isUserAction($revSystem, 'console'));
+
+        @unlink(CommitSession::MARKER_FILE);
+    }
 }

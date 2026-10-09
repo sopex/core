@@ -40,38 +40,141 @@ class CommitSessionManager {
     }
 
     init() {
-        // Listen for announcements from the system status framework (statusObj)
-        // to avoid any polling or 403 errors when no session or notice is active.
-        if (typeof statusObj !== 'undefined' && typeof statusObj.attach === 'function') {
-            statusObj.attach({
-                update: (status) => {
-                    if (this.isForbidden) {
-                        return;
-                    }
-                    if (status && status.subsystems && status.subsystems.commitsession) {
-                        let cs = status.subsystems.commitsession;
-                        if (cs.location) {
-                            if (this.active) {
-                                this.active = false;
-                                this.removeBanner();
-                                this.stopTimer();
-                                this.stopPolling();
-                            }
-                            this.checkNotice();
-                        } else {
-                            if (!this.active) {
-                                this.checkStatus();
-                            }
-                        }
-                    } else if (this.active) {
-                        // System status framework no longer reports commitsession
-                        this.active = false;
-                        this.removeBanner();
-                        this.stopTimer();
-                        this.stopPolling();
-                    }
+        if (this.initialized) {
+            return;
+        }
+        this.initialized = true;
+
+        // Intercept announcements from the system status framework (statusObj)
+        // without adding to statusObj.observers, so statusObj.observers.length === 0
+        // is preserved for native widgets (StatusIcon, StatusDialog, StatusBanner).
+        if (typeof statusObj !== 'undefined' && typeof statusObj.notify === 'function') {
+            if (!statusObj._commitSessionNotifyWrapped) {
+                statusObj._commitSessionNotifyWrapped = true;
+                const origNotify = statusObj.notify.bind(statusObj);
+                statusObj.notify = (status) => {
+                    origNotify(status);
+                    this.handleStatusUpdate(status);
+                };
+            }
+            if (statusObj.data) {
+                this.handleStatusUpdate(statusObj.data);
+            }
+        }
+
+        // GUI entrypoint to start/manage protected change session
+        $(document).off('click', '#btn-start-commit-session').on('click', '#btn-start-commit-session', (e) => {
+            e.preventDefault();
+            this.promptStartSession();
+        });
+        this.updateHeaderButton();
+    }
+
+    handleStatusUpdate(status) {
+        if (this.isForbidden) {
+            return;
+        }
+        if (status && status.subsystems && status.subsystems.commitsession) {
+            let cs = status.subsystems.commitsession;
+            if (cs.location) {
+                if (this.active) {
+                    this.active = false;
+                    this.removeBanner();
+                    this.stopTimer();
+                    this.stopPolling();
+                    this.updateHeaderButton();
                 }
-            });
+                this.checkNotice();
+            } else {
+                if (!this.active) {
+                    this.checkStatus();
+                }
+            }
+        } else if (this.active) {
+            // System status framework no longer reports commitsession
+            this.active = false;
+            this.removeBanner();
+            this.stopTimer();
+            this.stopPolling();
+            this.updateHeaderButton();
+        }
+    }
+
+    promptStartSession() {
+        if (this.isForbidden) {
+            return;
+        }
+        if (this.active) {
+            let $banner = $('#commit-session-banner');
+            if (!$banner.length) {
+                this.renderBanner();
+                $banner = $('#commit-session-banner');
+            }
+            if ($banner.length) {
+                $('html, body').animate({
+                    scrollTop: $banner.offset().top - 20
+                }, 300);
+            } else {
+                BootstrapDialog.show({
+                    title: 'Protected Change Session',
+                    message: 'A protected change session is currently active.',
+                    type: BootstrapDialog.TYPE_INFO
+                });
+            }
+            return;
+        }
+
+        BootstrapDialog.confirm({
+            title: 'Start Protected Change Session',
+            message: 'A protected change session creates a snapshot of the current configuration.<br/><br/>' +
+                     'Any changes saved during the session will arm an automatic rollback countdown. ' +
+                     'If not confirmed before the timer expires, changes are automatically reverted to the snapshot.<br/><br/>' +
+                     'Do you want to start a protected change session now?',
+            type: BootstrapDialog.TYPE_PRIMARY,
+            btnOKClass: 'btn-primary',
+            btnOKLabel: 'Start Session',
+            btnCancelLabel: 'Cancel',
+            callback: (result) => {
+                if (result) {
+                    ajaxCall('/api/core/commit_session/start', {}, (data) => {
+                        if (data && data.status === 'ok') {
+                            this.active = true;
+                            this.checkStatus();
+                            this.updateHeaderButton();
+                            if (typeof updateSystemStatus === 'function') {
+                                updateSystemStatus();
+                            }
+                        } else {
+                            if (data && data.status === 403) {
+                                this.isForbidden = true;
+                                this.updateHeaderButton();
+                            }
+                            BootstrapDialog.show({
+                                title: 'Failed to Start Session',
+                                message: (data && data.message) ? data.message : 'Unable to start protected change session.',
+                                type: BootstrapDialog.TYPE_DANGER
+                            });
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    updateHeaderButton() {
+        let $btn = $('#btn-start-commit-session');
+        if ($btn.length) {
+            if (this.isForbidden) {
+                $btn.closest('li').hide();
+                return;
+            }
+            if (this.active) {
+                $btn.removeClass('text-muted').addClass('text-warning');
+                $btn.attr('data-original-title', 'Protected change session is active').attr('title', 'Protected change session is active');
+            } else {
+                $btn.removeClass('text-warning text-success').addClass('text-muted');
+                $btn.attr('data-original-title', 'Start protected change session').attr('title', 'Start protected change session');
+            }
         }
     }
 
@@ -295,6 +398,7 @@ class CommitSessionManager {
         `;
 
         $container.html(html);
+        this.updateHeaderButton();
         this.bindBannerActions();
     }
 
@@ -327,6 +431,7 @@ class CommitSessionManager {
 
     removeBanner() {
         $('#commit-session-banner-area').empty();
+        this.updateHeaderButton();
     }
 
     bindBannerActions() {
@@ -345,6 +450,10 @@ class CommitSessionManager {
                                 this.removeBanner();
                                 this.stopTimer();
                                 this.stopPolling();
+                                this.updateHeaderButton();
+                                if (typeof updateSystemStatus === 'function') {
+                                    updateSystemStatus();
+                                }
                                 BootstrapDialog.show({
                                     title: 'Session Confirmed',
                                     message: 'The protected change session has been ended. Your changes are confirmed.',
@@ -496,6 +605,9 @@ class CommitSessionManager {
                     action: function(dialog) {
                         ajaxCall('/api/core/commit_session/notice', {}, function() {
                             dialog.close();
+                            if (typeof updateSystemStatus === 'function') {
+                                updateSystemStatus();
+                            }
                         });
                     }
                 }

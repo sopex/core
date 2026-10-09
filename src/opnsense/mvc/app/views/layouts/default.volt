@@ -193,10 +193,12 @@
                 $("#menu_search_box").focus(function(){
                     $("#menu_search_box").css('width', '450px');
                     $("#system_status").hide();
+                    $("#btn-start-commit-session").hide();
                 });
                 $("#menu_search_box").focusout(function(){
                     $("#menu_search_box").css('width', '250px');
                     $("#system_status").show();
+                    $("#btn-start-commit-session").show();
                 });
                 // enable bootstrap tooltips
                 $('body').tooltip({
@@ -255,6 +257,11 @@
           <ul class="nav navbar-nav navbar-right">
             <li id="menu_messages">
               <span class="navbar-text">{{session_username}}@{{system_hostname}}.{{system_domain}}</span>
+            </li>
+            <li>
+              <span class="navbar-text" style="margin-left: 0">
+                <i id="btn-start-commit-session" data-toggle="tooltip" data-placement="left" title="{{ lang._('Start protected change session') }}" style="cursor:pointer" class="fa fa-shield text-muted"></i>
+              </span>
             </li>
             <li>
               <span class="navbar-text" style="margin-left: 0">

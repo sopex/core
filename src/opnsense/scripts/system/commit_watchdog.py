@@ -421,15 +421,18 @@ class CommitWatchdog:
             os.chmod(tmp_notice, 0o640)
             os.replace(tmp_notice, self.notice_file)
 
-            # 5. Clean up pending marker and snapshot ONLY on restore success
-            self.cleanup_session()
-
-            # 6. Run reload-all-services path
+            # 5. Run reload-all-services path (DEVNULL and close_fds=True avoid daemon pipe inheritance deadlock)
             syslog.syslog(syslog.LOG_NOTICE, f"commit-session: executing {self.reload_script} following revert")
             reload_ok = False
             if os.path.exists(self.reload_script):
                 try:
-                    res = subprocess.run([self.reload_script], capture_output=True, timeout=180)
+                    res = subprocess.run(
+                        [self.reload_script],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        close_fds=True,
+                        timeout=180
+                    )
                     if res.returncode == 0:
                         reload_ok = True
                     else:
@@ -440,14 +443,27 @@ class CommitWatchdog:
                 except Exception as e:
                     syslog.syslog(syslog.LOG_ERR, f"commit-session: failed to run reload script: {e}")
 
-            # 7. If reload fails, reboot system
+            # 6. If reload fails, keep marker and snapshot so boot-time syshook can roll back on reboot, then reboot
             if not reload_ok:
                 syslog.syslog(syslog.LOG_CRIT, "commit-session: reload-all failed; rebooting system now!")
                 if os.path.exists(self.shutdown_bin):
-                    subprocess.run([self.shutdown_bin, '-r', 'now'])
+                    subprocess.run(
+                        [self.shutdown_bin, '-r', 'now'],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        close_fds=True
+                    )
                 elif os.path.exists(self.reboot_bin):
-                    subprocess.run([self.reboot_bin])
+                    subprocess.run(
+                        [self.reboot_bin],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        close_fds=True
+                    )
+                return False
 
+            # 7. Clean up pending marker and snapshot ONLY after reload succeeds
+            self.cleanup_session()
             return True
 
         except Exception as e:
