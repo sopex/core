@@ -347,15 +347,11 @@ class TestCommitWatchdog(unittest.TestCase):
         success = wd.execute_revert(reason='countdown_expired')
         self.assertTrue(success)
 
-        # Prior revision XML must now be tagged Reverted
-        tree = ET.parse(prior_backup)
-        rev = tree.find('revision')
-        self.assertIsNotNone(rev)
-        stag = rev.find('session_tag')
-        self.assertIsNotNone(stag)
-        self.assertEqual(stag.text, 'Reverted')
+        # Prior backup file must remain untouched
+        with open(prior_backup, 'rb') as f:
+            self.assertEqual(f.read(), prior_xml)
 
-        # Sidecar index must also record Reverted
+        # Sidecar index must record Reverted
         sidecar_file = os.path.join(self.backup_dir, 'session_tags.json')
         with open(sidecar_file, 'r', encoding='utf-8') as f:
             tags = json.load(f)
@@ -376,13 +372,9 @@ class TestCommitWatchdog(unittest.TestCase):
         res = json.loads(wd.handle_command('CONFIRM'))
         self.assertEqual(res['status'], 'ok')
 
-        # Prior revision must now be tagged Confirmed
-        tree = ET.parse(prior_backup)
-        rev = tree.find('revision')
-        self.assertIsNotNone(rev)
-        stag = rev.find('session_tag')
-        self.assertIsNotNone(stag)
-        self.assertEqual(stag.text, 'Confirmed')
+        # Prior backup file must remain untouched
+        with open(prior_backup, 'rb') as f:
+            self.assertEqual(f.read(), prior_xml)
 
         # Sidecar index must also record Confirmed
         sidecar_file = os.path.join(self.backup_dir, 'session_tags.json')
@@ -419,10 +411,15 @@ class TestCommitWatchdog(unittest.TestCase):
             self.assertEqual(notice['source'], 'api')
             self.assertEqual(notice['reason'], 'unconfirmed_at_boot')
 
-        # Prior revision must be updated to Reverted
-        tree = ET.parse(prior_backup)
-        stag = tree.find('revision').find('session_tag')
-        self.assertEqual(stag.text, 'Reverted')
+        # Prior backup file must remain untouched
+        with open(prior_backup, 'rb') as f:
+            self.assertEqual(f.read(), prior_xml)
+
+        # Sidecar index must record Reverted
+        sidecar_file = os.path.join(self.backup_dir, 'session_tags.json')
+        with open(sidecar_file, 'r', encoding='utf-8') as f:
+            tags = json.load(f)
+        self.assertEqual(tags.get('config-1728460200.0011.xml'), 'Reverted')
 
         # Marker and snapshot must be deleted
         self.assertFalse(os.path.exists(self.marker_file))

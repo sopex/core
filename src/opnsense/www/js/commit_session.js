@@ -36,26 +36,39 @@ class CommitSessionManager {
         this.failCount = 0;
         this.connectionLost = false;
         this.revertingNoticeShown = false;
+        this.isForbidden = false;
     }
 
     init() {
-        this.checkNotice();
-        // Check once if a session is currently active
-        this.checkStatus();
-
-        // Listen for announcements from the system status framework
-        // to avoid constant polling when no session is active.
+        // Listen for announcements from the system status framework (statusObj)
+        // to avoid any polling or 403 errors when no session or notice is active.
         if (typeof statusObj !== 'undefined' && typeof statusObj.attach === 'function') {
             statusObj.attach({
                 update: (status) => {
+                    if (this.isForbidden) {
+                        return;
+                    }
                     if (status && status.subsystems && status.subsystems.commitsession) {
-                        // System status framework announced an active session or notice
-                        if (!this.active) {
-                            this.checkStatus();
+                        let cs = status.subsystems.commitsession;
+                        if (cs.location) {
+                            if (this.active) {
+                                this.active = false;
+                                this.removeBanner();
+                                this.stopTimer();
+                                this.stopPolling();
+                            }
+                            this.checkNotice();
+                        } else {
+                            if (!this.active) {
+                                this.checkStatus();
+                            }
                         }
                     } else if (this.active) {
                         // System status framework no longer reports commitsession
-                        this.syncStatus();
+                        this.active = false;
+                        this.removeBanner();
+                        this.stopTimer();
+                        this.stopPolling();
                     }
                 }
             });
@@ -105,6 +118,9 @@ class CommitSessionManager {
     }
 
     checkStatus() {
+        if (this.isForbidden) {
+            return;
+        }
         $.ajax({
             url: '/api/core/commit_session/status',
             type: 'GET',
@@ -129,7 +145,10 @@ class CommitSessionManager {
                     this.stopPolling();
                 }
             },
-            error: () => {
+            error: (xhr) => {
+                if (xhr && xhr.status === 403) {
+                    this.isForbidden = true;
+                }
                 this.active = false;
                 this.removeBanner();
                 this.stopTimer();
@@ -139,7 +158,7 @@ class CommitSessionManager {
     }
 
     syncStatus() {
-        if (!this.active) {
+        if (!this.active || this.isForbidden) {
             this.stopPolling();
             return;
         }
@@ -168,7 +187,10 @@ class CommitSessionManager {
             error: (xhr) => {
                 if (xhr && xhr.status === 403) {
                     // Unauthorized; stop polling immediately to avoid repeated 403 errors
+                    this.isForbidden = true;
                     this.stopPolling();
+                    this.removeBanner();
+                    this.stopTimer();
                     return;
                 }
                 this.failCount++;
@@ -423,9 +445,23 @@ class CommitSessionManager {
     }
 
     checkNotice() {
-        ajaxGet('/api/core/commit_session/notice', {}, (data, status) => {
-            if (status === 'success' && data && data.has_notice && data.notice) {
-                this.renderNoticeDialog(data.notice);
+        if (this.isForbidden) {
+            return;
+        }
+        $.ajax({
+            url: '/api/core/commit_session/notice',
+            type: 'GET',
+            dataType: 'json',
+            timeout: 5000,
+            success: (data) => {
+                if (data && data.has_notice && data.notice) {
+                    this.renderNoticeDialog(data.notice);
+                }
+            },
+            error: (xhr) => {
+                if (xhr && xhr.status === 403) {
+                    this.isForbidden = true;
+                }
             }
         });
     }

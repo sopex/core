@@ -32,6 +32,16 @@ use OPNsense\Core\CommitSession;
 
 class CommitSessionTest extends \PHPUnit\Framework\TestCase
 {
+    public static function setUpBeforeClass(): void
+    {
+        $app = new \OPNsense\Core\AppConfig();
+        if (file_exists('/conf/config.xml')) {
+            $app->update('application.configDir', '/conf');
+            $app->update('application.configDefault', '/conf/config.xml');
+            \OPNsense\Core\Config::getInstance()->forceReload();
+        }
+    }
+
     public function testInitialInactive()
     {
         $cs = CommitSession::getInstance();
@@ -120,5 +130,45 @@ class CommitSessionTest extends \PHPUnit\Framework\TestCase
         $dismissed = $cs->dismissRevertNotice();
         $this->assertTrue($dismissed);
         $this->assertFalse($cs->hasRevertNotice());
+    }
+
+    public function testGetGuiUrlWithIpv6HttpHost()
+    {
+        $cs = CommitSession::getInstance();
+        $_SERVER['HTTP_HOST'] = '[2001:db8::1]:8443';
+        $xmlStr = '<opnsense><system><webgui><protocol>https</protocol><port>8443</port></webgui></system></opnsense>';
+        $xml = simplexml_load_string($xmlStr);
+        $url = $cs->getGuiUrl($xml);
+        $this->assertEquals('https://[2001:db8::1]:8443', $url);
+
+        $_SERVER['HTTP_HOST'] = '[2001:db8::1]';
+        $url2 = $cs->getGuiUrl($xml);
+        $this->assertEquals('https://[2001:db8::1]:8443', $url2);
+        unset($_SERVER['HTTP_HOST']);
+    }
+
+    public function testTagRevisionsInHistoryUpdatesSidecarWithoutTouchingBackups()
+    {
+        $cs = CommitSession::getInstance();
+        $backupDir = '/conf/backup';
+        if (!file_exists($backupDir)) {
+            @mkdir($backupDir, 0750, true);
+        }
+        $testFile = $backupDir . '/config-9999999999.1234.xml';
+        $originalXml = '<?xml version="1.0"?><opnsense><revision><time>9999999999.1234</time><session_tag>Pending</session_tag></revision></opnsense>';
+        file_put_contents($testFile, $originalXml);
+
+        $cs->tagRevisionsInHistory(['config-9999999999.1234.xml'], 'Confirmed');
+
+        // Backup file itself must remain untouched!
+        $this->assertEquals($originalXml, file_get_contents($testFile));
+
+        // Sidecar tags file must have Confirmed tag
+        $tagsFile = $backupDir . '/session_tags.json';
+        $this->assertTrue(file_exists($tagsFile));
+        $tags = json_decode(file_get_contents($tagsFile), true);
+        $this->assertEquals('Confirmed', $tags['config-9999999999.1234.xml']);
+
+        @unlink($testFile);
     }
 }

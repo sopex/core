@@ -120,9 +120,16 @@ class CommitSession extends Singleton
         // 1. Capture host user actually used to connect
         $host = '';
         if (!empty($_SERVER['HTTP_HOST'])) {
-            $host = explode(':', $_SERVER['HTTP_HOST'])[0];
+            $hostStr = trim($_SERVER['HTTP_HOST']);
+            if (preg_match('/^\[([a-fA-F0-9:]+)\](?::\d+)?$/', $hostStr, $matches)) {
+                $host = $matches[1];
+            } elseif (preg_match('/^([^:]+)(?::\d+)?$/', $hostStr, $matches)) {
+                $host = $matches[1];
+            } else {
+                $host = $hostStr;
+            }
         } elseif (!empty($_SERVER['SERVER_ADDR'])) {
-            $host = $_SERVER['SERVER_ADDR'];
+            $host = trim($_SERVER['SERVER_ADDR']);
         }
 
         // 2. Fallback for console / CLI: use LAN IP only if valid IP (not "dhcp"), otherwise 127.0.0.1
@@ -368,6 +375,8 @@ class CommitSession extends Singleton
         $isUser = false;
         if (!empty($_SESSION['Username']) || !empty($_SERVER['PHP_AUTH_USER'])) {
             $isUser = true;
+        } elseif (php_sapi_name() === 'cli' && function_exists('posix_isatty') && @posix_isatty(STDIN)) {
+            $isUser = true;
         } elseif (isset($revision['username'])) {
             $u = $revision['username'];
             if ($u !== '(root)' && $u !== 'system' && $u !== '(system)' && !str_starts_with($u, '(root)@')) {
@@ -514,7 +523,7 @@ class CommitSession extends Singleton
         $guiUrl = $data['gui_url'] ?? $this->getGuiUrl();
 
         // 1. Try instructing the running detached watchdog via socket
-        $resp = $this->sendWatchdogCommand('REVERT');
+        $resp = $this->sendWatchdogCommand('REVERT ' . $reason);
         if ($resp && isset($resp['status']) && $resp['status'] === 'ok') {
             openlog('audit', LOG_ODELAY, LOG_AUTH);
             syslog(
@@ -536,12 +545,12 @@ class CommitSession extends Singleton
         if (file_exists('/usr/sbin/daemon') && file_exists(self::WATCHDOG_SCRIPT)) {
             Shell::shell_safe(
                 '/usr/sbin/daemon -f %s %s --revert %s',
-                [$pythonBin, self::WATCHDOG_SCRIPT, escapeshellarg($reason)]
+                [$pythonBin, self::WATCHDOG_SCRIPT, $reason]
             );
         } else {
             Shell::shell_safe(
                 '%s %s --revert %s > /dev/null 2>&1 &',
-                [$pythonBin, self::WATCHDOG_SCRIPT, escapeshellarg($reason)]
+                [$pythonBin, self::WATCHDOG_SCRIPT, $reason]
             );
         }
 
@@ -617,15 +626,6 @@ class CommitSession extends Singleton
             }
 
             $tags[$filename] = $tag;
-
-            $bckFile = $backupDir . $filename;
-            if (file_exists($bckFile)) {
-                $xml = @simplexml_load_file($bckFile);
-                if ($xml && isset($xml->revision)) {
-                    $xml->revision->session_tag = $tag;
-                    @file_put_contents($bckFile, $xml->asXML());
-                }
-            }
         }
 
         @file_put_contents($tagsFile . '.tmp', json_encode($tags, JSON_PRETTY_PRINT));

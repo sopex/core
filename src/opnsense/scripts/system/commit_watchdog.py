@@ -183,7 +183,7 @@ class CommitWatchdog:
             syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: error updating marker: {e}")
 
     def tag_revisions_in_history(self, revisions, tag):
-        """Update session_tags.json sidecar index and backup XML files for revisions."""
+        """Update session_tags.json sidecar index for revisions without touching backup files."""
         if not revisions:
             return
         os.makedirs(self.backup_dir, mode=0o750, exist_ok=True)
@@ -205,23 +205,6 @@ class CommitWatchdog:
                 filename = f"config-{clean_time}.xml"
 
             tags[filename] = tag
-
-            backup_file = os.path.join(self.backup_dir, filename)
-            if os.path.exists(backup_file):
-                try:
-                    tree = ET.parse(backup_file)
-                    root = tree.getroot()
-                    r_elem = root.find('revision')
-                    if r_elem is None:
-                        r_elem = ET.SubElement(root, 'revision')
-                    stag = r_elem.find('session_tag')
-                    if stag is None:
-                        stag = ET.SubElement(r_elem, 'session_tag')
-                    stag.text = tag
-                    tree.write(backup_file, encoding='utf-8', xml_declaration=True)
-                    os.chmod(backup_file, 0o640)
-                except Exception as e:
-                    syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: failed to update XML tag for {backup_file}: {e}")
 
         try:
             tmp_tags = tags_file + '.tmp'
@@ -321,6 +304,7 @@ class CommitWatchdog:
 
         elif cmd == 'REVERT':
             self.trigger_revert_manual = True
+            self.revert_reason = parts[1] if len(parts) > 1 else 'manual'
             return json.dumps({
                 "status": "ok",
                 "message": "reverting",
@@ -468,6 +452,11 @@ class CommitWatchdog:
 
         except Exception as e:
             syslog.syslog(syslog.LOG_CRIT, f"commit-session: critical error during revert: {e}")
+            if os.path.exists(tmp_config):
+                try:
+                    os.unlink(tmp_config)
+                except OSError:
+                    pass
             # Do NOT cleanup snapshot and marker on failure; keep them for fallback or recovery!
             return False
 
@@ -575,6 +564,11 @@ class CommitWatchdog:
 
         except Exception as e:
             syslog.syslog(syslog.LOG_CRIT, f"commit-session: critical error during boot revert: {e}")
+            if os.path.exists(tmp_config):
+                try:
+                    os.unlink(tmp_config)
+                except OSError:
+                    pass
             # Do NOT cleanup marker and snapshot on failure!
             return False
 
@@ -623,7 +617,7 @@ class CommitWatchdog:
                         syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: socket handling error: {e}")
 
             if self.trigger_revert_manual:
-                self.execute_revert(reason="manual_revert")
+                self.execute_revert(reason=getattr(self, 'revert_reason', 'manual'))
                 self.running = False
                 break
 
@@ -712,6 +706,19 @@ def check_watchdog_supervisor():
     if not alive:
         syslog.openlog('commit-watchdog', syslog.LOG_PID, syslog.LOG_AUTH)
         syslog.syslog(syslog.LOG_WARNING, "commit-watchdog: supervisor check detected dead watchdog with active session; respawning!")
+        for pfile in [SUPERVISOR_PID_FILE, PID_FILE]:
+            if os.path.exists(pfile):
+                try:
+                    with open(pfile, 'r') as pf:
+                        p = int(pf.read().strip())
+                    if p > 0:
+                        os.kill(p, signal.SIGTERM)
+                except Exception:
+                    pass
+                try:
+                    os.unlink(pfile)
+                except OSError:
+                    pass
         if os.path.exists(socket_file):
             try:
                 os.unlink(socket_file)

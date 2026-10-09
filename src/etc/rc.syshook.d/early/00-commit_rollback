@@ -70,6 +70,20 @@ if [ -f "${MARKER}" -a -f "${SNAPSHOT}" ]; then
 		cp "${SNAPSHOT}" "${BACKUP_DIR}/config-${REVERT_TIME}.00.xml"
 		chmod 640 "${BACKUP_DIR}/config-${REVERT_TIME}.00.xml"
 
+		# Update sidecar index
+		if [ -x "${PYTHON_BIN}" ]; then
+			${PYTHON_BIN} -c "
+import json, os
+p = '${BACKUP_DIR}/session_tags.json'
+try:
+    with open(p, 'r') as f: d = json.load(f)
+except Exception: d = {}
+d['config-${REVERT_TIME}.00.xml'] = 'Reverted'
+with open(p + '.tmp', 'w') as f: json.dump(d, f, indent=2)
+os.replace(p + '.tmp', p)
+" 2>/dev/null || true
+		fi
+
 		# Create login notice
 		cat <<EOF > "${NOTICE}"
 {
@@ -94,6 +108,7 @@ EOF
 		echo ">>> Configuration successfully restored to pre-session snapshot."
 		exit 0
 	else
+		rm -f "${TMP_TARGET}"
 		logger -t config -p local5.crit "commit-session: boot-time shell restore failed! Keeping snapshot and marker for manual recovery."
 		echo ">>> CRITICAL: Configuration revert failed! Keeping snapshot and marker."
 		exit 1
