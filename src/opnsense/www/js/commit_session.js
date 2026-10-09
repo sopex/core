@@ -360,15 +360,31 @@ class CommitSessionManager {
         if (data.reverting || data.status === 'reverting') {
             let reasonStr = data.revert_reason || 'manual';
             let reasonLabel = reasonStr === 'countdown_expired' ? 'Countdown Expired' : 'Rollback in Progress';
+            let attempts = parseInt(data.revert_attempts || 0, 10);
+            let failing = attempts > 0 && !!data.last_revert_error && !data.revert_running;
+            let bannerClass = failing ? 'alert-danger' : 'alert-warning';
+            let iconHtml = failing
+                ? '<span class="fa fa-exclamation-triangle fa-lg" style="margin-right:10px;"></span>'
+                : '<span class="fa fa-spinner fa-spin fa-lg" style="margin-right:10px; color:#d9534f;"></span>';
+            let msgHtml = 'Reverting changes to pre-session snapshot and reloading services... Please wait.';
+            if (failing) {
+                let retryStr = (data.next_retry_seconds !== null && data.next_retry_seconds !== undefined)
+                    ? 'Next attempt in ' + this.formatTime(data.next_retry_seconds) + '.'
+                    : 'Retrying shortly.';
+                msgHtml = 'Rollback failed ' + attempts + ' time' + (attempts === 1 ? '' : 's') +
+                    ' (' + $('<span>').text(data.last_revert_error).html() + '). ' + retryStr +
+                    ' The firewall is still running the unconfirmed configuration.' +
+                    ' Confirm the session to keep it and stop retrying.';
+            }
             let html = `
-                <div id="commit-session-banner" class="alert alert-warning" style="margin: 10px 15px; padding: 12px 15px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
+                <div id="commit-session-banner" class="alert ${bannerClass}" style="margin: 10px 15px; padding: 12px 15px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
                     <div class="row" style="display:flex; align-items:center; flex-wrap:wrap;">
                         <div class="col-xs-12">
-                            <span class="fa fa-spinner fa-spin fa-lg" style="margin-right:10px; color:#d9534f;"></span>
-                            <strong style="text-transform:uppercase; letter-spacing:0.5px;">Reverting Configuration (${reasonLabel})</strong>
+                            ${iconHtml}
+                            <strong style="text-transform:uppercase; letter-spacing:0.5px;">${failing ? 'Rollback Failing' : 'Reverting Configuration'} (${reasonLabel})</strong>
                             <span style="margin: 0 8px;">|</span>
                             <span id="cs-banner-msg">
-                                Reverting changes to pre-session snapshot and reloading services... Please wait.
+                                ${msgHtml}
                             </span>
                         </div>
                     </div>
@@ -388,6 +404,11 @@ class CommitSessionManager {
         let extensionsRemaining = Math.max(0, maxExtensions - extensionsCount);
         let userStr = data.username || 'admin';
         let sourceStr = data.source || 'gui';
+        let sessionLimitHtml = '';
+        let limitRem = data.session_limit_remaining_seconds;
+        if (isCountdown && limitRem !== null && limitRem !== undefined && limitRem <= 900) {
+            sessionLimitHtml = `<span style="color:#d9534f;">Session limit reached in <strong>${this.formatTime(limitRem)}</strong>; confirm before then.</span>`;
+        }
 
         let html = `
             <div id="commit-session-banner" class="alert ${alertClass}" style="margin: 10px 15px; padding: 10px 15px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
@@ -415,6 +436,7 @@ class CommitSessionManager {
                         <div style="font-size: 0.85em; opacity: 0.85; margin-top: 2px;">
                             Session by <strong>${userStr}</strong> via <strong>${sourceStr}</strong>.
                             Extensions remaining: <strong>${extensionsRemaining} of ${maxExtensions}</strong>.
+                            ${sessionLimitHtml}
                         </div>
                     </div>
                     <div class="col-md-5 col-sm-12 text-right" style="margin-bottom: 5px;">

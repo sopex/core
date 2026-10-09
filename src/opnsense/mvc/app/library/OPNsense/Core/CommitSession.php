@@ -49,6 +49,11 @@ class CommitSession extends Singleton
     public const SOCKET_FILE = '/var/run/commit_watchdog.sock';
     public const PID_FILE = '/var/run/commit_watchdog.pid';
     public const SUPERVISOR_PID_FILE = '/var/run/commit_watchdog_sup.pid';
+    public const REVERT_LOCK_FILE = '/var/run/commit_watchdog_revert.lock';
+    public const DEFAULT_COUNTDOWN = 10;
+    public const DEFAULT_EXTENSION = 5;
+    public const DEFAULT_MAX_EXTENSIONS = 6;
+    public const DEFAULT_MAX_SESSION = 120;
     public const SIDECAR_TAGS_FILE = '/conf/backup/session_tags.json';
     public const RELOAD_SCRIPT = '/usr/local/etc/rc.reload_all';
     public const WATCHDOG_SCRIPT = '/usr/local/opnsense/scripts/system/commit_watchdog.py';
@@ -76,15 +81,50 @@ class CommitSession extends Singleton
     }
 
     /**
+     * Check whether some process is executing a revert right now (watchdog or one-shot fallback).
+     * Mirrors the flock() taken by commit_watchdog.py around every revert.
+     * @return bool
+     */
+    public function revertLockHeld(): bool
+    {
+        if (!file_exists(self::REVERT_LOCK_FILE)) {
+            return false;
+        }
+        $fp = @fopen(self::REVERT_LOCK_FILE, 'c');
+        if ($fp === false) {
+            return false;
+        }
+        $held = !flock($fp, LOCK_EX | LOCK_NB);
+        if (!$held) {
+            flock($fp, LOCK_UN);
+        }
+        fclose($fp);
+        return $held;
+    }
+
+    /**
+     * Write the marker atomically (temp file + rename). Only used by the fallback paths that run
+     * when the watchdog is unreachable; otherwise the watchdog is the sole writer.
+     * @param array $data
+     */
+    private function writeMarkerAtomic(array $data): void
+    {
+        $tmp = self::MARKER_FILE . '.tmp';
+        File::file_put_contents($tmp, json_encode($data, JSON_PRETTY_PRINT), 0640);
+        @rename($tmp, self::MARKER_FILE);
+    }
+
+    /**
      * Retrieve configuration settings for rollback
      * @return array
      */
     public function getSettings(): array
     {
         $cnf = Config::getInstance()->object();
-        $countdown = 3;
-        $extension = 5;
-        $maxExtensions = 6;
+        $countdown = self::DEFAULT_COUNTDOWN;
+        $extension = self::DEFAULT_EXTENSION;
+        $maxExtensions = self::DEFAULT_MAX_EXTENSIONS;
+        $maxSession = self::DEFAULT_MAX_SESSION;
 
         if (isset($cnf->system->commit_rollback)) {
             $cr = $cnf->system->commit_rollback;
@@ -97,12 +137,19 @@ class CommitSession extends Singleton
             if (isset($cr->max_extensions) && (string)$cr->max_extensions !== '') {
                 $maxExtensions = max(0, min(60, (int)$cr->max_extensions));
             }
+            if (!empty($cr->max_session)) {
+                $maxSession = max(15, min(480, (int)$cr->max_session));
+            }
         }
+
+        // A session limit shorter than one countdown would cut the first save short
+        $maxSession = max($maxSession, $countdown);
 
         return [
             'countdown' => $countdown,
             'extension' => $extension,
             'max_extensions' => $maxExtensions,
+            'max_session' => $maxSession,
         ];
     }
 
@@ -220,12 +267,23 @@ class CommitSession extends Singleton
         }
 
         if (!empty($data['reverting']) || ($data['status'] ?? '') === 'reverting') {
+            // Do not query the socket here: a watchdog busy reloading services cannot answer it
+            $nextRetry = null;
+            if (!empty($data['revert_attempts']) && !empty($data['last_revert_attempt_epoch'])) {
+                $backoff = min(300, 15 * (2 ** ((int)$data['revert_attempts'] - 1)));
+                $nextRetry = max(0, (int)round($data['last_revert_attempt_epoch'] + $backoff - time()));
+            }
             return [
                 'active' => true,
                 'status' => 'reverting',
                 'reverting' => true,
                 'revert_reason' => $data['revert_reason'] ?? 'manual',
+                'revert_attempts' => (int)($data['revert_attempts'] ?? 0),
+                'last_revert_error' => $data['last_revert_error'] ?? '',
+                'next_retry_seconds' => $this->revertLockHeld() ? null : $nextRetry,
+                'revert_running' => $this->revertLockHeld(),
                 'gui_url' => $data['gui_url'] ?? $this->getGuiUrl(),
+                'username' => $data['username'] ?? '',
                 'countdown_active' => false,
                 'remaining_seconds' => 0,
                 'has_notice' => $this->hasRevertNotice(),
@@ -239,6 +297,7 @@ class CommitSession extends Singleton
             $data['countdown_active'] = !empty($watchdogStatus['countdown_active']);
             $data['extensions_count'] = (int)($watchdogStatus['extensions_count'] ?? $data['extensions_count'] ?? 0);
             $data['saves_count'] = (int)($watchdogStatus['saves_count'] ?? $data['saves_count'] ?? 0);
+            $data['session_limit_remaining_seconds'] = $watchdogStatus['session_limit_remaining_seconds'] ?? null;
             $data['watchdog_alive'] = true;
         } else {
             // Watchdog not answering; fallback computation from expire_epoch
@@ -302,7 +361,7 @@ class CommitSession extends Singleton
         $now = time();
         $countdownSec = $settings['countdown'] * 60;
         $extensionSec = $settings['extension'] * 60;
-        $maxTotalSec = $countdownSec + ($settings['max_extensions'] * $extensionSec);
+        $maxSessionSec = $settings['max_session'] * 60;
 
         $markerData = [
             'session_id' => $sessionId,
@@ -320,7 +379,8 @@ class CommitSession extends Singleton
             'status' => 'pending',
             'countdown_active' => false,
             'expire_epoch' => null,
-            'absolute_ceiling_epoch' => $now + $maxTotalSec,
+            // The session limit starts counting at the first save (set by the watchdog), not now
+            'max_session_seconds' => $maxSessionSec,
             'revisions' => [],
         ];
 
@@ -393,21 +453,19 @@ class CommitSession extends Singleton
      */
     public function isUserAction(?array $revision = null, string $source = 'console'): bool
     {
+        // Web GUI session or API key
         if (!empty($_SESSION['Username']) || !empty($_SERVER['PHP_AUTH_USER'])) {
             return true;
         }
+        // Interactive console or SSH menu
         if (php_sapi_name() === 'cli' && function_exists('posix_isatty') && defined('STDIN') && @posix_isatty(STDIN)) {
             return true;
         }
+        // A named account; parenthesised names such as "(root)" are process identities from whoami,
+        // i.e. backend scripts and cron jobs
         if (isset($revision['username'])) {
-            $u = trim((string)$revision['username']);
-            if ($u !== '' && $u !== 'system' && $u !== '(system)') {
-                return true;
-            }
-            return false;
-        }
-        if ($source === 'console') {
-            return true;
+            $u = trim(explode('@', (string)$revision['username'])[0]);
+            return $u !== '' && $u[0] !== '(' && $u !== 'system';
         }
         return false;
     }
@@ -496,6 +554,10 @@ class CommitSession extends Singleton
                     $msg = gettext('Maximum number of extensions reached.');
                 } elseif ($err === 'not_counting') {
                     $msg = gettext('No countdown is currently running (no changes saved yet).');
+                } elseif ($err === 'session_limit_reached') {
+                    $msg = gettext('The maximum session length has been reached. Confirm or revert your changes.');
+                } elseif ($err === 'reverting') {
+                    $msg = gettext('A configuration rollback is in progress.');
                 } else {
                     $msg = gettext('Failed to extend countdown.');
                 }
@@ -527,10 +589,32 @@ class CommitSession extends Singleton
             ];
         }
 
-        // Notify watchdog to update revisions to Confirmed, cleanup, and exit cleanly
-        $this->sendWatchdogCommand('CONFIRM');
+        // Never remove the snapshot while a revert is executing: the restore would be left half done
+        if ($this->revertLockHeld()) {
+            return [
+                'status' => 'failed',
+                'message' => gettext('A configuration rollback is running right now. Wait for it to finish.'),
+            ];
+        }
 
-        // Stop supervisor and clean any remaining artifacts
+        // The watchdog tags revisions as Confirmed, cleans up and exits; it refuses during a revert
+        $resp = $this->sendWatchdogCommand('CONFIRM');
+        if (!empty($resp) && ($resp['status'] ?? '') !== 'ok') {
+            return [
+                'status' => 'failed',
+                'message' => gettext('The watchdog refused to confirm: a configuration rollback is running.'),
+            ];
+        }
+
+        if (empty($resp) && $this->isReverting()) {
+            // Watchdog silent while reverting: it is most likely reloading services. Do not kill it.
+            return [
+                'status' => 'failed',
+                'message' => gettext('A configuration rollback is in progress. Try again in a moment.'),
+            ];
+        }
+
+        // Watchdog confirmed, or is dead with no revert pending: stop supervisor and clean up
         $this->stopWatchdogProcess();
         @unlink(self::MARKER_FILE);
         @unlink(self::SNAPSHOT_FILE);
@@ -580,8 +664,19 @@ class CommitSession extends Singleton
             ];
         }
 
-        // 2. Fallback: If watchdog was unreachable, start a one-shot detached revert process.
+        // 2. A revert is already executing (watchdog busy reloading, or an earlier fallback): nothing to start
+        if ($this->revertLockHeld()) {
+            return [
+                'status' => 'ok',
+                'message' => gettext('Configuration revert is already in progress.'),
+                'gui_url' => $guiUrl,
+            ];
+        }
+
+        // 3. Fallback: If watchdog was unreachable, start a one-shot detached revert process.
         // Never run rc.reload_all inside PHP-CGI; restarting lighttpd kills PHP mid-reload.
+        // If the one-shot fails, the marker stays in the reverting state and the cron check respawns
+        // a watchdog that retries with backoff.
         $this->stopWatchdogProcess();
 
         if (file_exists(self::MARKER_FILE)) {
@@ -590,8 +685,8 @@ class CommitSession extends Singleton
             $mdata['reverting'] = true;
             $mdata['countdown_active'] = false;
             $mdata['revert_reason'] = $reason;
-            $mdata['revert_started_at'] = time();
-            @file_put_contents(self::MARKER_FILE, json_encode($mdata, JSON_PRETTY_PRINT));
+            $mdata['revert_started_at'] = $mdata['revert_started_at'] ?? time();
+            $this->writeMarkerAtomic($mdata);
         }
 
         $pythonBin = '/usr/local/bin/python3';

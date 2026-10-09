@@ -26,11 +26,28 @@
 
 """
 Commit-Confirmed Watchdog Daemon.
+
 Runs as a detached background process tracking protected change sessions using a monotonic clock.
 If the countdown expires or an explicit revert is ordered, atomically restores config.xml
 and triggers rc.reload_all (or reboots on reload failure).
+
+Session state machine:
+
+    pending   - session started, no saves yet; closes on idle timeout
+    counting  - at least one save; reverts when the countdown expires
+    reverting - a revert was requested or the countdown expired; retried with
+                backoff until it succeeds, the box reboots, or an admin confirms
+
+Invariants:
+    * Once a save has been recorded, the session can only end by confirm or revert.
+      The idle timeout never discards recorded changes.
+    * Any save arms the countdown if it is not running (fail closed). Only user saves
+      restart a running countdown, so background saves cannot postpone a revert.
+    * The session ceiling starts at the first save, so a save always gets a full countdown.
+    * Only one process executes a revert at a time (revert lock).
 """
 
+import fcntl
 import json
 import os
 import select
@@ -68,12 +85,98 @@ NOTICE_FILE = '/conf/commit_rollback_notice.json'
 SOCKET_FILE = '/var/run/commit_watchdog.sock'
 PID_FILE = '/var/run/commit_watchdog.pid'
 SUPERVISOR_PID_FILE = '/var/run/commit_watchdog_sup.pid'
+REVERT_LOCK_FILE = '/var/run/commit_watchdog_revert.lock'
 CONFIG_FILE = '/conf/config.xml'
 BACKUP_DIR = '/conf/backup'
 RELOAD_SCRIPT = '/usr/local/etc/rc.reload_all'
 SHUTDOWN_BIN = '/sbin/shutdown'
 REBOOT_BIN = '/sbin/reboot'
+
 IDLE_TIMEOUT_SECONDS = 3600.0
+DEFAULT_COUNTDOWN_SECONDS = 600.0
+DEFAULT_EXTENSION_SECONDS = 300.0
+DEFAULT_MAX_EXTENSIONS = 6
+DEFAULT_MAX_SESSION_SECONDS = 7200.0
+RETRY_BASE_SECONDS = 15.0
+RETRY_MAX_SECONDS = 300.0
+
+
+def revert_backoff(attempts):
+    """Delay before the next revert attempt after `attempts` failed attempts (15s, 30s, ... capped at 5m)."""
+    if attempts <= 0:
+        return 0.0
+    return min(RETRY_MAX_SECONDS, RETRY_BASE_SECONDS * (2 ** (attempts - 1)))
+
+
+def acquire_revert_lock(lock_file):
+    """Try to take the revert lock without blocking. Returns an open fd, or None when another process holds it."""
+    try:
+        fd = os.open(lock_file, os.O_CREAT | os.O_RDWR, 0o600)
+    except OSError:
+        return None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd
+    except OSError:
+        os.close(fd)
+        return None
+
+
+def release_revert_lock(fd):
+    if fd is None:
+        return
+    try:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    except OSError:
+        pass
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+
+
+def revert_lock_held(lock_file):
+    """True when some process is executing a revert right now."""
+    if not os.path.exists(lock_file):
+        return False
+    fd = acquire_revert_lock(lock_file)
+    if fd is None:
+        return True
+    release_revert_lock(fd)
+    return False
+
+
+def read_pid(pid_file):
+    try:
+        with open(pid_file, 'r') as f:
+            pid = int(f.read().strip())
+        return pid if pid > 0 else None
+    except Exception:
+        return None
+
+
+def watchdog_pid_alive(pid_file):
+    """Liveness by process, not by socket: a watchdog busy in rc.reload_all cannot answer, but is alive."""
+    pid = read_pid(pid_file)
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    # Guard against PID reuse: the process must be our watchdog script.
+    try:
+        res = subprocess.run(['/bin/ps', '-o', 'command=', '-p', str(pid)],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
+        command = res.stdout.decode('utf-8', 'replace')
+        if res.returncode == 0 and command.strip():
+            return 'commit_watchdog' in command
+    except Exception:
+        pass
+    # ps unavailable or inconclusive: trust the signal check
+    return True
 
 
 class CommitWatchdog:
@@ -81,7 +184,10 @@ class CommitWatchdog:
                  socket_file=SOCKET_FILE, notice_file=NOTICE_FILE,
                  config_file=CONFIG_FILE, backup_dir=BACKUP_DIR,
                  reload_script=RELOAD_SCRIPT, idle_timeout=IDLE_TIMEOUT_SECONDS,
-                 shutdown_bin=SHUTDOWN_BIN, reboot_bin=REBOOT_BIN):
+                 shutdown_bin=SHUTDOWN_BIN, reboot_bin=REBOOT_BIN,
+                 pid_file=PID_FILE, supervisor_pid_file=SUPERVISOR_PID_FILE,
+                 revert_lock_file=REVERT_LOCK_FILE,
+                 clock=time.monotonic, wallclock=time.time):
         self.marker_file = marker_file
         self.snapshot_file = snapshot_file
         self.socket_file = socket_file
@@ -92,16 +198,22 @@ class CommitWatchdog:
         self.idle_timeout = idle_timeout
         self.shutdown_bin = shutdown_bin
         self.reboot_bin = reboot_bin
+        self.pid_file = pid_file
+        self.supervisor_pid_file = supervisor_pid_file
+        self.revert_lock_file = revert_lock_file
+        self._mono = clock
+        self._wall = wallclock
 
         self.running = True
         self.countdown_active = False
         self.deadline_monotonic = 0.0
-        self.absolute_ceiling_monotonic = float('inf')
-        self.idle_deadline_monotonic = time.monotonic() + self.idle_timeout
+        self.session_ceiling_monotonic = float('inf')
+        self.idle_deadline_monotonic = self._mono() + self.idle_timeout
 
-        self.countdown_seconds = 180.0
-        self.extension_seconds = 300.0
-        self.max_extensions = 6
+        self.countdown_seconds = DEFAULT_COUNTDOWN_SECONDS
+        self.extension_seconds = DEFAULT_EXTENSION_SECONDS
+        self.max_extensions = DEFAULT_MAX_EXTENSIONS
+        self.max_session_seconds = DEFAULT_MAX_SESSION_SECONDS
         self.extensions_count = 0
         self.saves_count = 0
         self.username = 'admin'
@@ -109,12 +221,21 @@ class CommitWatchdog:
         self.session_id = ''
         self.gui_url = ''
         self.revisions = []
-        self.trigger_revert_manual = False
+
+        # reverting state
         self.is_reverting = False
         self.revert_reason = 'manual'
+        self.revert_attempts = 0
+        self.last_revert_attempt_wall = None
+        self.last_revert_error = ''
+        self.next_revert_monotonic = 0.0
+        self.reboot_initiated = False
+        self.last_revert_outcome = None
 
         self.server_sock = None
         self.load_marker()
+
+    # ------------------------------------------------------------------ state
 
     def load_marker(self):
         if not os.path.exists(self.marker_file):
@@ -122,61 +243,97 @@ class CommitWatchdog:
         try:
             with open(self.marker_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
+            now_mono = self._mono()
+            now_wall = self._wall()
+
             self.session_id = data.get('session_id', '')
             self.username = data.get('username', 'admin')
             self.source = data.get('source', 'gui')
-            self.countdown_seconds = float(data.get('countdown_seconds', 180))
-            self.extension_seconds = float(data.get('extension_seconds', 300))
-            self.max_extensions = int(data.get('max_extensions', 6))
+            self.countdown_seconds = float(data.get('countdown_seconds', DEFAULT_COUNTDOWN_SECONDS))
+            self.extension_seconds = float(data.get('extension_seconds', DEFAULT_EXTENSION_SECONDS))
+            self.max_extensions = int(data.get('max_extensions', DEFAULT_MAX_EXTENSIONS))
+            self.max_session_seconds = max(
+                float(data.get('max_session_seconds', DEFAULT_MAX_SESSION_SECONDS)),
+                self.countdown_seconds
+            )
             self.extensions_count = int(data.get('extensions_count', 0))
             self.saves_count = int(data.get('saves_count', 0))
             self.gui_url = data.get('gui_url', '')
-            self.revisions = data.get('revisions', [])
+            self.revisions = list(data.get('revisions', []) or [])
+            created_at = float(data.get('created_at', now_wall))
+
+            # Session ceiling only exists once the first save armed the countdown
+            if data.get('session_ceiling_epoch'):
+                rem_ceiling = max(0.0, float(data['session_ceiling_epoch']) - now_wall)
+                self.session_ceiling_monotonic = now_mono + rem_ceiling
+            else:
+                self.session_ceiling_monotonic = float('inf')
 
             if data.get('status') == 'reverting' or data.get('reverting'):
+                # Resume a revert that a previous process requested or failed to finish
                 self.is_reverting = True
+                self.countdown_active = False
                 self.revert_reason = data.get('revert_reason', 'manual')
-
-            created_at = float(data.get('created_at', time.time()))
-
-            # Absolute session ceiling to ensure background saves or loops cannot postpone revert forever
-            if data.get('absolute_ceiling_epoch'):
-                rem_ceiling = max(0.0, float(data['absolute_ceiling_epoch']) - time.time())
-                self.absolute_ceiling_monotonic = time.monotonic() + rem_ceiling
-            else:
-                max_total = self.countdown_seconds + (self.max_extensions * self.extension_seconds)
-                self.absolute_ceiling_monotonic = time.monotonic() + max_total
-
-            # Resume remaining time instead of restarting full countdown
-            if data.get('countdown_active') and not self.is_reverting:
+                self.revert_attempts = int(data.get('revert_attempts', 0))
+                self.last_revert_error = data.get('last_revert_error', '')
+                last_attempt = data.get('last_revert_attempt_epoch')
+                self.last_revert_attempt_wall = float(last_attempt) if last_attempt else None
+                wait = 0.0
+                if self.revert_attempts > 0 and self.last_revert_attempt_wall is not None:
+                    elapsed = max(0.0, now_wall - self.last_revert_attempt_wall)
+                    wait = max(0.0, revert_backoff(self.revert_attempts) - elapsed)
+                self.next_revert_monotonic = now_mono + wait
+            elif data.get('countdown_active') or self.revisions:
+                # Recorded changes always keep a countdown running (fail closed)
                 self.countdown_active = True
-                if data.get('expire_epoch'):
-                    rem = float(data['expire_epoch']) - time.time()
-                    self.deadline_monotonic = time.monotonic() + max(0.0, rem)
+                if data.get('countdown_active') and data.get('expire_epoch'):
+                    rem = float(data['expire_epoch']) - now_wall
+                    self.deadline_monotonic = now_mono + max(0.0, rem)
                 else:
-                    self.deadline_monotonic = time.monotonic() + self.countdown_seconds
+                    self.deadline_monotonic = now_mono + self.countdown_seconds
+                if self.session_ceiling_monotonic == float('inf'):
+                    self.session_ceiling_monotonic = now_mono + self.max_session_seconds
+                self.deadline_monotonic = min(self.deadline_monotonic, self.session_ceiling_monotonic)
             else:
                 self.countdown_active = False
-                idle_rem = (created_at + self.idle_timeout) - time.time()
-                self.idle_deadline_monotonic = time.monotonic() + max(0.0, idle_rem)
+                idle_rem = (created_at + self.idle_timeout) - now_wall
+                self.idle_deadline_monotonic = now_mono + max(0.0, idle_rem)
 
             return True
         except Exception as e:
             syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: error reading marker: {e}")
             return False
 
-    def set_reverting_marker(self, reason='manual'):
-        """Explicitly set status to reverting on disk so GUI and API reflect ongoing rollback."""
+    def update_marker(self):
+        """Persist live state. The watchdog is the only regular writer of the marker."""
         if not os.path.exists(self.marker_file):
             return
         try:
             with open(self.marker_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            data['status'] = 'reverting'
-            data['reverting'] = True
-            data['countdown_active'] = False
-            data['revert_reason'] = reason
-            data['revert_started_at'] = int(time.time())
+            now_mono = self._mono()
+            now_wall = self._wall()
+            data['countdown_active'] = self.countdown_active
+            data['extensions_count'] = self.extensions_count
+            data['saves_count'] = self.saves_count
+            data['revisions'] = self.revisions
+            data['max_session_seconds'] = self.max_session_seconds
+            data.pop('absolute_ceiling_epoch', None)
+            if self.countdown_active:
+                rem = max(0.0, self.deadline_monotonic - now_mono)
+                data['expire_epoch'] = now_wall + rem
+            if self.session_ceiling_monotonic != float('inf'):
+                data['session_ceiling_epoch'] = now_wall + max(0.0, self.session_ceiling_monotonic - now_mono)
+            if self.is_reverting:
+                data['status'] = 'reverting'
+                data['reverting'] = True
+                data['countdown_active'] = False
+                data['revert_reason'] = self.revert_reason
+                data['revert_attempts'] = self.revert_attempts
+                data['last_revert_error'] = self.last_revert_error
+                if self.last_revert_attempt_wall is not None:
+                    data['last_revert_attempt_epoch'] = self.last_revert_attempt_wall
+                data.setdefault('revert_started_at', int(now_wall))
             tmp_marker = self.marker_file + '.tmp'
             with open(tmp_marker, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2)
@@ -184,30 +341,27 @@ class CommitWatchdog:
                 os.fsync(f.fileno())
             os.replace(tmp_marker, self.marker_file)
         except Exception as e:
-            syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: error setting reverting marker: {e}")
-
-    def update_marker(self):
-        if not os.path.exists(self.marker_file):
-            return
-        try:
-            with open(self.marker_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            data['countdown_active'] = self.countdown_active
-            data['extensions_count'] = self.extensions_count
-            data['saves_count'] = self.saves_count
-            data['revisions'] = self.revisions
-            if self.countdown_active:
-                rem = max(0.0, self.deadline_monotonic - time.monotonic())
-                data['expire_epoch'] = time.time() + rem
-                ceiling_rem = max(0.0, self.absolute_ceiling_monotonic - time.monotonic())
-                data['absolute_ceiling_epoch'] = time.time() + ceiling_rem
-            with open(self.marker_file + '.tmp', 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(self.marker_file + '.tmp', self.marker_file)
-        except Exception as e:
             syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: error updating marker: {e}")
+
+    def set_reverting_marker(self, reason='manual'):
+        """Enter the reverting state and persist it so GUI, API and a restarted watchdog all see it."""
+        self.is_reverting = True
+        self.countdown_active = False
+        self.revert_reason = reason
+        self.update_marker()
+
+    def _arm_countdown(self):
+        """Start or restart the countdown; the first arm also starts the session ceiling."""
+        now = self._mono()
+        if self.session_ceiling_monotonic == float('inf'):
+            self.session_ceiling_monotonic = now + self.max_session_seconds
+        self.countdown_active = True
+        self.deadline_monotonic = min(now + self.countdown_seconds, self.session_ceiling_monotonic)
+
+    def _remaining(self, deadline):
+        return max(0, int(round(deadline - self._mono())))
+
+    # ------------------------------------------------------------ history
 
     def tag_revisions_in_history(self, revisions, tag):
         """Update session_tags.json sidecar index for revisions without touching backup files."""
@@ -244,6 +398,8 @@ class CommitWatchdog:
         except Exception as e:
             syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: failed to update session_tags.json: {e}")
 
+    # ------------------------------------------------------------- socket
+
     def setup_socket(self):
         try:
             if os.path.exists(self.socket_file):
@@ -264,28 +420,39 @@ class CommitWatchdog:
         cmd = parts[0].upper()
 
         if cmd == 'STATUS':
-            if getattr(self, 'is_reverting', False):
+            if self.is_reverting:
                 return json.dumps({
                     "status": "reverting",
                     "reverting": True,
                     "countdown_active": False,
                     "remaining_seconds": 0,
-                    "revert_reason": getattr(self, 'revert_reason', 'manual'),
+                    "revert_reason": self.revert_reason,
+                    "revert_attempts": self.revert_attempts,
+                    "last_revert_error": self.last_revert_error,
+                    "next_retry_seconds": self._remaining(self.next_revert_monotonic),
+                    "reboot_initiated": self.reboot_initiated,
                     "gui_url": self.gui_url
                 })
-            rem = max(0, int(round(self.deadline_monotonic - time.monotonic()))) if self.countdown_active else 0
+            ceiling_started = self.session_ceiling_monotonic != float('inf')
             return json.dumps({
                 "status": "ok",
                 "countdown_active": self.countdown_active,
-                "remaining_seconds": rem,
+                "remaining_seconds": self._remaining(self.deadline_monotonic) if self.countdown_active else 0,
                 "extensions_count": self.extensions_count,
                 "max_extensions": self.max_extensions,
                 "saves_count": self.saves_count,
+                "max_session_seconds": self.max_session_seconds,
+                "session_limit_remaining_seconds":
+                    self._remaining(self.session_ceiling_monotonic) if ceiling_started else None,
                 "gui_url": self.gui_url
             })
 
         elif cmd == 'SAVE':
-            # Format: SAVE [filename] [is_user: 0|1]
+            # Format: SAVE [filename|none] [is_user: 0|1]
+            if self.is_reverting:
+                # Saves made while the revert reloads services are side effects, not session changes
+                return json.dumps({"status": "reverting", "reverting": True})
+
             rev_file = parts[1] if len(parts) > 1 and not parts[1].isdigit() and parts[1].lower() != 'none' else None
             is_user = True
             if len(parts) > 2:
@@ -299,50 +466,65 @@ class CommitWatchdog:
 
             self.saves_count += 1
 
-            if is_user:
-                self.countdown_active = True
-                new_deadline = time.monotonic() + self.countdown_seconds
-                self.deadline_monotonic = min(new_deadline, self.absolute_ceiling_monotonic)
+            if not self.countdown_active:
+                # Fail closed: any recorded change arms the countdown, whoever made it
+                self._arm_countdown()
+                if not is_user:
+                    syslog.syslog(syslog.LOG_NOTICE,
+                                  "commit-watchdog: non-interactive save armed the countdown")
+            elif is_user:
+                self._arm_countdown()
+            # else: background save while counting; never postpones the revert
 
             self.update_marker()
-            rem = max(0, int(round(self.deadline_monotonic - time.monotonic()))) if self.countdown_active else 0
             return json.dumps({
                 "status": "ok",
                 "countdown_seconds": self.countdown_seconds,
                 "saves_count": self.saves_count,
                 "countdown_active": self.countdown_active,
-                "remaining_seconds": rem
+                "remaining_seconds": self._remaining(self.deadline_monotonic)
             })
 
         elif cmd == 'EXTEND':
+            if self.is_reverting:
+                return json.dumps({"status": "failed", "error": "reverting"})
             if not self.countdown_active:
                 return json.dumps({"status": "failed", "error": "not_counting"})
             if self.extensions_count >= self.max_extensions:
                 return json.dumps({"status": "failed", "error": "max_extensions_reached"})
-            new_deadline = self.deadline_monotonic + self.extension_seconds
-            self.deadline_monotonic = min(new_deadline, self.absolute_ceiling_monotonic)
+            if self.deadline_monotonic >= self.session_ceiling_monotonic - 0.5:
+                return json.dumps({"status": "failed", "error": "session_limit_reached"})
+            self.deadline_monotonic = min(self.deadline_monotonic + self.extension_seconds,
+                                          self.session_ceiling_monotonic)
             self.extensions_count += 1
             self.update_marker()
-            rem = max(0, int(round(self.deadline_monotonic - time.monotonic())))
             return json.dumps({
                 "status": "ok",
                 "extensions_count": self.extensions_count,
                 "max_extensions": self.max_extensions,
                 "extension_seconds": self.extension_seconds,
-                "remaining_seconds": rem
+                "remaining_seconds": self._remaining(self.deadline_monotonic)
             })
 
         elif cmd == 'CONFIRM':
+            if revert_lock_held(self.revert_lock_file):
+                # Another process (one-shot fallback) is restoring right now; never pull the snapshot from under it
+                return json.dumps({"status": "failed", "error": "revert_in_progress"})
+            if self.is_reverting:
+                syslog.syslog(syslog.LOG_WARNING,
+                              f"commit-session: pending rollback cancelled by confirm after "
+                              f"{self.revert_attempts} failed attempt(s)")
             self.tag_revisions_in_history(self.revisions, 'Confirmed')
             self.cleanup_session()
             self.running = False
             return json.dumps({"status": "ok", "message": "confirmed"})
 
         elif cmd == 'REVERT':
-            self.trigger_revert_manual = True
-            self.is_reverting = True
-            self.revert_reason = parts[1] if len(parts) > 1 else 'manual'
-            self.set_reverting_marker(self.revert_reason)
+            reason = parts[1] if len(parts) > 1 else 'manual'
+            if not self.is_reverting:
+                self.set_reverting_marker(reason)
+            # An explicit request skips any backoff wait
+            self.next_revert_monotonic = self._mono()
             return json.dumps({
                 "status": "ok",
                 "message": "reverting",
@@ -351,107 +533,69 @@ class CommitWatchdog:
 
         return json.dumps({"status": "failed", "error": "unknown_command"})
 
+    # ------------------------------------------------------------ cleanup
+
     def cleanup_session(self):
         # Stop supervisor if running so daemon -r doesn't respawn after intentional exit
-        if os.path.exists(SUPERVISOR_PID_FILE):
+        sup_pid = read_pid(self.supervisor_pid_file)
+        if sup_pid is not None:
             try:
-                with open(SUPERVISOR_PID_FILE, 'r') as f:
-                    sup_pid = int(f.read().strip())
-                if sup_pid > 0:
-                    os.kill(sup_pid, signal.SIGTERM)
+                os.kill(sup_pid, signal.SIGTERM)
             except Exception:
                 pass
-            try:
-                os.unlink(SUPERVISOR_PID_FILE)
-            except OSError:
-                pass
-
-        for path in [self.marker_file, self.snapshot_file, self.socket_file, PID_FILE]:
+        for path in [self.marker_file, self.snapshot_file, self.socket_file,
+                     self.pid_file, self.supervisor_pid_file]:
             if os.path.exists(path):
                 try:
                     os.unlink(path)
                 except OSError:
                     pass
 
-    def execute_revert(self, reason='countdown_expired'):
-        self.is_reverting = True
-        self.revert_reason = reason
-        self.set_reverting_marker(reason)
-        syslog.syslog(
-            syslog.LOG_WARNING,
-            f"commit-session: configuration rollback triggered for user {self.username} via {self.source} (reason: {reason})"
-        )
+    # ------------------------------------------------------------- revert
 
-        if not os.path.exists(self.snapshot_file):
-            syslog.syslog(syslog.LOG_ERR, f"commit-session: snapshot file {self.snapshot_file} missing during revert!")
-            return False
-
+    def _write_reverted_history(self, snapshot_bytes, description):
+        """Best effort: record the restored config as a Reverted revision. Never fails the revert."""
+        revert_time = f"{self._wall():.4f}"
+        backup_name = f"config-{revert_time}.xml"
         try:
-            with open(self.snapshot_file, 'rb') as f:
-                snapshot_bytes = f.read()
-
-            # 1. Atomically restore snapshot to config.xml
-            tmp_config = self.config_file + '.revert_tmp'
-            with open(tmp_config, 'wb') as f:
-                f.write(snapshot_bytes)
-                f.flush()
-                os.fsync(f.fileno())
-            os.chmod(tmp_config, 0o640)
-            os.replace(tmp_config, self.config_file)
-
-            # 2. Record history revision marked as Reverted in /conf/backup/
-            revert_time = f"{time.time():.4f}"
             os.makedirs(self.backup_dir, mode=0o750, exist_ok=True)
-            backup_file = os.path.join(self.backup_dir, f"config-{revert_time}.xml")
-
+            backup_file = os.path.join(self.backup_dir, backup_name)
             try:
                 root = ET.fromstring(snapshot_bytes)
                 rev = root.find('revision')
                 if rev is None:
                     rev = ET.SubElement(root, 'revision')
-                rev_user = rev.find('username')
-                if rev_user is None:
-                    rev_user = ET.SubElement(rev, 'username')
-                rev_user.text = self.username
-
-                rev_time_el = rev.find('time')
-                if rev_time_el is None:
-                    rev_time_el = ET.SubElement(rev, 'time')
-                rev_time_el.text = revert_time
-
-                rev_desc = rev.find('description')
-                if rev_desc is None:
-                    rev_desc = ET.SubElement(rev, 'description')
-                rev_desc.text = f"Reverted to snapshot from protected session ({reason})"
-
-                rev_tag = rev.find('session_tag')
-                if rev_tag is None:
-                    rev_tag = ET.SubElement(rev, 'session_tag')
-                rev_tag.text = 'Reverted'
-
-                tree = ET.ElementTree(root)
-                tree.write(backup_file, encoding='utf-8', xml_declaration=True)
-                os.chmod(backup_file, 0o640)
+                for tag, value in (('username', self.username), ('time', revert_time),
+                                   ('description', description), ('session_tag', 'Reverted')):
+                    el = rev.find(tag)
+                    if el is None:
+                        el = ET.SubElement(rev, tag)
+                    el.text = value
+                ET.ElementTree(root).write(backup_file, encoding='utf-8', xml_declaration=True)
             except Exception as e:
                 syslog.syslog(syslog.LOG_ERR, f"commit-session: failed to write XML revision tag: {e}")
                 with open(backup_file, 'wb') as f:
                     f.write(snapshot_bytes)
-                os.chmod(backup_file, 0o640)
+            os.chmod(backup_file, 0o640)
+        except Exception as e:
+            syslog.syslog(syslog.LOG_ERR, f"commit-session: failed to record reverted revision: {e}")
 
-            # 3. Update session revisions + revert backup in backup history to Reverted
-            all_revisions = list(self.revisions)
-            if f"config-{revert_time}.xml" not in all_revisions:
-                all_revisions.append(f"config-{revert_time}.xml")
-            self.tag_revisions_in_history(all_revisions, 'Reverted')
+        all_revisions = list(self.revisions)
+        if backup_name not in all_revisions:
+            all_revisions.append(backup_name)
+        self.tag_revisions_in_history(all_revisions, 'Reverted')
+        return backup_name
 
-            # 4. Create login notice file
+    def _write_notice(self, reason, backup_name):
+        """Best effort: login notice for the next admin. Never fails the revert."""
+        try:
             notice_data = {
-                'reverted_at': int(time.time()),
-                'reverted_at_iso': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                'reverted_at': int(self._wall()),
+                'reverted_at_iso': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self._wall())),
                 'username': self.username,
                 'source': self.source,
                 'reason': reason,
-                'backup_id': f"config-{revert_time}.xml",
+                'backup_id': backup_name,
                 'gui_url': self.gui_url
             }
             tmp_notice = self.notice_file + '.tmp'
@@ -461,8 +605,81 @@ class CommitWatchdog:
                 os.fsync(f.fileno())
             os.chmod(tmp_notice, 0o640)
             os.replace(tmp_notice, self.notice_file)
+        except Exception as e:
+            syslog.syslog(syslog.LOG_ERR, f"commit-session: failed to write revert notice: {e}")
 
-            # 5. Run reload-all-services path (DEVNULL and close_fds=True avoid daemon pipe inheritance deadlock)
+    def _schedule_retry(self, error):
+        self.last_revert_error = error
+        self.next_revert_monotonic = self._mono() + revert_backoff(self.revert_attempts)
+        self.update_marker()
+        syslog.syslog(
+            syslog.LOG_CRIT,
+            f"commit-session: revert attempt {self.revert_attempts} failed ({error}); "
+            f"retrying in {int(revert_backoff(self.revert_attempts))}s"
+        )
+
+    def execute_revert(self, reason='countdown_expired'):
+        """
+        Restore the snapshot and reload services.
+        Returns True only when the box runs the restored config again. On False, last_revert_outcome is
+        'busy' (another process is reverting), 'failed' (retry scheduled) or 'rebooting'.
+        """
+        if not self.is_reverting or self.revert_reason != reason:
+            self.set_reverting_marker(reason)
+
+        lock_fd = acquire_revert_lock(self.revert_lock_file)
+        if lock_fd is None:
+            self.last_revert_outcome = 'busy'
+            self.next_revert_monotonic = self._mono() + RETRY_BASE_SECONDS
+            syslog.syslog(syslog.LOG_NOTICE, "commit-session: another process is reverting; waiting")
+            return False
+
+        tmp_config = self.config_file + '.revert_tmp'
+        try:
+            self.revert_attempts += 1
+            self.last_revert_attempt_wall = self._wall()
+            self.update_marker()
+            syslog.syslog(
+                syslog.LOG_WARNING,
+                f"commit-session: configuration rollback triggered for user {self.username} via {self.source} "
+                f"(reason: {reason}, attempt {self.revert_attempts})"
+            )
+
+            if not os.path.exists(self.snapshot_file):
+                self.last_revert_outcome = 'failed'
+                self._schedule_retry('snapshot missing')
+                return False
+
+            # 1. Atomically restore snapshot to config.xml. Until os.replace succeeds nothing has changed,
+            #    so every failure up to here leaves a consistent box that can simply be retried.
+            try:
+                with open(self.snapshot_file, 'rb') as f:
+                    snapshot_bytes = f.read()
+                if not snapshot_bytes:
+                    raise ValueError('snapshot is empty')
+                with open(tmp_config, 'wb') as f:
+                    f.write(snapshot_bytes)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.chmod(tmp_config, 0o640)
+                os.replace(tmp_config, self.config_file)
+            except Exception as e:
+                if os.path.exists(tmp_config):
+                    try:
+                        os.unlink(tmp_config)
+                    except OSError:
+                        pass
+                self.last_revert_outcome = 'failed'
+                self._schedule_retry(f"restore failed: {e}")
+                return False
+
+            # 2./3. History and notice are best effort; they must never block getting the old config back
+            backup_name = self._write_reverted_history(
+                snapshot_bytes, f"Reverted to snapshot from protected session ({reason})"
+            )
+            self._write_notice(reason, backup_name)
+
+            # 4. Reload all services (DEVNULL and close_fds=True avoid daemon pipe inheritance deadlock)
             syslog.syslog(syslog.LOG_NOTICE, f"commit-session: executing {self.reload_script} following revert")
             reload_ok = False
             if os.path.exists(self.reload_script):
@@ -484,38 +701,31 @@ class CommitWatchdog:
                 except Exception as e:
                     syslog.syslog(syslog.LOG_ERR, f"commit-session: failed to run reload script: {e}")
 
-            # 6. If reload fails, keep marker and snapshot so boot-time syshook can roll back on reboot, then reboot
+            # 5. Reload failed: config.xml is already restored, so reboot. Marker and snapshot stay so the
+            #    early boot hook finishes the job; this process stops retrying.
             if not reload_ok:
+                self.last_revert_outcome = 'rebooting'
+                self.reboot_initiated = True
+                self.last_revert_error = 'service reload failed; rebooting'
+                self.update_marker()
                 syslog.syslog(syslog.LOG_CRIT, "commit-session: reload-all failed; rebooting system now!")
-                if os.path.exists(self.shutdown_bin):
-                    subprocess.run(
-                        [self.shutdown_bin, '-r', 'now'],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        close_fds=True
-                    )
-                elif os.path.exists(self.reboot_bin):
-                    subprocess.run(
-                        [self.reboot_bin],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        close_fds=True
-                    )
+                for cmd in ([self.shutdown_bin, '-r', 'now'], [self.reboot_bin]):
+                    if os.path.exists(cmd[0]):
+                        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+                        break
                 return False
 
-            # 7. Clean up pending marker and snapshot ONLY after reload succeeds
+            # 6. Success: clean up marker and snapshot only now
+            self.last_revert_outcome = 'ok'
             self.cleanup_session()
             return True
 
         except Exception as e:
-            syslog.syslog(syslog.LOG_CRIT, f"commit-session: critical error during revert: {e}")
-            if os.path.exists(tmp_config):
-                try:
-                    os.unlink(tmp_config)
-                except OSError:
-                    pass
-            # Do NOT cleanup snapshot and marker on failure; keep them for fallback or recovery!
+            self.last_revert_outcome = 'failed'
+            self._schedule_retry(f"unexpected error: {e}")
             return False
+        finally:
+            release_revert_lock(lock_fd)
 
     def execute_boot_revert(self):
         """Execute revert at early boot before any service reads config.xml."""
@@ -539,86 +749,20 @@ class CommitWatchdog:
             f"commit-session: boot-time revert: unconfirmed protected session by {user} via {src} reverted to snapshot."
         )
 
+        tmp_config = self.config_file + '.boot_tmp'
         try:
             with open(self.snapshot_file, 'rb') as f:
                 snapshot_bytes = f.read()
+            if not snapshot_bytes:
+                raise ValueError('snapshot is empty')
 
             # Atomically restore snapshot to config.xml
-            tmp_config = self.config_file + '.boot_tmp'
             with open(tmp_config, 'wb') as f:
                 f.write(snapshot_bytes)
                 f.flush()
                 os.fsync(f.fileno())
             os.chmod(tmp_config, 0o640)
             os.replace(tmp_config, self.config_file)
-
-            # Record backup revision in backup directory tagged as Reverted
-            revert_time = f"{time.time():.4f}"
-            os.makedirs(self.backup_dir, mode=0o750, exist_ok=True)
-            backup_file = os.path.join(self.backup_dir, f"config-{revert_time}.xml")
-
-            try:
-                root = ET.fromstring(snapshot_bytes)
-                rev = root.find('revision')
-                if rev is None:
-                    rev = ET.SubElement(root, 'revision')
-                rev_user = rev.find('username')
-                if rev_user is None:
-                    rev_user = ET.SubElement(rev, 'username')
-                rev_user.text = user
-
-                rev_time_el = rev.find('time')
-                if rev_time_el is None:
-                    rev_time_el = ET.SubElement(rev, 'time')
-                rev_time_el.text = revert_time
-
-                rev_desc = rev.find('description')
-                if rev_desc is None:
-                    rev_desc = ET.SubElement(rev, 'description')
-                rev_desc.text = f"Reverted unconfirmed protected session at boot ({user} via {src})"
-
-                rev_tag = rev.find('session_tag')
-                if rev_tag is None:
-                    rev_tag = ET.SubElement(rev, 'session_tag')
-                rev_tag.text = 'Reverted'
-
-                tree = ET.ElementTree(root)
-                tree.write(backup_file, encoding='utf-8', xml_declaration=True)
-                os.chmod(backup_file, 0o640)
-            except Exception as e:
-                syslog.syslog(syslog.LOG_ERR, f"commit-session: failed to write boot XML revision tag: {e}")
-                with open(backup_file, 'wb') as f:
-                    f.write(snapshot_bytes)
-                os.chmod(backup_file, 0o640)
-
-            # Update pending revisions in backup history to Reverted
-            all_revisions = list(self.revisions)
-            if f"config-{revert_time}.xml" not in all_revisions:
-                all_revisions.append(f"config-{revert_time}.xml")
-            self.tag_revisions_in_history(all_revisions, 'Reverted')
-
-            # Create login notice
-            notice_data = {
-                'reverted_at': int(time.time()),
-                'reverted_at_iso': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-                'username': user,
-                'source': src,
-                'reason': 'unconfirmed_at_boot',
-                'backup_id': f"config-{revert_time}.xml",
-                'gui_url': self.gui_url
-            }
-            tmp_notice = self.notice_file + '.tmp'
-            with open(tmp_notice, 'w', encoding='utf-8') as f:
-                json.dump(notice_data, f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
-            os.chmod(tmp_notice, 0o640)
-            os.replace(tmp_notice, self.notice_file)
-
-            # Clean up marker and snapshot ONLY on restore success
-            self.cleanup_session()
-            return True
-
         except Exception as e:
             syslog.syslog(syslog.LOG_CRIT, f"commit-session: critical error during boot revert: {e}")
             if os.path.exists(tmp_config):
@@ -629,6 +773,50 @@ class CommitWatchdog:
             # Do NOT cleanup marker and snapshot on failure!
             return False
 
+        backup_name = self._write_reverted_history(
+            snapshot_bytes, f"Reverted unconfirmed protected session at boot ({user} via {src})"
+        )
+        self._write_notice('unconfirmed_at_boot', backup_name)
+
+        # Clean up marker and snapshot ONLY on restore success
+        self.cleanup_session()
+        return True
+
+    # --------------------------------------------------------------- loop
+
+    def _finish_revert_attempt(self, ok):
+        if ok or self.reboot_initiated:
+            self.running = False
+
+    def step(self):
+        """One pass of the time-based state machine. Called by run() after socket handling."""
+        now = self._mono()
+
+        if self.is_reverting:
+            if not self.reboot_initiated and now >= self.next_revert_monotonic:
+                self._finish_revert_attempt(self.execute_revert(self.revert_reason))
+            return
+
+        if self.countdown_active:
+            if now >= self.deadline_monotonic:
+                syslog.syslog(syslog.LOG_WARNING, "commit-watchdog: countdown reached zero, reverting!")
+                self._finish_revert_attempt(self.execute_revert('countdown_expired'))
+            return
+
+        if self.revisions:
+            # Should not happen (saves arm the countdown); fail closed if it does
+            self._arm_countdown()
+            self.update_marker()
+            return
+
+        if now >= self.idle_deadline_monotonic:
+            syslog.syslog(
+                syslog.LOG_NOTICE,
+                "commit-session: session idle timeout (60 minutes with no saves), session closed without changes."
+            )
+            self.cleanup_session()
+            self.running = False
+
     def run(self):
         syslog.openlog('commit-watchdog', syslog.LOG_PID, syslog.LOG_AUTH)
         syslog.syslog(syslog.LOG_NOTICE, f"commit-watchdog: started for session {self.session_id}")
@@ -636,6 +824,7 @@ class CommitWatchdog:
         self.setup_socket()
 
         def sig_handler(signum, frame):
+            # Only stops the loop between steps; a revert in progress always runs to completion
             self.running = False
 
         try:
@@ -673,31 +862,9 @@ class CommitWatchdog:
                     except Exception as e:
                         syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: socket handling error: {e}")
 
-            if self.trigger_revert_manual:
-                self.execute_revert(reason=getattr(self, 'revert_reason', 'manual'))
-                self.running = False
+            if not self.running:
                 break
-
-            # Monotonic time checks
-            now_mono = time.monotonic()
-
-            if self.countdown_active:
-                rem = self.deadline_monotonic - now_mono
-                if rem <= 0:
-                    syslog.syslog(syslog.LOG_WARNING, "commit-watchdog: countdown reached zero, reverting!")
-                    self.execute_revert(reason='countdown_expired')
-                    self.running = False
-                    break
-            else:
-                # Session opened without any saves yet: check 60-minute idle timeout
-                if now_mono >= self.idle_deadline_monotonic:
-                    syslog.syslog(
-                        syslog.LOG_NOTICE,
-                        "commit-session: session idle timeout (60 minutes with no saves), session closed without changes."
-                    )
-                    self.cleanup_session()
-                    self.running = False
-                    break
+            self.step()
 
         # Cleanup socket on exit
         if self.server_sock:
@@ -713,39 +880,56 @@ class CommitWatchdog:
         syslog.syslog(syslog.LOG_NOTICE, "commit-watchdog: terminated")
 
 
-def check_watchdog_supervisor():
-    """Supervisor check intended to run periodically (e.g. 1-minute cron)."""
-    marker_file = MARKER_FILE
-    socket_file = SOCKET_FILE
+def spawn_supervised_watchdog(supervisor_pid_file=SUPERVISOR_PID_FILE, pid_file=PID_FILE):
+    python_bin = sys.executable or '/usr/local/bin/python3'
+    script_path = os.path.abspath(__file__)
+    daemon_bin = '/usr/sbin/daemon'
+    if os.path.exists(daemon_bin):
+        subprocess.run([
+            daemon_bin, '-f', '-r',
+            '-P', supervisor_pid_file,
+            '-p', pid_file,
+            python_bin, script_path
+        ])
+    else:
+        subprocess.Popen([python_bin, script_path])
+
+
+def check_watchdog_supervisor(marker_file=MARKER_FILE, socket_file=SOCKET_FILE, pid_file=PID_FILE,
+                              supervisor_pid_file=SUPERVISOR_PID_FILE, revert_lock_file=REVERT_LOCK_FILE,
+                              spawn=None, pid_alive=None):
+    """
+    Supervisor check intended to run periodically (1-minute cron).
+    Never interferes with a revert in progress, and judges liveness by process rather than by
+    socket response, because a watchdog running rc.reload_all cannot answer the socket.
+    Returns 0 always; the action taken is logged.
+    """
+    spawn = spawn or spawn_supervised_watchdog
+    pid_alive = pid_alive or watchdog_pid_alive
+
+    if revert_lock_held(revert_lock_file):
+        return 0
 
     if not os.path.exists(marker_file):
         # No session active. If orphan supervisor or socket exists, clean up.
-        if os.path.exists(SUPERVISOR_PID_FILE):
+        sup_pid = read_pid(supervisor_pid_file)
+        if sup_pid is not None:
             try:
-                with open(SUPERVISOR_PID_FILE, 'r') as f:
-                    sup_pid = int(f.read().strip())
-                if sup_pid > 0:
-                    os.kill(sup_pid, signal.SIGTERM)
+                os.kill(sup_pid, signal.SIGTERM)
             except Exception:
                 pass
-            try:
-                os.unlink(SUPERVISOR_PID_FILE)
-            except OSError:
-                pass
-        if os.path.exists(PID_FILE):
-            try:
-                os.unlink(PID_FILE)
-            except OSError:
-                pass
-        if os.path.exists(socket_file):
-            try:
-                os.unlink(socket_file)
-            except OSError:
-                pass
+        for path in (supervisor_pid_file, pid_file, socket_file):
+            if os.path.exists(path):
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
         return 0
 
-    # Marker exists: verify watchdog is alive and responsive
-    alive = False
+    # Marker exists: a live watchdog process is enough, whatever state it is in
+    if pid_alive(pid_file):
+        return 0
+
     if os.path.exists(socket_file):
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -754,45 +938,32 @@ def check_watchdog_supervisor():
             s.sendall(b"STATUS\n")
             data = s.recv(1024).decode('utf-8')
             s.close()
-            resp = json.loads(data)
-            if resp.get('status') == 'ok':
-                alive = True
+            if json.loads(data).get('status') in ('ok', 'reverting'):
+                return 0
         except Exception:
-            alive = False
+            pass
 
-    if not alive:
-        syslog.openlog('commit-watchdog', syslog.LOG_PID, syslog.LOG_AUTH)
-        syslog.syslog(syslog.LOG_WARNING, "commit-watchdog: supervisor check detected dead watchdog with active session; respawning!")
-        for pfile in [SUPERVISOR_PID_FILE, PID_FILE]:
-            if os.path.exists(pfile):
-                try:
-                    with open(pfile, 'r') as pf:
-                        p = int(pf.read().strip())
-                    if p > 0:
-                        os.kill(p, signal.SIGTERM)
-                except Exception:
-                    pass
-                try:
-                    os.unlink(pfile)
-                except OSError:
-                    pass
-        if os.path.exists(socket_file):
+    syslog.openlog('commit-watchdog', syslog.LOG_PID, syslog.LOG_AUTH)
+    syslog.syslog(syslog.LOG_WARNING,
+                  "commit-watchdog: supervisor check detected dead watchdog with active session; respawning!")
+    for pfile in (supervisor_pid_file, pid_file):
+        pid = read_pid(pfile)
+        if pid is not None:
             try:
-                os.unlink(socket_file)
+                os.kill(pid, signal.SIGTERM)
+            except Exception:
+                pass
+        if os.path.exists(pfile):
+            try:
+                os.unlink(pfile)
             except OSError:
                 pass
-        python_bin = sys.executable or '/usr/local/bin/python3'
-        script_path = os.path.abspath(__file__)
-        daemon_bin = '/usr/sbin/daemon'
-        if os.path.exists(daemon_bin):
-            subprocess.run([
-                daemon_bin, '-f', '-r',
-                '-P', SUPERVISOR_PID_FILE,
-                '-p', PID_FILE,
-                python_bin, script_path
-            ])
-        else:
-            subprocess.Popen([python_bin, script_path])
+    if os.path.exists(socket_file):
+        try:
+            os.unlink(socket_file)
+        except OSError:
+            pass
+    spawn(supervisor_pid_file=supervisor_pid_file, pid_file=pid_file)
     return 0
 
 
@@ -802,6 +973,8 @@ if __name__ == '__main__':
         ok = watchdog.execute_boot_revert()
         sys.exit(0 if ok else 1)
     elif len(sys.argv) > 1 and sys.argv[1] == '--revert':
+        # One-shot fallback used when the watchdog is unreachable. On failure the marker stays in the
+        # reverting state with its attempt count; the cron check then respawns a watchdog that retries.
         reason = sys.argv[2] if len(sys.argv) > 2 else 'manual_fallback'
         watchdog = CommitWatchdog()
         ok = watchdog.execute_revert(reason=reason)

@@ -38,10 +38,12 @@ import xml.etree.ElementTree as ET
 script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'scripts', 'system'))
 sys.path.insert(0, script_dir)
 
-from commit_watchdog import CommitWatchdog, check_watchdog_supervisor
+from commit_watchdog import (
+    CommitWatchdog, check_watchdog_supervisor, acquire_revert_lock, release_revert_lock, revert_backoff
+)
 
 
-class TestCommitWatchdog(unittest.TestCase):
+class WatchdogTestBase(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp(prefix='watchdog_test_')
         self.marker_file = os.path.join(self.test_dir, 'commit_rollback_pending.json')
@@ -107,11 +109,16 @@ class TestCommitWatchdog(unittest.TestCase):
             'reload_script': self.reload_script,
             'idle_timeout': 3600.0,
             'shutdown_bin': self.mock_shutdown,
-            'reboot_bin': self.mock_shutdown
+            'reboot_bin': self.mock_shutdown,
+            'pid_file': os.path.join(self.test_dir, 'watchdog.pid'),
+            'supervisor_pid_file': os.path.join(self.test_dir, 'watchdog_sup.pid'),
+            'revert_lock_file': os.path.join(self.test_dir, 'revert.lock')
         }
         defaults.update(kwargs)
         return CommitWatchdog(**defaults)
 
+
+class TestCommitWatchdog(WatchdogTestBase):
     def test_load_marker_initial_state(self):
         wd = self.get_watchdog()
         self.assertEqual(wd.session_id, 'test-session-1234')
@@ -181,19 +188,19 @@ class TestCommitWatchdog(unittest.TestCase):
         # Monotonic deadline should NOT have moved forward!
         self.assertEqual(wd.deadline_monotonic, deadline_user)
 
-    def test_absolute_session_ceiling_enforced(self):
-        # 10s countdown, 5s extension, max 2 extensions => ceiling is at most 20s
+    def test_session_ceiling_caps_repeated_user_saves(self):
+        # Ceiling starts at the first save; later saves cannot push the deadline past it
         self.marker_data['countdown_seconds'] = 10
-        self.marker_data['extension_seconds'] = 5
-        self.marker_data['max_extensions'] = 2
+        self.marker_data['max_session_seconds'] = 20
         with open(self.marker_file, 'w', encoding='utf-8') as f:
             json.dump(self.marker_data, f)
 
         wd = self.get_watchdog()
+        self.assertEqual(wd.session_ceiling_monotonic, float('inf'))
         wd.handle_command('SAVE config-1.xml 1')
-        ceiling = wd.absolute_ceiling_monotonic
+        ceiling = wd.session_ceiling_monotonic
+        self.assertNotEqual(ceiling, float('inf'))
 
-        # Repeated saves cannot push deadline past ceiling
         for i in range(5):
             wd.handle_command(f'SAVE config-{i+2}.xml 1')
             self.assertLessEqual(wd.deadline_monotonic, ceiling)
@@ -489,8 +496,8 @@ class TestCommitWatchdog(unittest.TestCase):
         self.assertEqual(res['status'], 'ok')
         self.assertEqual(res['message'], 'reverting')
         self.assertEqual(res['gui_url'], 'https://192.168.1.1')
-        self.assertTrue(wd.trigger_revert_manual)
         self.assertTrue(wd.is_reverting)
+        self.assertLessEqual(wd.next_revert_monotonic, time.monotonic())
 
         # Marker file on disk must now reflect reverting status
         with open(self.marker_file, 'r', encoding='utf-8') as f:
@@ -514,6 +521,363 @@ class TestCommitWatchdog(unittest.TestCase):
         self.assertTrue(marker.get('reverting'))
         self.assertEqual(marker.get('revert_reason'), 'test_reason')
         self.assertFalse(marker.get('countdown_active'))
+
+
+class FakeClock:
+    """Deterministic monotonic and wall clocks that advance together."""
+    def __init__(self):
+        self.mono_now = 1000.0
+        self.wall_now = time.time()
+
+    def mono(self):
+        return self.mono_now
+
+    def wall(self):
+        return self.wall_now
+
+    def advance(self, seconds):
+        self.mono_now += seconds
+        self.wall_now += seconds
+
+
+class TestCommitWatchdogStateMachine(WatchdogTestBase):
+    """Regression tests for the ceiling, fail-closed saves, revert retries and the cron check."""
+
+    def setUp(self):
+        super().setUp()
+        self.clock = FakeClock()
+        self.marker_data['created_at'] = int(self.clock.wall_now)
+        self.marker_data['countdown_seconds'] = 600
+        self.marker_data['max_extensions'] = 6
+        self.marker_data['max_session_seconds'] = 7200
+        self.write_marker()
+
+    def write_marker(self, **overrides):
+        data = dict(self.marker_data)
+        data.update(overrides)
+        with open(self.marker_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+
+    def read_marker(self):
+        with open(self.marker_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+
+    def get_watchdog(self, **kwargs):
+        kwargs.setdefault('clock', self.clock.mono)
+        kwargs.setdefault('wallclock', self.clock.wall)
+        return super().get_watchdog(**kwargs)
+
+    def failing_config_path(self):
+        return os.path.join(self.test_dir, 'missing_dir', 'config.xml')
+
+    # ---- defaults
+
+    def test_default_countdown_is_ten_minutes(self):
+        data = dict(self.marker_data)
+        del data['countdown_seconds']
+        with open(self.marker_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+        wd = self.get_watchdog()
+        self.assertEqual(wd.countdown_seconds, 600.0)
+
+    # ---- bug 3: session ceiling
+
+    def test_first_save_after_long_idle_gets_full_countdown(self):
+        wd = self.get_watchdog()
+        self.clock.advance(50 * 60)  # well past the old start-anchored 33 minute ceiling
+        res = json.loads(wd.handle_command('SAVE config-1.xml 1'))
+        self.assertEqual(res['remaining_seconds'], 600)
+        wd.step()
+        self.assertTrue(wd.running)
+        self.assertFalse(wd.is_reverting)
+        self.assertTrue(os.path.exists(self.snapshot_file))
+
+    def test_late_first_save_with_zero_extensions_does_not_revert(self):
+        self.write_marker(max_extensions=0)
+        wd = self.get_watchdog()
+        self.clock.advance(15 * 60)
+        wd.handle_command('SAVE config-1.xml 1')
+        wd.step()
+        self.assertFalse(wd.is_reverting)
+        self.assertEqual(json.loads(wd.handle_command('STATUS'))['remaining_seconds'], 600)
+
+    def test_ceiling_starts_at_first_save_and_caps_later_saves(self):
+        self.write_marker(max_session_seconds=1200)
+        wd = self.get_watchdog()
+        self.clock.advance(300)
+        wd.handle_command('SAVE config-1.xml 1')
+        first_save = self.clock.mono_now
+        self.assertEqual(wd.session_ceiling_monotonic, first_save + 1200)
+        self.clock.advance(700)
+        wd.handle_command('SAVE config-2.xml 1')
+        self.assertEqual(wd.deadline_monotonic, first_save + 1200)
+
+    def test_max_session_is_never_shorter_than_countdown(self):
+        self.write_marker(max_session_seconds=60)
+        wd = self.get_watchdog()
+        self.assertEqual(wd.max_session_seconds, 600.0)
+
+    def test_extend_refused_at_session_limit_without_using_an_extension(self):
+        self.write_marker(max_session_seconds=900)
+        wd = self.get_watchdog()
+        wd.handle_command('SAVE config-1.xml 1')
+        self.assertEqual(json.loads(wd.handle_command('EXTEND'))['status'], 'ok')  # 600 -> 900 (capped)
+        res = json.loads(wd.handle_command('EXTEND'))
+        self.assertEqual(res['error'], 'session_limit_reached')
+        self.assertEqual(wd.extensions_count, 1)
+
+    def test_status_reports_session_limit(self):
+        wd = self.get_watchdog()
+        self.assertIsNone(json.loads(wd.handle_command('STATUS'))['session_limit_remaining_seconds'])
+        wd.handle_command('SAVE config-1.xml 1')
+        self.clock.advance(100)
+        self.assertEqual(json.loads(wd.handle_command('STATUS'))['session_limit_remaining_seconds'], 7100)
+
+    def test_ceiling_survives_watchdog_restart(self):
+        wd = self.get_watchdog()
+        wd.handle_command('SAVE config-1.xml 1')
+        self.clock.advance(1000)
+        wd2 = self.get_watchdog()
+        self.assertAlmostEqual(wd2.session_ceiling_monotonic - self.clock.mono_now, 6200, delta=1)
+
+    # ---- fail-closed saves
+
+    def test_background_save_arms_countdown_when_idle(self):
+        wd = self.get_watchdog()
+        res = json.loads(wd.handle_command('SAVE config-bg.xml 0'))
+        self.assertTrue(res['countdown_active'])
+        self.assertEqual(res['remaining_seconds'], 600)
+
+    def test_background_save_does_not_restart_running_countdown(self):
+        wd = self.get_watchdog()
+        wd.handle_command('SAVE config-1.xml 1')
+        deadline = wd.deadline_monotonic
+        self.clock.advance(120)
+        wd.handle_command('SAVE config-bg.xml 0')
+        self.assertEqual(wd.deadline_monotonic, deadline)
+
+    def test_recorded_changes_never_idle_out(self):
+        # Legacy or inconsistent marker: changes recorded but no countdown flag
+        self.write_marker(revisions=['config-1.xml'], countdown_active=False)
+        wd = self.get_watchdog()
+        self.assertTrue(wd.countdown_active)
+        self.clock.advance(2 * 3600)
+        wd.step()
+        # It reverted instead of silently closing the session
+        self.assertFalse(os.path.exists(self.marker_file))
+        with open(self.config_file, 'rb') as f:
+            self.assertEqual(f.read(), self.dummy_snapshot)
+
+    def test_save_during_revert_is_ignored(self):
+        wd = self.get_watchdog()
+        wd.handle_command('REVERT manual')
+        res = json.loads(wd.handle_command('SAVE config-x.xml 1'))
+        self.assertEqual(res['status'], 'reverting')
+        self.assertNotIn('config-x.xml', wd.revisions)
+
+    # ---- bug 1: failed revert must retry, never drop the snapshot
+
+    def test_failed_restore_schedules_retry_with_backoff(self):
+        wd = self.get_watchdog(config_file=self.failing_config_path())
+        wd.handle_command('SAVE config-1.xml 1')
+        self.clock.advance(601)
+        wd.step()
+        self.assertTrue(wd.is_reverting)
+        self.assertTrue(wd.running)  # stays alive to retry
+        self.assertEqual(wd.revert_attempts, 1)
+        self.assertEqual(wd.last_revert_outcome, 'failed')
+        self.assertTrue(os.path.exists(self.snapshot_file))
+        marker = self.read_marker()
+        self.assertEqual(marker['status'], 'reverting')
+        self.assertEqual(marker['revert_attempts'], 1)
+        self.assertIn('restore failed', marker['last_revert_error'])
+
+        self.clock.advance(revert_backoff(1) - 1)
+        wd.step()
+        self.assertEqual(wd.revert_attempts, 1)  # still waiting
+
+        self.clock.advance(2)
+        wd.step()
+        self.assertEqual(wd.revert_attempts, 2)
+        self.assertEqual(self.read_marker()['revert_attempts'], 2)
+
+    def test_retry_succeeds_once_problem_is_fixed(self):
+        bad = self.failing_config_path()
+        wd = self.get_watchdog(config_file=bad)
+        wd.handle_command('REVERT manual')
+        wd.step()
+        self.assertEqual(wd.last_revert_outcome, 'failed')
+        os.makedirs(os.path.dirname(bad))
+        self.clock.advance(revert_backoff(1) + 1)
+        wd.step()
+        self.assertEqual(wd.last_revert_outcome, 'ok')
+        self.assertFalse(wd.running)
+        self.assertFalse(os.path.exists(self.marker_file))
+        with open(bad, 'rb') as f:
+            self.assertEqual(f.read(), self.dummy_snapshot)
+
+    def test_failed_revert_never_reaches_idle_cleanup(self):
+        # Session created two hours ago, so the old idle timer would already have expired
+        self.write_marker(created_at=int(self.clock.wall_now) - 7200)
+        wd = self.get_watchdog(config_file=self.failing_config_path())
+        wd.handle_command('REVERT manual')
+        for _ in range(20):
+            wd.step()
+            self.clock.advance(400)
+        self.assertTrue(os.path.exists(self.marker_file))
+        self.assertTrue(os.path.exists(self.snapshot_file))
+        self.assertGreaterEqual(wd.revert_attempts, 10)
+
+    def test_restarted_watchdog_resumes_revert(self):
+        # A previous watchdog failed twice and died; the respawned one must retry, not idle
+        self.write_marker(status='reverting', reverting=True, revert_reason='countdown_expired',
+                          revert_attempts=2, last_revert_attempt_epoch=self.clock.wall_now - 100,
+                          created_at=int(self.clock.wall_now) - 7200)
+        wd = self.get_watchdog()
+        self.assertTrue(wd.is_reverting)
+        self.assertFalse(wd.countdown_active)
+        wd.step()
+        self.assertEqual(wd.last_revert_outcome, 'ok')
+        self.assertFalse(os.path.exists(self.marker_file))
+
+    def test_restarted_watchdog_honours_remaining_backoff(self):
+        self.write_marker(status='reverting', reverting=True, revert_attempts=3,
+                          last_revert_attempt_epoch=self.clock.wall_now - 10)
+        wd = self.get_watchdog()
+        wd.step()
+        self.assertIsNone(wd.last_revert_outcome)  # backoff(3)=60s, only 10s elapsed
+        self.clock.advance(51)
+        wd.step()
+        self.assertEqual(wd.last_revert_outcome, 'ok')
+
+    def test_backoff_is_capped(self):
+        self.assertEqual(revert_backoff(1), 15)
+        self.assertEqual(revert_backoff(2), 30)
+        self.assertEqual(revert_backoff(10), 300)
+
+    def test_reload_failure_reboots_and_stops_retrying(self):
+        failing_reload = os.path.join(self.test_dir, 'failing_reload.sh')
+        with open(failing_reload, 'w') as f:
+            f.write("#!/bin/sh\nexit 1\n")
+        os.chmod(failing_reload, 0o755)
+        wd = self.get_watchdog(reload_script=failing_reload)
+        wd.handle_command('REVERT manual')
+        wd.step()
+        self.assertEqual(wd.last_revert_outcome, 'rebooting')
+        self.assertFalse(wd.running)
+        self.assertTrue(os.path.exists(self.snapshot_file))  # boot hook finishes the job
+        self.clock.advance(1000)
+        wd.step()
+        self.assertEqual(wd.revert_attempts, 1)
+
+    def test_missing_snapshot_keeps_marker_and_retries(self):
+        os.unlink(self.snapshot_file)
+        wd = self.get_watchdog()
+        wd.handle_command('REVERT manual')
+        wd.step()
+        self.assertEqual(wd.last_revert_outcome, 'failed')
+        self.assertTrue(os.path.exists(self.marker_file))
+        self.assertEqual(self.read_marker()['last_revert_error'], 'snapshot missing')
+
+    def test_status_reports_retry_details(self):
+        wd = self.get_watchdog(config_file=self.failing_config_path())
+        wd.handle_command('REVERT manual')
+        wd.step()
+        status = json.loads(wd.handle_command('STATUS'))
+        self.assertEqual(status['status'], 'reverting')
+        self.assertEqual(status['revert_attempts'], 1)
+        self.assertEqual(status['next_retry_seconds'], 15)
+        self.assertIn('restore failed', status['last_revert_error'])
+
+    # ---- revert lock
+
+    def test_concurrent_revert_is_blocked_by_lock(self):
+        fd = acquire_revert_lock(os.path.join(self.test_dir, 'revert.lock'))
+        try:
+            wd = self.get_watchdog()
+            self.assertFalse(wd.execute_revert('manual'))
+            self.assertEqual(wd.last_revert_outcome, 'busy')
+            self.assertEqual(wd.revert_attempts, 0)
+            with open(self.config_file, 'rb') as f:
+                self.assertEqual(f.read(), self.dummy_modified)
+        finally:
+            release_revert_lock(fd)
+        self.clock.advance(16)
+        wd.step()
+        self.assertEqual(wd.last_revert_outcome, 'ok')
+
+    def test_confirm_refused_while_another_process_reverts(self):
+        fd = acquire_revert_lock(os.path.join(self.test_dir, 'revert.lock'))
+        try:
+            wd = self.get_watchdog()
+            res = json.loads(wd.handle_command('CONFIRM'))
+            self.assertEqual(res['error'], 'revert_in_progress')
+            self.assertTrue(os.path.exists(self.marker_file))
+            self.assertTrue(os.path.exists(self.snapshot_file))
+        finally:
+            release_revert_lock(fd)
+
+    def test_confirm_cancels_a_failing_revert(self):
+        wd = self.get_watchdog(config_file=self.failing_config_path())
+        wd.handle_command('REVERT manual')
+        wd.step()
+        res = json.loads(wd.handle_command('CONFIRM'))
+        self.assertEqual(res['status'], 'ok')
+        self.assertFalse(os.path.exists(self.marker_file))
+
+    # ---- bug 2: cron check must not touch a live or reverting watchdog
+
+    def cron(self, pid_alive, **kwargs):
+        spawned = []
+        check_watchdog_supervisor(
+            marker_file=self.marker_file,
+            socket_file=self.socket_file,
+            pid_file=os.path.join(self.test_dir, 'watchdog.pid'),
+            supervisor_pid_file=os.path.join(self.test_dir, 'watchdog_sup.pid'),
+            revert_lock_file=os.path.join(self.test_dir, 'revert.lock'),
+            spawn=lambda **kw: spawned.append(kw),
+            pid_alive=lambda path: pid_alive,
+            **kwargs
+        )
+        return spawned
+
+    def test_cron_leaves_revert_in_progress_alone(self):
+        fd = acquire_revert_lock(os.path.join(self.test_dir, 'revert.lock'))
+        try:
+            self.assertEqual(self.cron(pid_alive=False), [])
+            self.assertTrue(os.path.exists(self.marker_file))
+        finally:
+            release_revert_lock(fd)
+
+    def test_cron_treats_live_pid_as_alive_even_if_socket_is_silent(self):
+        self.assertEqual(self.cron(pid_alive=True), [])
+
+    def test_cron_respawns_dead_watchdog(self):
+        self.assertEqual(len(self.cron(pid_alive=False)), 1)
+
+    def test_cron_accepts_reverting_status_on_socket(self):
+        wd = self.get_watchdog()
+        wd.handle_command('REVERT manual')
+        wd.setup_socket()
+        import threading
+        def serve_one():
+            conn, _ = wd.server_sock.accept()
+            conn.sendall(wd.handle_command(conn.recv(1024).decode()).encode() + b"\n")
+            conn.close()
+        wd.server_sock.setblocking(True)
+        t = threading.Thread(target=serve_one)
+        t.start()
+        spawned = self.cron(pid_alive=False)
+        t.join(timeout=5)
+        wd.server_sock.close()
+        self.assertEqual(spawned, [])
+
+    def test_cron_without_session_cleans_orphans_only(self):
+        os.unlink(self.marker_file)
+        with open(os.path.join(self.test_dir, 'watchdog.pid'), 'w') as f:
+            f.write('999999')
+        self.assertEqual(self.cron(pid_alive=False), [])
+        self.assertFalse(os.path.exists(os.path.join(self.test_dir, 'watchdog.pid')))
 
 
 if __name__ == '__main__':

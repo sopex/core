@@ -89,9 +89,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $pconfig['sshdpermitrootlogin'] = isset($config['system']['ssh']['permitrootlogin']);
     $pconfig['quietlogin'] = isset($config['system']['webgui']['quietlogin']);
     $pconfig['deployment'] = $config['system']['deployment'] ?? '';
-    $pconfig['rollback_countdown'] = $config['system']['commit_rollback']['countdown'] ?? '3';
+    $pconfig['rollback_countdown'] = $config['system']['commit_rollback']['countdown'] ?? '10';
     $pconfig['rollback_extension'] = $config['system']['commit_rollback']['extension'] ?? '5';
     $pconfig['rollback_max_extensions'] = $config['system']['commit_rollback']['max_extensions'] ?? '6';
+    $pconfig['rollback_max_session'] = $config['system']['commit_rollback']['max_session'] ?? '120';
 
     /* XXX not really a syslog setting */
     $pconfig['loglighttpd'] = empty($config['syslog']['nologlighttpd']);
@@ -177,6 +178,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
     if (isset($pconfig['rollback_max_extensions']) && $pconfig['rollback_max_extensions'] !== '' && (!is_numeric($pconfig['rollback_max_extensions']) || $pconfig['rollback_max_extensions'] < 0 || $pconfig['rollback_max_extensions'] > 60)) {
         $input_errors[] = gettext('Maximum extensions must be an integer between 0 and 60.');
+    }
+    if (isset($pconfig['rollback_max_session']) && $pconfig['rollback_max_session'] !== '' && (!is_numeric($pconfig['rollback_max_session']) || $pconfig['rollback_max_session'] < 15 || $pconfig['rollback_max_session'] > 480)) {
+        $input_errors[] = gettext('Maximum session length must be an integer between 15 and 480 minutes.');
+    } elseif (!empty($pconfig['rollback_max_session']) && is_numeric($pconfig['rollback_countdown'] ?? '') && (int)$pconfig['rollback_max_session'] < (int)$pconfig['rollback_countdown']) {
+        $input_errors[] = gettext('Maximum session length cannot be shorter than the countdown length.');
     }
 
     if (count($input_errors) == 0) {
@@ -378,9 +384,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if (empty($config['system']['commit_rollback'])) {
             $config['system']['commit_rollback'] = [];
         }
-        $config['system']['commit_rollback']['countdown'] = (isset($pconfig['rollback_countdown']) && $pconfig['rollback_countdown'] !== '') ? (int)$pconfig['rollback_countdown'] : 3;
+        $config['system']['commit_rollback']['countdown'] = (isset($pconfig['rollback_countdown']) && $pconfig['rollback_countdown'] !== '') ? (int)$pconfig['rollback_countdown'] : 10;
         $config['system']['commit_rollback']['extension'] = (isset($pconfig['rollback_extension']) && $pconfig['rollback_extension'] !== '') ? (int)$pconfig['rollback_extension'] : 5;
         $config['system']['commit_rollback']['max_extensions'] = (isset($pconfig['rollback_max_extensions']) && $pconfig['rollback_max_extensions'] !== '') ? (int)$pconfig['rollback_max_extensions'] : 6;
+        $config['system']['commit_rollback']['max_session'] = (isset($pconfig['rollback_max_session']) && $pconfig['rollback_max_session'] !== '') ? (int)$pconfig['rollback_max_session'] : 120;
 
         if ($restart_webgui) {
             $http_host_port = explode("]", $_SERVER['HTTP_HOST']);
@@ -1135,7 +1142,7 @@ $(document).ready(function() {
                 <td><a id="help_for_rollback_countdown" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a> <?= gettext('Countdown length') ?></td>
                 <td>
                   <input name="rollback_countdown" type="text" value="<?= html_safe($pconfig['rollback_countdown']); ?>" />
-                  <small><?= gettext('Minutes (1-30, default: 3)'); ?></small>
+                  <small><?= gettext('Minutes (1-30, default: 10)'); ?></small>
                   <div class="hidden" data-for="help_for_rollback_countdown">
                     <?= gettext('The initial automatic rollback countdown time started upon each configuration save within a protected change session.') ?>
                   </div>
@@ -1158,6 +1165,16 @@ $(document).ready(function() {
                   <small><?= gettext('Count (0-60, default: 6)'); ?></small>
                   <div class="hidden" data-for="help_for_rollback_max_extensions">
                     <?= gettext('The maximum number of times the running countdown can be extended.') ?>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td><a id="help_for_rollback_max_session" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a> <?= gettext('Maximum session length') ?></td>
+                <td>
+                  <input name="rollback_max_session" type="text" value="<?= html_safe($pconfig['rollback_max_session']); ?>" />
+                  <small><?= gettext('Minutes (15-480, default: 120)'); ?></small>
+                  <div class="hidden" data-for="help_for_rollback_max_session">
+                    <?= gettext('Measured from the first saved change. After this time the session reverts unless confirmed, however many changes are saved or extensions requested.') ?>
                   </div>
                 </td>
               </tr>

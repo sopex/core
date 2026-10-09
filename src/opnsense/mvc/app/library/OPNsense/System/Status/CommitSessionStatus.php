@@ -51,9 +51,21 @@ class CommitSessionStatus extends AbstractStatus
     {
         $cs = CommitSession::getInstance();
         if ($cs->isReverting()) {
-            $this->internalStatus = SystemStatusCode::NOTICE;
+            $state = $cs->getState();
+            $attempts = (int)($state['revert_attempts'] ?? 0);
             $this->internalTitle = gettext('Reverting Configuration');
-            $this->internalMessage = gettext('Configuration rollback in progress. Reloading services...');
+            if ($attempts > 0 && !empty($state['last_revert_error']) && empty($state['revert_running'])) {
+                // A failed rollback must be loud: the box is still on the unconfirmed configuration
+                $this->internalStatus = SystemStatusCode::ERROR;
+                $this->internalMessage = sprintf(
+                    gettext('Configuration rollback failed %d time(s) (%s). Retrying automatically; confirm the session to keep the current configuration instead.'),
+                    $attempts,
+                    $state['last_revert_error']
+                );
+            } else {
+                $this->internalStatus = SystemStatusCode::NOTICE;
+                $this->internalMessage = gettext('Configuration rollback in progress. Reloading services...');
+            }
             $this->internalTimestamp = time();
             $this->internalLocation = null;
             $this->internalIsBanner = false;

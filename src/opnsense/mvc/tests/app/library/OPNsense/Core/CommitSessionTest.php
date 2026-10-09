@@ -65,6 +65,34 @@ class CommitSessionTest extends \PHPUnit\Framework\TestCase
         $this->assertLessThanOrEqual(30, $settings['extension']);
         $this->assertGreaterThanOrEqual(1, $settings['max_extensions']);
         $this->assertLessThanOrEqual(60, $settings['max_extensions']);
+        $this->assertArrayHasKey('max_session', $settings);
+        $this->assertGreaterThanOrEqual($settings['countdown'], $settings['max_session']);
+        $this->assertLessThanOrEqual(480, $settings['max_session']);
+    }
+
+    public function testDefaultCountdownIsTenMinutes()
+    {
+        $this->assertEquals(10, CommitSession::DEFAULT_COUNTDOWN);
+        $this->assertEquals(120, CommitSession::DEFAULT_MAX_SESSION);
+    }
+
+    public function testNamedAccountIsUserAction()
+    {
+        $cs = CommitSession::getInstance();
+        unset($_SESSION['Username'], $_SERVER['PHP_AUTH_USER']);
+        $this->assertTrue($cs->isUserAction(['username' => 'admin@192.168.1.10'], 'gui'));
+    }
+
+    public function testProcessIdentityIsNotUserAction()
+    {
+        if (function_exists('posix_isatty') && @posix_isatty(STDIN)) {
+            $this->markTestSkipped('interactive terminal counts as a user session');
+        }
+        $cs = CommitSession::getInstance();
+        unset($_SESSION['Username'], $_SERVER['PHP_AUTH_USER']);
+        $this->assertFalse($cs->isUserAction(['username' => '(root)'], 'console'));
+        $this->assertFalse($cs->isUserAction(['username' => '(root)@10.0.0.1'], 'console'));
+        $this->assertFalse($cs->isUserAction(null, 'console'));
     }
 
     public function testGetGuiUrlFromXml()
