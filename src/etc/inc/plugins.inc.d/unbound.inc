@@ -449,7 +449,7 @@ function unbound_blocklist_generate()
 {
     $blScript = '/usr/local/opnsense/scripts/unbound/blocklists.py';
     if (file_exists($blScript)) {
-        mwexec(sprintf('%s update', $blScript));
+        mwexec(sprintf('%s generate', $blScript));
     }
 }
 
@@ -479,7 +479,7 @@ function unbound_configure_do($verbose = false, $interface_map = null)
 
     unbound_generate_config();
 
-    /* Compile DNSBL blocklists from generated unbound-blocklists.conf before daemon start */
+    /* Compile DNSBL settings using cached downloads before daemon start */
     unbound_blocklist_generate();
 
     $domain = '';

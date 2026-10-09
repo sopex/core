@@ -211,20 +211,23 @@ class CommitSessionTest extends \PHPUnit\Framework\TestCase
 
     public function testIsUserActionDetection()
     {
+        if (function_exists('posix_isatty') && @posix_isatty(STDIN)) {
+            $this->markTestSkipped('interactive terminal counts as a user session');
+        }
         $cs = CommitSession::getInstance();
         unset($_SESSION['Username']);
         unset($_SERVER['REQUEST_URI']);
         unset($_SERVER['PHP_AUTH_USER']);
 
-        // Console saves with root, (root), or (root)@ip must be detected as user actions
-        $this->assertTrue($cs->isUserAction(['username' => '(root)'], 'console'));
-        $this->assertTrue($cs->isUserAction(['username' => '(root)@192.168.1.1'], 'console'));
+        // Process identities are not user actions; named accounts are.
+        $this->assertFalse($cs->isUserAction(['username' => '(root)'], 'console'));
+        $this->assertFalse($cs->isUserAction(['username' => '(root)@192.168.1.1'], 'console'));
         $this->assertTrue($cs->isUserAction(['username' => 'root'], 'console'));
         $this->assertTrue($cs->isUserAction(['username' => 'admin'], 'console'));
 
-        // Console saves without username must count as user action
-        $this->assertTrue($cs->isUserAction(null, 'console'));
-        $this->assertTrue($cs->isUserAction([], 'console'));
+        // Saves without an identity or authenticated context are not user actions
+        $this->assertFalse($cs->isUserAction(null, 'console'));
+        $this->assertFalse($cs->isUserAction([], 'console'));
 
         // Automated system saves must NOT count as user actions
         $this->assertFalse($cs->isUserAction(['username' => 'system'], 'console'));
@@ -249,17 +252,20 @@ class CommitSessionTest extends \PHPUnit\Framework\TestCase
 
     public function testOnConfigSaveConsoleRootUserDetection()
     {
+        if (function_exists('posix_isatty') && @posix_isatty(STDIN)) {
+            $this->markTestSkipped('interactive terminal counts as a user session');
+        }
         $cs = CommitSession::getInstance();
         file_put_contents(CommitSession::MARKER_FILE, json_encode(['session_id' => 'test']));
         $this->assertTrue($cs->isActive());
 
         @unlink(CommitSession::SOCKET_FILE);
         unset($_SESSION['Username']);
-        unset($_SERVER['REQUEST_URI']);
+        unset($_SERVER['REQUEST_URI'], $_SERVER['PHP_AUTH_USER']);
 
         $rev = ['username' => '(root)'];
         $cs->onConfigSave('config-test.xml', $rev);
-        $this->assertTrue($cs->isUserAction($rev, 'console'));
+        $this->assertFalse($cs->isUserAction($rev, 'console'));
 
         $revSystem = ['username' => '(system)'];
         $cs->onConfigSave('config-test.xml', $revSystem);

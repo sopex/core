@@ -259,6 +259,7 @@ class CommitWatchdog:
             self.extensions_count = int(data.get('extensions_count', 0))
             self.saves_count = int(data.get('saves_count', 0))
             self.gui_url = data.get('gui_url', '')
+            self.reboot_initiated = bool(data.get('reboot_initiated', False))
             self.revisions = list(data.get('revisions', []) or [])
             created_at = float(data.get('created_at', now_wall))
 
@@ -313,6 +314,7 @@ class CommitWatchdog:
                 data = json.load(f)
             now_mono = self._mono()
             now_wall = self._wall()
+            data['reboot_initiated'] = self.reboot_initiated
             data['countdown_active'] = self.countdown_active
             data['extensions_count'] = self.extensions_count
             data['saves_count'] = self.saves_count
@@ -535,7 +537,7 @@ class CommitWatchdog:
 
     # ------------------------------------------------------------ cleanup
 
-    def cleanup_session(self):
+    def stop_supervisor(self):
         # Stop supervisor if running so daemon -r doesn't respawn after intentional exit
         sup_pid = read_pid(self.supervisor_pid_file)
         if sup_pid is not None:
@@ -543,6 +545,9 @@ class CommitWatchdog:
                 os.kill(sup_pid, signal.SIGTERM)
             except Exception:
                 pass
+
+    def cleanup_session(self):
+        self.stop_supervisor()
         for path in [self.marker_file, self.snapshot_file, self.socket_file,
                      self.pid_file, self.supervisor_pid_file]:
             if os.path.exists(path):
@@ -709,6 +714,7 @@ class CommitWatchdog:
                 self.last_revert_error = 'service reload failed; rebooting'
                 self.update_marker()
                 syslog.syslog(syslog.LOG_CRIT, "commit-session: reload-all failed; rebooting system now!")
+                self.stop_supervisor()
                 for cmd in ([self.shutdown_bin, '-r', 'now'], [self.reboot_bin]):
                     if os.path.exists(cmd[0]):
                         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)

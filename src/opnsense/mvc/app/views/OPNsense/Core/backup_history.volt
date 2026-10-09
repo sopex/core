@@ -56,7 +56,7 @@
                         } else if (record.session_tag === 'Reverted') {
                             tagClass = 'label-danger';
                         }
-                        payload.append("&nbsp;<span class='label " + tagClass + "'>" + record.session_tag + "</span>");
+                        payload.append("&nbsp;", $("<span/>").addClass("label").addClass(tagClass).text(record.session_tag));
                     }
                     payload.append("<br/>");
                     payload.append($("<small/>").text(record.description));

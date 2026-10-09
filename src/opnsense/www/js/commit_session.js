@@ -400,10 +400,11 @@ class CommitSessionManager {
         let remainingStr = this.formatTime(this.localRemainingSeconds);
         let savesCount = data.saves_count || 0;
         let extensionsCount = data.extensions_count || 0;
-        let maxExtensions = data.max_extensions || 6;
+        let maxExtensions = data.max_extensions ?? 6;
+        let extensionMinutes = Number(data.extension_seconds ?? 300) / 60;
         let extensionsRemaining = Math.max(0, maxExtensions - extensionsCount);
-        let userStr = data.username || 'admin';
-        let sourceStr = data.source || 'gui';
+        let userStr = $('<span>').text(data.username || 'admin').html();
+        let sourceStr = $('<span>').text(data.source || 'gui').html();
         let sessionLimitHtml = '';
         let limitRem = data.session_limit_remaining_seconds;
         if (isCountdown && limitRem !== null && limitRem !== undefined && limitRem <= 900) {
@@ -443,8 +444,8 @@ class CommitSessionManager {
                         <button id="cs-btn-confirm" class="btn btn-success btn-xs" style="margin-right:5px;" title="Keep changes permanently and end protected session">
                             <i class="fa fa-check"></i> Confirm Changes
                         </button>
-                        <button id="cs-btn-extend" class="btn btn-default btn-xs" style="margin-right:5px;" ${(!isCountdown || extensionsRemaining <= 0) ? 'disabled' : ''} title="Add 5 minutes to countdown">
-                            <i class="fa fa-clock-o"></i> Extend (+5m)
+                        <button id="cs-btn-extend" class="btn btn-default btn-xs" style="margin-right:5px;" ${(!isCountdown || extensionsRemaining <= 0) ? 'disabled' : ''} title="Add ${extensionMinutes} minutes to countdown">
+                            <i class="fa fa-clock-o"></i> Extend (+${extensionMinutes}m)
                         </button>
                         <button id="cs-btn-revert" class="btn btn-danger btn-xs" style="margin-right:5px;" title="Discard changes and restore pre-session snapshot immediately">
                             <i class="fa fa-undo"></i> Revert Now
@@ -465,6 +466,17 @@ class CommitSessionManager {
     renderConnectionLostBanner() {
         let $container = this.getContainer();
         let guiUrl = (this.sessionData && this.sessionData.gui_url) ? this.sessionData.gui_url : window.location.origin;
+
+        try {
+            let parsedUrl = new URL(guiUrl);
+            if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+                guiUrl = window.location.origin;
+            }
+        } catch (e) {
+            guiUrl = window.location.origin;
+        }
+        // Text escaping handles markup; quotes must also be escaped for the href attribute.
+        guiUrl = $('<span>').text(guiUrl).html().replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
         let html = `
             <div id="commit-session-banner" class="alert alert-danger" style="margin: 10px 15px; padding: 12px 15px; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">
@@ -641,9 +653,9 @@ class CommitSessionManager {
         let msg = `
             <div class="alert alert-warning">
                 <i class="fa fa-info-circle fa-lg"></i>
-                <strong>Notice:</strong> An automatic configuration rollback was executed on <strong>${notice.reverted_at_iso || 'recently'}</strong>.
+                <strong>Notice:</strong> An automatic configuration rollback was executed on <strong>${$('<span>').text(notice.reverted_at_iso || 'recently').html()}</strong>.
                 <br/>
-                Reason: <em>${notice.reason || 'countdown expired'}</em>. Reverted to previous snapshot.
+                Reason: <em>${$('<span>').text(notice.reason || 'countdown expired').html()}</em>. Reverted to previous snapshot.
             </div>
             <p>You can review the rollback in configuration history or <a href="/ui/core/backup/history" class="alert-link" style="text-decoration:underline; font-weight:bold;">view the reverted diff here</a>.</p>
         `;

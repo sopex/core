@@ -58,8 +58,8 @@ class CommitSessionController extends ApiControllerBase
             return ['status' => 'failed', 'message' => gettext('POST request required.')];
         }
 
-        $source = !empty($this->request->getHeader('X-Client-Type')) ?
-            $this->request->getHeader('X-Client-Type') : 'api';
+        $source = $this->request->getHeader('X-Client-Type');
+        $source = in_array($source, ['gui', 'api', 'console'], true) ? $source : 'api';
 
         return CommitSession::getInstance()->start($this->getUserName(), $source);
     }
@@ -75,8 +75,8 @@ class CommitSessionController extends ApiControllerBase
             return ['status' => 'failed', 'message' => gettext('POST request required.')];
         }
 
-        $source = !empty($this->request->getHeader('X-Client-Type')) ?
-            $this->request->getHeader('X-Client-Type') : 'api';
+        $source = $this->request->getHeader('X-Client-Type');
+        $source = in_array($source, ['gui', 'api', 'console'], true) ? $source : 'api';
 
         return CommitSession::getInstance()->confirm($this->getUserName(), $source);
     }
@@ -92,8 +92,8 @@ class CommitSessionController extends ApiControllerBase
             return ['status' => 'failed', 'message' => gettext('POST request required.')];
         }
 
-        $source = !empty($this->request->getHeader('X-Client-Type')) ?
-            $this->request->getHeader('X-Client-Type') : 'api';
+        $source = $this->request->getHeader('X-Client-Type');
+        $source = in_array($source, ['gui', 'api', 'console'], true) ? $source : 'api';
 
         return CommitSession::getInstance()->extend($this->getUserName(), $source);
     }
@@ -109,8 +109,8 @@ class CommitSessionController extends ApiControllerBase
             return ['status' => 'failed', 'message' => gettext('POST request required.')];
         }
 
-        $source = !empty($this->request->getHeader('X-Client-Type')) ?
-            $this->request->getHeader('X-Client-Type') : 'api';
+        $source = $this->request->getHeader('X-Client-Type');
+        $source = in_array($source, ['gui', 'api', 'console'], true) ? $source : 'api';
 
         return CommitSession::getInstance()->revert($this->getUserName(), $source, 'manual');
     }

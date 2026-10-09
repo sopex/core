@@ -59,7 +59,7 @@ class DefaultBlocklistHandler(BaseBlocklistHandler):
         h = hashlib.md5(uri.encode()).hexdigest()
         cache_loc = '/tmp/bl_cache/'
         filep = cache_loc + h
-        if not os.path.exists(filep) or (time.time() - os.stat(filep).st_ctime >= cache_ttl):
+        if not self.cache_only and (not os.path.exists(filep) or (time.time() - os.stat(filep).st_ctime >= cache_ttl)):
             # cache expired or not available yet, try to read, keep old one when failed
             try:
                 os.makedirs(cache_loc, exist_ok=True)

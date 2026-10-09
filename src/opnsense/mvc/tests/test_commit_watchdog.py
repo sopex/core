@@ -27,11 +27,13 @@
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 # Import the watchdog class from src/opnsense/scripts/system/commit_watchdog.py
@@ -127,6 +129,7 @@ class TestCommitWatchdog(WatchdogTestBase):
         self.assertEqual(wd.extension_seconds, 300.0)
         self.assertEqual(wd.max_extensions, 3)
         self.assertFalse(wd.countdown_active)
+        self.assertFalse(wd.reboot_initiated)
         self.assertEqual(wd.saves_count, 0)
 
     def test_handle_command_status_before_save(self):
@@ -762,13 +765,33 @@ class TestCommitWatchdogStateMachine(WatchdogTestBase):
         os.chmod(failing_reload, 0o755)
         wd = self.get_watchdog(reload_script=failing_reload)
         wd.handle_command('REVERT manual')
-        wd.step()
+        with open(wd.supervisor_pid_file, 'w') as f:
+            f.write('12345')
+        run = subprocess.run
+
+        def check_shutdown(cmd, **kwargs):
+            if cmd[0] == self.mock_shutdown:
+                kill.assert_called_once_with(12345, signal.SIGTERM)
+                self.assertTrue(self.read_marker()['reboot_initiated'])
+            return run(cmd, **kwargs)
+
+        with patch('commit_watchdog.os.kill') as kill, \
+                patch('commit_watchdog.subprocess.run', side_effect=check_shutdown) as run_mock:
+            wd.step()
+            self.assertTrue(any(call.args[0][0] == self.mock_shutdown for call in run_mock.call_args_list))
         self.assertEqual(wd.last_revert_outcome, 'rebooting')
         self.assertFalse(wd.running)
         self.assertTrue(os.path.exists(self.snapshot_file))  # boot hook finishes the job
         self.clock.advance(1000)
         wd.step()
         self.assertEqual(wd.revert_attempts, 1)
+        restarted = self.get_watchdog(reload_script=failing_reload)
+        self.assertTrue(restarted.reboot_initiated)
+        with patch.object(restarted, 'execute_revert') as revert:
+            restarted.step()
+            revert.assert_not_called()
+        self.assertTrue(os.path.exists(self.marker_file))
+        self.assertTrue(os.path.exists(self.snapshot_file))
 
     def test_missing_snapshot_keeps_marker_and_retries(self):
         os.unlink(self.snapshot_file)
