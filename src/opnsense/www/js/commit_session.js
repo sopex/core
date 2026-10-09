@@ -168,7 +168,10 @@ class CommitSessionManager {
                 $btn.closest('li').hide();
                 return;
             }
-            if (this.active) {
+            if (this.sessionData && (this.sessionData.reverting || this.sessionData.status === 'reverting')) {
+                $btn.removeClass('text-muted text-success').addClass('text-warning');
+                $btn.attr('data-original-title', 'Configuration rollback in progress...').attr('title', 'Configuration rollback in progress...');
+            } else if (this.active) {
                 $btn.removeClass('text-muted').addClass('text-warning');
                 $btn.attr('data-original-title', 'Protected change session is active').attr('title', 'Protected change session is active');
             } else {
@@ -237,7 +240,11 @@ class CommitSessionManager {
                     this.failCount = 0;
                     this.connectionLost = false;
                     this.renderBanner();
-                    this.startTimer();
+                    if (data.status !== 'reverting' && !data.reverting) {
+                        this.startTimer();
+                    } else {
+                        this.stopTimer();
+                    }
                     if (!this.pollInterval) {
                         this.startPolling();
                     }
@@ -246,6 +253,8 @@ class CommitSessionManager {
                     this.removeBanner();
                     this.stopTimer();
                     this.stopPolling();
+                    this.updateHeaderButton();
+                    this.checkNotice();
                 }
             },
             error: (xhr) => {
@@ -279,12 +288,20 @@ class CommitSessionManager {
                 if (data && data.active) {
                     this.sessionData = data;
                     this.localRemainingSeconds = data.remaining_seconds || 0;
+                    if (data.status === 'reverting' || data.reverting) {
+                        this.stopTimer();
+                    }
                     this.renderBanner();
                 } else {
                     this.active = false;
                     this.removeBanner();
                     this.stopTimer();
                     this.stopPolling();
+                    this.updateHeaderButton();
+                    if (typeof updateSystemStatus === 'function') {
+                        updateSystemStatus();
+                    }
+                    this.checkNotice();
                 }
             },
             error: (xhr) => {
@@ -308,7 +325,7 @@ class CommitSessionManager {
     startTimer() {
         this.stopTimer();
         this.timerInterval = setInterval(() => {
-            if (this.sessionData && this.sessionData.countdown_active) {
+            if (this.sessionData && this.sessionData.countdown_active && this.sessionData.status !== 'reverting' && !this.sessionData.reverting) {
                 if (this.localRemainingSeconds > 0) {
                     this.localRemainingSeconds--;
                     $('#cs-timer-val').text(this.formatTime(this.localRemainingSeconds));
@@ -316,14 +333,13 @@ class CommitSessionManager {
                     $('#cs-timer-val').text('0:00');
                     if (!this.revertingNoticeShown) {
                         this.revertingNoticeShown = true;
-                        let guiUrl = (this.sessionData && this.sessionData.gui_url) ? this.sessionData.gui_url : window.location.origin;
-                        $('#cs-banner-msg').html(
-                            '<strong>Countdown expired!</strong> Configuration is reverting automatically to pre-session snapshot. ' +
-                            'Reconnecting at <a href="' + guiUrl + '" class="alert-link">' + guiUrl + '</a> in a few moments...'
-                        );
-                        setTimeout(() => {
-                            window.location.href = guiUrl;
-                        }, 5000);
+                        this.stopTimer();
+                        if (this.sessionData) {
+                            this.sessionData.status = 'reverting';
+                            this.sessionData.reverting = true;
+                            this.sessionData.revert_reason = 'countdown_expired';
+                        }
+                        this.renderBanner();
                     }
                 }
             }
@@ -340,6 +356,28 @@ class CommitSessionManager {
     renderBanner() {
         let $container = this.getContainer();
         let data = this.sessionData || {};
+
+        if (data.reverting || data.status === 'reverting') {
+            let reasonStr = data.revert_reason || 'manual';
+            let reasonLabel = reasonStr === 'countdown_expired' ? 'Countdown Expired' : 'Rollback in Progress';
+            let html = `
+                <div id="commit-session-banner" class="alert alert-warning" style="margin: 10px 15px; padding: 12px 15px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
+                    <div class="row" style="display:flex; align-items:center; flex-wrap:wrap;">
+                        <div class="col-xs-12">
+                            <span class="fa fa-spinner fa-spin fa-lg" style="margin-right:10px; color:#d9534f;"></span>
+                            <strong style="text-transform:uppercase; letter-spacing:0.5px;">Reverting Configuration (${reasonLabel})</strong>
+                            <span style="margin: 0 8px;">|</span>
+                            <span id="cs-banner-msg">
+                                Reverting changes to pre-session snapshot and reloading services... Please wait.
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            $container.html(html);
+            this.updateHeaderButton();
+            return;
+        }
 
         let isCountdown = !!data.countdown_active;
         let alertClass = isCountdown ? 'alert-warning' : 'alert-info';
@@ -501,16 +539,18 @@ class CommitSessionManager {
                 callback: (result) => {
                     if (result) {
                         ajaxCall('/api/core/commit_session/revert', {}, (data) => {
-                            this.stopPolling();
                             this.stopTimer();
                             let targetUrl = (data && data.gui_url) ? data.gui_url : guiUrl;
-                            $('#cs-banner-msg').html(
-                                '<strong>Reverting configuration now.</strong> Reconnecting to <a href="' +
-                                targetUrl + '" class="alert-link">' + targetUrl + '</a>...'
-                            );
-                            setTimeout(() => {
-                                window.location.href = targetUrl;
-                            }, 5000);
+                            if (this.sessionData) {
+                                this.sessionData.status = 'reverting';
+                                this.sessionData.reverting = true;
+                                this.sessionData.revert_reason = 'manual';
+                                this.sessionData.gui_url = targetUrl;
+                            }
+                            this.renderBanner();
+                            if (!this.pollInterval) {
+                                this.startPolling();
+                            }
                         });
                     }
                 }

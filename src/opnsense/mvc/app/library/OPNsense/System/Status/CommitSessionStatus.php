@@ -50,7 +50,14 @@ class CommitSessionStatus extends AbstractStatus
     public function collectStatus()
     {
         $cs = CommitSession::getInstance();
-        if ($cs->isActive()) {
+        if ($cs->isReverting()) {
+            $this->internalStatus = SystemStatusCode::NOTICE;
+            $this->internalTitle = gettext('Reverting Configuration');
+            $this->internalMessage = gettext('Configuration rollback in progress. Reloading services...');
+            $this->internalTimestamp = time();
+            $this->internalLocation = null;
+            $this->internalIsBanner = false;
+        } elseif ($cs->isActive()) {
             $this->internalStatus = SystemStatusCode::NOTICE;
             $this->internalTitle = gettext('Protected Change Session');
             $this->internalMessage = gettext('A commit-confirmed protected change session is active.');

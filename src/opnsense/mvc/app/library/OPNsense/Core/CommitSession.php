@@ -63,6 +63,19 @@ class CommitSession extends Singleton
     }
 
     /**
+     * Check if the session is currently in the process of reverting
+     * @return bool
+     */
+    public function isReverting(): bool
+    {
+        if (!$this->isActive()) {
+            return false;
+        }
+        $data = @json_decode(@file_get_contents(self::MARKER_FILE), true);
+        return is_array($data) && (!empty($data['reverting']) || ($data['status'] ?? '') === 'reverting');
+    }
+
+    /**
      * Retrieve configuration settings for rollback
      * @return array
      */
@@ -202,6 +215,19 @@ class CommitSession extends Singleton
             return [
                 'active' => true,
                 'error' => 'corrupted marker file',
+                'has_notice' => $this->hasRevertNotice(),
+            ];
+        }
+
+        if (!empty($data['reverting']) || ($data['status'] ?? '') === 'reverting') {
+            return [
+                'active' => true,
+                'status' => 'reverting',
+                'reverting' => true,
+                'revert_reason' => $data['revert_reason'] ?? 'manual',
+                'gui_url' => $data['gui_url'] ?? $this->getGuiUrl(),
+                'countdown_active' => false,
+                'remaining_seconds' => 0,
                 'has_notice' => $this->hasRevertNotice(),
             ];
         }
@@ -558,6 +584,16 @@ class CommitSession extends Singleton
         // Never run rc.reload_all inside PHP-CGI; restarting lighttpd kills PHP mid-reload.
         $this->stopWatchdogProcess();
 
+        if (file_exists(self::MARKER_FILE)) {
+            $mdata = @json_decode(@file_get_contents(self::MARKER_FILE), true) ?: [];
+            $mdata['status'] = 'reverting';
+            $mdata['reverting'] = true;
+            $mdata['countdown_active'] = false;
+            $mdata['revert_reason'] = $reason;
+            $mdata['revert_started_at'] = time();
+            @file_put_contents(self::MARKER_FILE, json_encode($mdata, JSON_PRETTY_PRINT));
+        }
+
         $pythonBin = '/usr/local/bin/python3';
         if (file_exists('/usr/sbin/daemon') && file_exists(self::WATCHDOG_SCRIPT)) {
             Shell::shell_safe(
@@ -656,6 +692,10 @@ class CommitSession extends Singleton
     public function getDiff(): array
     {
         $items = [];
+        if ($this->isReverting()) {
+            return $items;
+        }
+
         $app = new AppConfig();
         $currentConfig = $app->application->configDir . '/config.xml';
 

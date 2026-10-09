@@ -490,6 +490,30 @@ class TestCommitWatchdog(unittest.TestCase):
         self.assertEqual(res['message'], 'reverting')
         self.assertEqual(res['gui_url'], 'https://192.168.1.1')
         self.assertTrue(wd.trigger_revert_manual)
+        self.assertTrue(wd.is_reverting)
+
+        # Marker file on disk must now reflect reverting status
+        with open(self.marker_file, 'r', encoding='utf-8') as f:
+            marker = json.load(f)
+        self.assertEqual(marker.get('status'), 'reverting')
+        self.assertTrue(marker.get('reverting'))
+        self.assertFalse(marker.get('countdown_active'))
+
+        # Subsequent STATUS command must report reverting
+        status_res = json.loads(wd.handle_command('STATUS'))
+        self.assertEqual(status_res.get('status'), 'reverting')
+        self.assertTrue(status_res.get('reverting'))
+        self.assertEqual(status_res.get('remaining_seconds'), 0)
+
+    def test_execute_revert_updates_marker_state(self):
+        wd = self.get_watchdog()
+        wd.set_reverting_marker('test_reason')
+        with open(self.marker_file, 'r', encoding='utf-8') as f:
+            marker = json.load(f)
+        self.assertEqual(marker.get('status'), 'reverting')
+        self.assertTrue(marker.get('reverting'))
+        self.assertEqual(marker.get('revert_reason'), 'test_reason')
+        self.assertFalse(marker.get('countdown_active'))
 
 
 if __name__ == '__main__':

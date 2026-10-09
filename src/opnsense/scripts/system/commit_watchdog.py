@@ -110,6 +110,8 @@ class CommitWatchdog:
         self.gui_url = ''
         self.revisions = []
         self.trigger_revert_manual = False
+        self.is_reverting = False
+        self.revert_reason = 'manual'
 
         self.server_sock = None
         self.load_marker()
@@ -131,6 +133,10 @@ class CommitWatchdog:
             self.gui_url = data.get('gui_url', '')
             self.revisions = data.get('revisions', [])
 
+            if data.get('status') == 'reverting' or data.get('reverting'):
+                self.is_reverting = True
+                self.revert_reason = data.get('revert_reason', 'manual')
+
             created_at = float(data.get('created_at', time.time()))
 
             # Absolute session ceiling to ensure background saves or loops cannot postpone revert forever
@@ -142,7 +148,7 @@ class CommitWatchdog:
                 self.absolute_ceiling_monotonic = time.monotonic() + max_total
 
             # Resume remaining time instead of restarting full countdown
-            if data.get('countdown_active'):
+            if data.get('countdown_active') and not self.is_reverting:
                 self.countdown_active = True
                 if data.get('expire_epoch'):
                     rem = float(data['expire_epoch']) - time.time()
@@ -158,6 +164,27 @@ class CommitWatchdog:
         except Exception as e:
             syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: error reading marker: {e}")
             return False
+
+    def set_reverting_marker(self, reason='manual'):
+        """Explicitly set status to reverting on disk so GUI and API reflect ongoing rollback."""
+        if not os.path.exists(self.marker_file):
+            return
+        try:
+            with open(self.marker_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            data['status'] = 'reverting'
+            data['reverting'] = True
+            data['countdown_active'] = False
+            data['revert_reason'] = reason
+            data['revert_started_at'] = int(time.time())
+            tmp_marker = self.marker_file + '.tmp'
+            with open(tmp_marker, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_marker, self.marker_file)
+        except Exception as e:
+            syslog.syslog(syslog.LOG_ERR, f"commit-watchdog: error setting reverting marker: {e}")
 
     def update_marker(self):
         if not os.path.exists(self.marker_file):
@@ -237,6 +264,15 @@ class CommitWatchdog:
         cmd = parts[0].upper()
 
         if cmd == 'STATUS':
+            if getattr(self, 'is_reverting', False):
+                return json.dumps({
+                    "status": "reverting",
+                    "reverting": True,
+                    "countdown_active": False,
+                    "remaining_seconds": 0,
+                    "revert_reason": getattr(self, 'revert_reason', 'manual'),
+                    "gui_url": self.gui_url
+                })
             rem = max(0, int(round(self.deadline_monotonic - time.monotonic()))) if self.countdown_active else 0
             return json.dumps({
                 "status": "ok",
@@ -304,7 +340,9 @@ class CommitWatchdog:
 
         elif cmd == 'REVERT':
             self.trigger_revert_manual = True
+            self.is_reverting = True
             self.revert_reason = parts[1] if len(parts) > 1 else 'manual'
+            self.set_reverting_marker(self.revert_reason)
             return json.dumps({
                 "status": "ok",
                 "message": "reverting",
@@ -336,6 +374,9 @@ class CommitWatchdog:
                     pass
 
     def execute_revert(self, reason='countdown_expired'):
+        self.is_reverting = True
+        self.revert_reason = reason
+        self.set_reverting_marker(reason)
         syslog.syslog(
             syslog.LOG_WARNING,
             f"commit-session: configuration rollback triggered for user {self.username} via {self.source} (reason: {reason})"

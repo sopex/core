@@ -239,4 +239,35 @@ class CommitSessionTest extends \PHPUnit\Framework\TestCase
 
         @unlink(CommitSession::MARKER_FILE);
     }
+
+    public function testIsRevertingAndGetState()
+    {
+        $cs = CommitSession::getInstance();
+        $markerData = [
+            'session_id' => 'test-revert',
+            'status' => 'reverting',
+            'reverting' => true,
+            'revert_reason' => 'manual',
+            'gui_url' => 'https://192.168.1.1',
+        ];
+        file_put_contents(CommitSession::MARKER_FILE, json_encode($markerData));
+
+        $this->assertTrue($cs->isActive());
+        $this->assertTrue($cs->isReverting());
+
+        $state = $cs->getState();
+        $this->assertTrue($state['active']);
+        $this->assertEquals('reverting', $state['status']);
+        $this->assertTrue($state['reverting']);
+        $this->assertEquals('manual', $state['revert_reason']);
+        $this->assertEquals(0, $state['remaining_seconds']);
+        $this->assertFalse($state['countdown_active']);
+
+        // Diff must be empty when reverting
+        $diff = $cs->getDiff();
+        $this->assertIsArray($diff);
+        $this->assertEmpty($diff);
+
+        @unlink(CommitSession::MARKER_FILE);
+    }
 }
