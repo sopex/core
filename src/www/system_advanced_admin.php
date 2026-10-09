@@ -89,6 +89,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $pconfig['sshdpermitrootlogin'] = isset($config['system']['ssh']['permitrootlogin']);
     $pconfig['quietlogin'] = isset($config['system']['webgui']['quietlogin']);
     $pconfig['deployment'] = $config['system']['deployment'] ?? '';
+    $pconfig['rollback_countdown'] = $config['system']['commit_rollback']['countdown'] ?? '3';
+    $pconfig['rollback_extension'] = $config['system']['commit_rollback']['extension'] ?? '5';
+    $pconfig['rollback_max_extensions'] = $config['system']['commit_rollback']['max_extensions'] ?? '6';
 
     /* XXX not really a syslog setting */
     $pconfig['loglighttpd'] = empty($config['syslog']['nologlighttpd']);
@@ -164,6 +167,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     if (!empty($pconfig['ssh-rekeylimit']) && !isset($ssh_rekeylimit_choices[$pconfig['ssh-rekeylimit']])) {
         $input_errors[] = gettext('Invalid rekey limit option.');
+    }
+
+    if (isset($pconfig['rollback_countdown']) && $pconfig['rollback_countdown'] !== '' && (!is_numeric($pconfig['rollback_countdown']) || $pconfig['rollback_countdown'] < 1 || $pconfig['rollback_countdown'] > 30)) {
+        $input_errors[] = gettext('Countdown length must be an integer between 1 and 30 minutes.');
+    }
+    if (isset($pconfig['rollback_extension']) && $pconfig['rollback_extension'] !== '' && (!is_numeric($pconfig['rollback_extension']) || $pconfig['rollback_extension'] < 1 || $pconfig['rollback_extension'] > 30)) {
+        $input_errors[] = gettext('Extension length must be an integer between 1 and 30 minutes.');
+    }
+    if (isset($pconfig['rollback_max_extensions']) && $pconfig['rollback_max_extensions'] !== '' && (!is_numeric($pconfig['rollback_max_extensions']) || $pconfig['rollback_max_extensions'] < 0 || $pconfig['rollback_max_extensions'] > 60)) {
+        $input_errors[] = gettext('Maximum extensions must be an integer between 0 and 60.');
     }
 
     if (count($input_errors) == 0) {
@@ -361,6 +374,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         } elseif (isset($config['system']['ssh']['permitrootlogin'])) {
             unset($config['system']['ssh']['permitrootlogin']);
         }
+
+        if (empty($config['system']['commit_rollback'])) {
+            $config['system']['commit_rollback'] = [];
+        }
+        $config['system']['commit_rollback']['countdown'] = (isset($pconfig['rollback_countdown']) && $pconfig['rollback_countdown'] !== '') ? (int)$pconfig['rollback_countdown'] : 3;
+        $config['system']['commit_rollback']['extension'] = (isset($pconfig['rollback_extension']) && $pconfig['rollback_extension'] !== '') ? (int)$pconfig['rollback_extension'] : 5;
+        $config['system']['commit_rollback']['max_extensions'] = (isset($pconfig['rollback_max_extensions']) && $pconfig['rollback_max_extensions'] !== '') ? (int)$pconfig['rollback_max_extensions'] : 6;
 
         if ($restart_webgui) {
             $http_host_port = explode("]", $_SERVER['HTTP_HOST']);
@@ -1100,6 +1120,44 @@ $(document).ready(function() {
                   <input name="noroot" type="checkbox" value="yes" <?= empty($pconfig['noroot']) ? '' : 'checked="checked"' ?> />
                   <div class="hidden" data-for="help_for_noroot">
                     <?=gettext("Make security stricter by running the web GUI as a non-root user. Not all components may be compatible with this feature.") ?>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </div>
+          <div class="content-box tab-content table-responsive __mb">
+            <table class="table table-striped opnsense_standard_table_form">
+              <tr>
+                <td style="width:22%"><strong><?= gettext('Protected Change Session') ?></strong></td>
+                <td style="width:78%"></td>
+              </tr>
+              <tr>
+                <td><a id="help_for_rollback_countdown" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a> <?= gettext('Countdown length') ?></td>
+                <td>
+                  <input name="rollback_countdown" type="text" value="<?= html_safe($pconfig['rollback_countdown']); ?>" />
+                  <small><?= gettext('Minutes (1-30, default: 3)'); ?></small>
+                  <div class="hidden" data-for="help_for_rollback_countdown">
+                    <?= gettext('The initial automatic rollback countdown time started upon each configuration save within a protected change session.') ?>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td><a id="help_for_rollback_extension" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a> <?= gettext('Extension length') ?></td>
+                <td>
+                  <input name="rollback_extension" type="text" value="<?= html_safe($pconfig['rollback_extension']); ?>" />
+                  <small><?= gettext('Minutes (1-30, default: 5)'); ?></small>
+                  <div class="hidden" data-for="help_for_rollback_extension">
+                    <?= gettext('The additional time added to the running countdown when an admin requests an extension.') ?>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td><a id="help_for_rollback_max_extensions" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a> <?= gettext('Maximum extensions') ?></td>
+                <td>
+                  <input name="rollback_max_extensions" type="text" value="<?= html_safe($pconfig['rollback_max_extensions']); ?>" />
+                  <small><?= gettext('Count (0-60, default: 6)'); ?></small>
+                  <div class="hidden" data-for="help_for_rollback_max_extensions">
+                    <?= gettext('The maximum number of times the running countdown can be extended.') ?>
                   </div>
                 </td>
               </tr>

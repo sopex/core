@@ -251,6 +251,12 @@ function carp_sync_xml($url, $username, $password, $sections, $debug)
     return true;
 }
 
+if (file_exists('/conf/commit_rollback_pending.json')) {
+    log_msg("HA synchronization refused: protected change session is currently active.", LOG_WARNING);
+    echo "Protected change session is active; HA configuration synchronization is disabled.\n";
+    exit(1);
+}
+
 if (!empty($config['hasync'])) {
     $hasync = $config['hasync'];
     $enable_debug = in_array('debug', $argv);

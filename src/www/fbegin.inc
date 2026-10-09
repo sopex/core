@@ -201,3 +201,4 @@ $aclObj = new \OPNsense\Core\ACL();
         </ul>
       </div>
     </header>
+    <div id="commit-session-banner-area"></div>

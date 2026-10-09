@@ -116,6 +116,7 @@ $pagetitle .= html_safe(sprintf(' | %s.%s', $config['system']['hostname'], $conf
     <script src="<?= cache_safe("/ui/js/bootstrap3-typeahead.min.js") ?>"></script>
 
     <script src="<?= cache_safe("/ui/js/opnsense_status.js") ?>"></script>
+    <script src="<?= cache_safe("/ui/js/commit_session.js") ?>"></script>
 
 <?php if (get_themed_filename('/js/theme.js', true)): ?>
     <script src="<?= cache_safe(get_themed_filename('/js/theme.js')) ?>"></script>

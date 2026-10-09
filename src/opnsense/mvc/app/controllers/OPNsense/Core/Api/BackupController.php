@@ -90,6 +90,7 @@ class BackupController extends ApiControllerBase
                         'description' => (string)$xmlNode->revision->description,
                         'username' => (string)$xmlNode->revision->username,
                         'filesize' => filesize($filename),
+                        'session_tag' => (string)($xmlNode->revision->session_tag ?? ''),
                         'id' => basename($filename)
                     ];
                     $result['items'][] = $cfg_item;

@@ -56,6 +56,15 @@ done
 
 shift $((OPTIND - 1))
 
+case "${1}" in
+update|upgrade|install|reinstall|remove|sync|resync)
+	if [ -f /conf/commit_rollback_pending.json ]; then
+		echo "Firmware action refused: protected change session is currently active."
+		exit 1
+	fi
+	;;
+esac
+
 if [ -n "${DO_VERBOSE}" ]; then
 	set -x
 fi

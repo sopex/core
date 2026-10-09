@@ -57,6 +57,12 @@
             <pattern>api/core/backup/*</pattern>
         </patterns>
     </page-diagnostics-configurationhistory>
+    <page-system-commit-session>
+        <name>System: Protected Change Session</name>
+        <patterns>
+            <pattern>api/core/commit_session/*</pattern>
+        </patterns>
+    </page-system-commit-session>
     <page-diagnostics-factorydefaults>
         <name>Diagnostics: Factory defaults</name>
         <patterns>

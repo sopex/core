@@ -750,6 +750,17 @@ class Config extends Singleton
     {
         $this->checkvalid();
         $time = microtime(true);
+
+        // Notify protected change session if active
+        $commitSession = CommitSession::getInstance();
+        if ($commitSession->isActive()) {
+            if (!is_array($revision)) {
+                $revision = $this->getRevisionContext();
+            }
+            $revision['time'] = sprintf('%0.2f', $time);
+            $commitSession->onConfigSave($revision);
+        }
+
         // update revision information ROOT.revision tag, align timestamp to backup output
         $revision = $this->updateRevision($revision, null, $time);
 

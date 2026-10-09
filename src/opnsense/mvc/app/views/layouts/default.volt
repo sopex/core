@@ -290,6 +290,7 @@
             </ul>
           </div>
         </header>
+        <div id="commit-session-banner-area"></div>
 
         <!-- page content -->
         <section class="page-content-main">

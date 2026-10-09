@@ -38,6 +38,20 @@ $version = shell_safe('opnsense-version');
 
 echo "\n*** {$config['system']['hostname']}.{$config['system']['domain']}: {$version} ***\n";
 
+if (\OPNsense\Core\CommitSession::getInstance()->isActive()) {
+    $cs = \OPNsense\Core\CommitSession::getInstance()->getState();
+    $user = $cs['username'] ?? 'admin';
+    if (!empty($cs['countdown_active'])) {
+        $rem = $cs['remaining_seconds'] ?? 0;
+        $m = floor($rem / 60);
+        $s = $rem % 60;
+        $timerStr = sprintf('%d:%02d', $m, $s);
+        echo sprintf("\n*** [WARNING] Protected change session active by %s (rollback in %s) ***\n", $user, $timerStr);
+    } else {
+        echo sprintf("\n*** [INFO] Protected change session active by %s (no changes yet) ***\n", $user);
+    }
+}
+
 $iflist = legacy_config_get_interfaces(['enable' => true, 'virtual' => false]);
 $ifdetails = legacy_interfaces_details();
 
