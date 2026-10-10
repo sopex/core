@@ -64,16 +64,34 @@ class TestCachedBlocklists(unittest.TestCase):
             self.assertEqual(list(self.handler._domains_in_blocklist(self.uri, 0)), ['blocked.example'])
             reader.assert_not_called()
 
-    def test_generate_with_missing_cache_keeps_custom_domains(self):
+    def test_generate_with_missing_cache_preserves_published_blocklist(self):
         self.handler.cnf_parsed = [{
             'id': 'policy', 'includes.patterns': ['custom.example'], 'blocklists.test': self.uri
         }]
-        with patch.object(self.handler, '_uri_reader', side_effect=AssertionError('network used')) as reader:
-            self.assertEqual(list(self.handler.blocklists_iter()), [
-                ('custom.example', 'policy', {'bl': 'Custom', 'wildcard': False})
-            ])
-            reader.assert_not_called()
+        parser = BlocklistParser.__new__(BlocklistParser)
+        parser.handlers = [self.handler]
+        parser.startup_time = time.time()
+        published = Path(self.cache.name) / 'dnsbl.json'
+        original = b'{"data":{"blocked.example":[]},"config":{}}'
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                if existing:
+                    published.write_bytes(original)
+                with patch.object(self.handler, '_uri_reader') as reader:
+                    with self.assertRaisesRegex(FileNotFoundError, 'no cached blocklist available'):
+                        parser.update_blocklist(cache_only=True)
+                    reader.assert_not_called()
+                self.assertEqual(published.exists(), existing)
+                if existing:
+                    self.assertEqual(published.read_bytes(), original)
+                self.assertFalse((Path(self.cache.name) / 'dnsbl.json.new').exists())
         self.assertFalse(self.local_path.exists())
+
+    def test_generate_custom_domains_without_configured_lists(self):
+        self.handler.cnf_parsed = [{'id': 'policy', 'includes.patterns': ['custom.example']}]
+        self.assertEqual(list(self.handler.blocklists_iter()), [
+            ('custom.example', 'policy', {'bl': 'Custom', 'wildcard': False})
+        ])
 
     def test_update_still_fetches_expired_cache(self):
         self.local_path.write_text('blocked.example\n')

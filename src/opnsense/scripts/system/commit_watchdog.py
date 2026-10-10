@@ -707,18 +707,28 @@ class CommitWatchdog:
                     syslog.syslog(syslog.LOG_ERR, f"commit-session: failed to run reload script: {e}")
 
             # 5. Reload failed: config.xml is already restored, so reboot. Marker and snapshot stay so the
-            #    early boot hook finishes the job; this process stops retrying.
+            #    early boot hook finishes the job; stop retrying only once a reboot command succeeds.
             if not reload_ok:
-                self.last_revert_outcome = 'rebooting'
-                self.reboot_initiated = True
-                self.last_revert_error = 'service reload failed; rebooting'
-                self.update_marker()
                 syslog.syslog(syslog.LOG_CRIT, "commit-session: reload-all failed; rebooting system now!")
-                self.stop_supervisor()
                 for cmd in ([self.shutdown_bin, '-r', 'now'], [self.reboot_bin]):
                     if os.path.exists(cmd[0]):
-                        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
-                        break
+                        try:
+                            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                                 close_fds=True)
+                        except Exception as e:
+                            syslog.syslog(syslog.LOG_ERR, f"commit-session: failed to run {cmd[0]}: {e}")
+                            continue
+                        if res.returncode == 0:
+                            self.last_revert_outcome = 'rebooting'
+                            self.reboot_initiated = True
+                            self.last_revert_error = 'service reload failed; rebooting'
+                            self.update_marker()
+                            self.stop_supervisor()
+                            return False
+                        syslog.syslog(syslog.LOG_ERR,
+                                      f"commit-session: {cmd[0]} exited with code {res.returncode}")
+                self.last_revert_outcome = 'failed'
+                self._schedule_retry('service reload failed; reboot commands failed')
                 return False
 
             # 6. Success: clean up marker and snapshot only now

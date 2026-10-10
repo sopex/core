@@ -771,13 +771,15 @@ class TestCommitWatchdogStateMachine(WatchdogTestBase):
 
         def check_shutdown(cmd, **kwargs):
             if cmd[0] == self.mock_shutdown:
-                kill.assert_called_once_with(12345, signal.SIGTERM)
-                self.assertTrue(self.read_marker()['reboot_initiated'])
+                kill.assert_not_called()
+                self.assertFalse(wd.reboot_initiated)
+                self.assertFalse(self.read_marker()['reboot_initiated'])
             return run(cmd, **kwargs)
 
         with patch('commit_watchdog.os.kill') as kill, \
                 patch('commit_watchdog.subprocess.run', side_effect=check_shutdown) as run_mock:
             wd.step()
+            kill.assert_called_once_with(12345, signal.SIGTERM)
             self.assertTrue(any(call.args[0][0] == self.mock_shutdown for call in run_mock.call_args_list))
         self.assertEqual(wd.last_revert_outcome, 'rebooting')
         self.assertFalse(wd.running)
@@ -792,6 +794,53 @@ class TestCommitWatchdogStateMachine(WatchdogTestBase):
             revert.assert_not_called()
         self.assertTrue(os.path.exists(self.marker_file))
         self.assertTrue(os.path.exists(self.snapshot_file))
+
+    def test_reboot_falls_back_after_shutdown_failure(self):
+        for failure in (subprocess.CompletedProcess([], 1), OSError('cannot execute')):
+            with self.subTest(failure=failure):
+                self.write_marker()
+                wd = self.get_watchdog(reload_script=os.path.join(self.test_dir, 'missing_reload'))
+                wd.handle_command('REVERT manual')
+                with patch('commit_watchdog.subprocess.run', side_effect=[
+                    failure, subprocess.CompletedProcess([], 0)
+                ]) as run, patch.object(wd, 'stop_supervisor') as stop:
+                    wd.step()
+                    self.assertEqual([call.args[0] for call in run.call_args_list], [
+                        [wd.shutdown_bin, '-r', 'now'], [wd.reboot_bin]
+                    ])
+                    stop.assert_called_once_with()
+                self.assertTrue(wd.reboot_initiated)
+                self.assertTrue(self.read_marker()['reboot_initiated'])
+                self.assertFalse(wd.running)
+
+    def test_failed_reboot_commands_leave_revert_retryable(self):
+        for failure in (subprocess.CompletedProcess([], 1), OSError('cannot execute')):
+            with self.subTest(failure=failure):
+                self.write_marker()
+                wd = self.get_watchdog(reload_script=os.path.join(self.test_dir, 'missing_reload'))
+                wd.handle_command('REVERT manual')
+                with patch('commit_watchdog.subprocess.run', side_effect=[failure, failure]) as run, \
+                        patch.object(wd, 'stop_supervisor') as stop:
+                    wd.step()
+                    self.assertEqual(run.call_count, 2)
+                    stop.assert_not_called()
+                self.assertFalse(wd.reboot_initiated)
+                self.assertFalse(self.read_marker()['reboot_initiated'])
+                self.assertEqual(wd.last_revert_outcome, 'failed')
+                self.assertTrue(wd.running)
+                self.assertTrue(os.path.exists(self.snapshot_file))
+                restarted = self.get_watchdog()
+                self.assertFalse(restarted.reboot_initiated)
+                with patch.object(restarted, 'execute_revert') as revert:
+                    restarted.step()
+                    revert.assert_not_called()
+                self.clock.advance(revert_backoff(1))
+                with patch.object(wd, 'execute_revert', return_value=False) as revert:
+                    wd.step()
+                    revert.assert_called_once_with('manual')
+                with patch.object(restarted, 'execute_revert', return_value=False) as revert:
+                    restarted.step()
+                    revert.assert_called_once_with('manual')
 
     def test_missing_snapshot_keeps_marker_and_retries(self):
         os.unlink(self.snapshot_file)

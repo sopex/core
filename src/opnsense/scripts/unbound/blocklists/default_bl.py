@@ -85,6 +85,9 @@ class DefaultBlocklistHandler(BaseBlocklistHandler):
                     (total_lines, 'from cache' if from_cache else 'downloaded', uri)
             )
         else:
+            if self.cache_only:
+                # Abort generation before an incomplete result can replace dnsbl.json.
+                raise FileNotFoundError('no cached blocklist available for %s' % uri)
             syslog.syslog(syslog.LOG_ERR, 'unable to download blocklist from %s and no cache available' % uri)
 
     def _domains_in_blocklist(self, blocklist, cache_ttl):
