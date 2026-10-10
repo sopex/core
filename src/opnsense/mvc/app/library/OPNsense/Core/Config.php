@@ -750,6 +750,16 @@ class Config extends Singleton
     {
         $this->checkvalid();
         $time = microtime(true);
+
+        // Notify protected change session if active
+        $commitSession = CommitSession::getInstance();
+        if ($commitSession->isActive()) {
+            if (!is_array($revision)) {
+                $revision = $this->getRevisionContext();
+            }
+            $revision['session_tag'] = 'Pending';
+        }
+
         // update revision information ROOT.revision tag, align timestamp to backup output
         $revision = $this->updateRevision($revision, null, $time);
 
@@ -769,6 +779,9 @@ class Config extends Singleton
                     // last processed event itself. (it's merely added for debug purposes)
                     $logger = new Syslog('config', null, LOG_LOCAL5);
                     $logger->info("config-event: new_config " . $backup_filename);
+                }
+                if ($commitSession->isActive()) {
+                    $commitSession->onConfigSave($backup_filename ? basename($backup_filename) : null, $revision);
                 }
                 flock($this->config_file_handle, LOCK_UN);
                 $this->mtime = fstat($this->config_file_handle)['mtime'];

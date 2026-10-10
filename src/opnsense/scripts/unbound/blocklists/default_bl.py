@@ -59,7 +59,7 @@ class DefaultBlocklistHandler(BaseBlocklistHandler):
         h = hashlib.md5(uri.encode()).hexdigest()
         cache_loc = '/tmp/bl_cache/'
         filep = cache_loc + h
-        if not os.path.exists(filep) or (time.time() - os.stat(filep).st_ctime >= cache_ttl):
+        if not self.cache_only and (not os.path.exists(filep) or (time.time() - os.stat(filep).st_ctime >= cache_ttl)):
             # cache expired or not available yet, try to read, keep old one when failed
             try:
                 os.makedirs(cache_loc, exist_ok=True)
@@ -85,6 +85,9 @@ class DefaultBlocklistHandler(BaseBlocklistHandler):
                     (total_lines, 'from cache' if from_cache else 'downloaded', uri)
             )
         else:
+            if self.cache_only:
+                # Abort generation before an incomplete result can replace dnsbl.json.
+                raise FileNotFoundError('no cached blocklist available for %s' % uri)
             syslog.syslog(syslog.LOG_ERR, 'unable to download blocklist from %s and no cache available' % uri)
 
     def _domains_in_blocklist(self, blocklist, cache_ttl):

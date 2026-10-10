@@ -81,16 +81,24 @@ class BackupController extends ApiControllerBase
         $result = ['items' => []];
         $providers = $this->providers();
         if (!empty($providers[$host])) {
+            $tagsFile = $providers[$host]['dirname'] . "/session_tags.json";
+            $sessionTags = [];
+            if (file_exists($tagsFile)) {
+                $sessionTags = @json_decode(file_get_contents($tagsFile), true) ?: [];
+            }
             foreach (glob($providers[$host]['dirname'] . "/config-*.xml") as $filename) {
                 $xmlNode = @simplexml_load_file($filename, "SimpleXMLElement", LIBXML_NOERROR | LIBXML_ERR_NONE);
                 if (isset($xmlNode->revision)) {
+                    $baseName = basename($filename);
+                    $tag = $sessionTags[$baseName] ?? (string)($xmlNode->revision->session_tag ?? '');
                     $cfg_item = [
                         'time' => (string)$xmlNode->revision->time,
                         'time_iso' => date('c', (int)$xmlNode->revision->time),
                         'description' => (string)$xmlNode->revision->description,
                         'username' => (string)$xmlNode->revision->username,
                         'filesize' => filesize($filename),
-                        'id' => basename($filename)
+                        'session_tag' => $tag,
+                        'id' => $baseName
                     ];
                     $result['items'][] = $cfg_item;
                 }

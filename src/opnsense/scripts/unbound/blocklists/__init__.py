@@ -43,6 +43,7 @@ from ipaddress import ip_network
 
 class BaseBlocklistHandler:
     def __init__(self, config=None):
+        self.cache_only = False
         self.config = config
         self.cnf = None
         self.cnf_indexed = None
@@ -240,7 +241,9 @@ class BlocklistParser:
                 blocklists[domain][policy].append(cnf)
         return blocklists
 
-    def update_blocklist(self):
+    def update_blocklist(self, cache_only=False):
+        for handler in self.handlers:
+            handler.cache_only = cache_only
         merged_result = {
             'data': {},
             'config': {

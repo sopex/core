@@ -31,6 +31,7 @@ namespace OPNsense\Core\Api;
 
 use OPNsense\Base\ApiMutableModelControllerBase;
 use OPNsense\Core\Backend;
+use OPNsense\Core\CommitSession;
 use OPNsense\Core\Config;
 use OPNsense\Core\SanitizeFilter;
 use OPNsense\Core\Shell;
@@ -43,6 +44,21 @@ class FirmwareController extends ApiMutableModelControllerBase
 {
     protected static $internalModelName = 'firmware';
     protected static $internalModelClass = 'OPNsense\Core\Firmware';
+
+    /**
+     * Check if protected change session is active, refusing firmware operations
+     * @return array|null
+     */
+    private function checkCommitSessionActive(): ?array
+    {
+        if (CommitSession::getInstance()->isActive()) {
+            return [
+                'status' => 'failure',
+                'status_msg' => gettext('Firmware updates and plugin modifications are prohibited during an active protected change session.')
+            ];
+        }
+        return null;
+    }
 
     /**
      * return bytes in human-readable form
@@ -460,6 +476,11 @@ class FirmwareController extends ApiMutableModelControllerBase
      */
     public function updateAction()
     {
+        $csCheck = $this->checkCommitSessionActive();
+        if ($csCheck !== null) {
+            return $csCheck;
+        }
+
         $backend = new Backend();
         $response = [];
         if ($this->request->isPost()) {
@@ -481,6 +502,11 @@ class FirmwareController extends ApiMutableModelControllerBase
      */
     public function upgradeAction()
     {
+        $csCheck = $this->checkCommitSessionActive();
+        if ($csCheck !== null) {
+            return $csCheck;
+        }
+
         $backend = new Backend();
         $response = [];
         if ($this->request->isPost()) {
@@ -567,6 +593,11 @@ class FirmwareController extends ApiMutableModelControllerBase
      */
     public function reinstallAction($pkg_name)
     {
+        $csCheck = $this->checkCommitSessionActive();
+        if ($csCheck !== null) {
+            return $csCheck;
+        }
+
         $backend = new Backend();
         $response = [];
 
@@ -592,6 +623,11 @@ class FirmwareController extends ApiMutableModelControllerBase
      */
     public function syncPluginsAction()
     {
+        $csCheck = $this->checkCommitSessionActive();
+        if ($csCheck !== null) {
+            return $csCheck;
+        }
+
         $backend = new Backend();
         $response = [];
 
@@ -612,6 +648,11 @@ class FirmwareController extends ApiMutableModelControllerBase
      */
     public function resyncPluginsAction()
     {
+        $csCheck = $this->checkCommitSessionActive();
+        if ($csCheck !== null) {
+            return $csCheck;
+        }
+
         $backend = new Backend();
         $response = [];
 
@@ -632,6 +673,11 @@ class FirmwareController extends ApiMutableModelControllerBase
      */
     public function installAction($pkg_name)
     {
+        $csCheck = $this->checkCommitSessionActive();
+        if ($csCheck !== null) {
+            return $csCheck;
+        }
+
         $backend = new Backend();
         $response = [];
 
@@ -658,6 +704,11 @@ class FirmwareController extends ApiMutableModelControllerBase
      */
     public function removeAction($pkg_name)
     {
+        $csCheck = $this->checkCommitSessionActive();
+        if ($csCheck !== null) {
+            return $csCheck;
+        }
+
         $backend = new Backend();
         $response = [];
 

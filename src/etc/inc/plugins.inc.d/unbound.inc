@@ -45,6 +45,7 @@ function unbound_configure()
         'newwanip' => ['unbound_configure_do:2'],
         'unbound_start' => ['unbound_configure_do'],
         'unbound_stop' => ['unbound_service_stop'],
+        'unbound_dnsbl' => ['unbound_blocklist_generate'],
     ];
 }
 
@@ -444,6 +445,14 @@ function unbound_match_interface($interface_map)
     return false;
 }
 
+function unbound_blocklist_generate()
+{
+    $blScript = '/usr/local/opnsense/scripts/unbound/blocklists.py';
+    if (file_exists($blScript)) {
+        mwexec(sprintf('%s generate', $blScript));
+    }
+}
+
 function unbound_configure_do($verbose = false, $interface_map = null)
 {
     global $config;
@@ -469,6 +478,9 @@ function unbound_configure_do($verbose = false, $interface_map = null)
     service_log('Starting Unbound DNS...', $verbose);
 
     unbound_generate_config();
+
+    /* Compile DNSBL settings using cached downloads before daemon start */
+    unbound_blocklist_generate();
 
     $domain = '';
     if (!empty((string)$mdl->general->regdhcp)) {
