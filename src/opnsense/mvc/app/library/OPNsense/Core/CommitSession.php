@@ -133,6 +133,14 @@ class CommitSession extends Singleton
         $this->store->finishSave($lease, $backup);
     }
 
+    public function apply(string $operation, callable $apply)
+    {
+        if ($this->isActive()) {
+            $this->ensureWorker();
+        }
+        return $this->store->apply($operation, $apply);
+    }
+
     public function getSettings(): array
     {
         $cnf = Config::getInstance()->object();

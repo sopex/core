@@ -31,6 +31,7 @@
 namespace OPNsense\Base;
 
 use OPNsense\Core\Backend;
+use OPNsense\Core\ServiceApply;
 
 /**
  * Class ApiMutableServiceControllerBase, inherit this class to implement
@@ -188,44 +189,19 @@ abstract class ApiMutableServiceControllerBase extends ApiControllerBase
         $ret = ['status' => 'failed'];
 
         if ($this->request->isPost()) {
-            $restart = $this->reconfigureForceRestart();
-            $enabled = $this->serviceEnabled();
-            $backend = new Backend();
-            $action = 'stop';
-            $result = 'OK';
-
-            if ($restart || !$enabled) {
-                $result = trim($backend->configdRun(escapeshellarg(static::$internalServiceName) . ' ' . $action));
-            }
-
-            if ($this->invokeInterfaceRegistration()) {
-                $this->runInterfaceRegistration();
-            }
-
-            if ($this->invokeFirewallReload()) {
-                $backend->configdRun('filter reload skip_alias');
-            }
-
-            if (!empty(static::$internalServiceTemplate)) {
-                $template_result = trim($backend->configdpRun('template reload', [static::$internalServiceTemplate]));
-                if ($template_result !== 'OK') {
-                    throw new UserException(sprintf(
-                        gettext('Template generation failed for internal service "%s". See backend log for details.'),
-                        static::$internalServiceName
-                    ), gettext('Configuration exception'));
-                }
-            }
-
-            if ($enabled) {
-                $action = $restart || $this->statusAction()['status'] != 'running' ? 'start' : 'reload';
-                $result = trim($backend->configdRun(escapeshellarg(static::$internalServiceName) . ' ' . $action));
-            }
-
-            if ($result !== 'OK') {
-                $ret['status_msg'] = sprintf(gettext('Service "%s" failed to %s.'), static::$internalServiceName, $action);
-                $ret['status'] = 'failed';
-            } else {
+            try {
+                (new ServiceApply())->reconfigure(
+                    static::$internalServiceName,
+                    $this->serviceEnabled(),
+                    static::$internalServiceTemplate,
+                    $this->reconfigureForceRestart(),
+                    fn() => $this->statusAction()['status'],
+                    $this->invokeInterfaceRegistration() ? fn() => $this->runInterfaceRegistration() : null,
+                    $this->invokeFirewallReload()
+                );
                 $ret['status'] = 'ok';
+            } catch (\RuntimeException $error) {
+                $ret['status_msg'] = $error->getMessage();
             }
         }
 

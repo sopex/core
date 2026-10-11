@@ -30,7 +30,6 @@
 namespace OPNsense\Unbound\Api;
 
 use OPNsense\Base\ApiMutableServiceControllerBase;
-use OPNsense\Core\Backend;
 use OPNsense\Core\ServiceApply;
 
 class ServiceController extends ApiMutableServiceControllerBase
@@ -47,12 +46,11 @@ class ServiceController extends ApiMutableServiceControllerBase
             return ['status' => 'failed'];
         }
 
-        $backend = new Backend();
-        /* XXX currently hardcoded to not cause side effect of $internalServiceTemplate use */
-        $backend->configdRun('template reload OPNsense/Unbound/*');
-        $response = $backend->configdRun(static::$internalServiceName . ' dnsbl');
-
-        return ['status' => $response];
+        try {
+            return ['status' => (new ServiceApply())->unboundDnsbl($this->serviceEnabled())];
+        } catch (\RuntimeException $e) {
+            return ['status' => 'failed', 'status_msg' => $e->getMessage()];
+        }
     }
 
     /**
@@ -69,7 +67,7 @@ class ServiceController extends ApiMutableServiceControllerBase
             (new ServiceApply())->unbound($this->serviceEnabled());
             return ['status' => 'ok'];
         } catch (\RuntimeException $e) {
-            return ['status' => 'failed', 'status_msg' => gettext('Failed to apply Unbound configuration.')];
+            return ['status' => 'failed', 'status_msg' => $e->getMessage()];
         }
     }
 }

@@ -81,7 +81,6 @@ class SessionFixture
     public string $baseline = '<opnsense><system><hostname>demo</hostname></system><filter><rule>allow</rule></filter></opnsense>';
     public array $settings = ['countdown' => 1, 'extension' => 1, 'max_extensions' => 2, 'max_session' => 3];
     public array $applied = [];
-    public int $reboots = 0;
 
     public function __construct()
     {
@@ -131,8 +130,7 @@ class SessionFixture
     }
     public function tick(bool $boot = false): void
     {
-        $this->store->tick(function ($services) { $this->applied[] = $services; },
-            function () { $this->reboots++; return false; }, $boot);
+        $this->store->tick(function ($services) { $this->applied[] = $services; }, $boot);
     }
     public function remove(): void
     {
@@ -158,7 +156,7 @@ $cases['pending and idle expiry'] = function ($f) {
     check($f->store->active(), 'Idle session ended early');
     $f->now++;
     $f->tick();
-    check(!$f->store->active() && !$f->applied && !$f->reboots, 'Idle session applied/rebooted');
+    check(!$f->store->active() && !$f->applied, 'Idle session applied');
 };
 $cases['save refresh and session ceiling'] = function ($f) {
     $f->start();
@@ -226,7 +224,7 @@ $cases['cumulative Apply plan and retained config inode'] = function ($f) {
     $f->store->change('revert');
     rejected(fn() => $f->save(), 'Write allowed during recovery');
     $f->tick();
-    check($f->applied === [['wireguard', 'unbound', 'filter']], 'Lost dirty service or dependency order');
+    check($f->applied === [['wireguard', 'unbound.general', 'filter']], 'Lost dirty service or dependency order');
     check(file_get_contents($f->path('dnsbl.json')) === '{"before":true}', 'Downloaded blocklist not restored');
     check(fstat($openConfig)['ino'] === $inode && stream_get_contents($openConfig) === $f->baseline, 'Replaced config inode');
     check((fileperms($f->path('config.xml')) & 0777) === 0640, 'Unsafe config mode');
@@ -239,9 +237,11 @@ $cases['failed Apply retries without losing recovery data'] = function ($f) {
     $f->start();
     $f->save();
     $f->store->change('revert');
-    $f->store->tick(fn() => throw new RuntimeException('configd failed'), fn() => false);
+    $f->store->tick(fn() => throw new RuntimeException('Apply action failed: unbound dnsbl_reload'));
     $state = $f->store->state();
     check($state['snapshot_restored'] && !$state['revert_running'] && $state['next_retry_seconds'] === 15, 'No durable retry');
+    check($state['last_revert_error'] === 'Apply action failed: unbound dnsbl_reload', 'Lost exact Apply failure');
+    check(!isset($state['reboot_requested']), 'Apply failure scheduled a reboot');
     check(is_file($f->path('commit_rollback/snapshot.xml')), 'Deleted failed recovery snapshot');
     check(!is_file($f->path('commit_rollback_notice.json')), 'Reported success before Apply succeeded');
     $f->restart();
@@ -251,19 +251,13 @@ $cases['failed Apply retries without losing recovery data'] = function ($f) {
     $f->tick();
     check($f->applied === [['filter']] && !$f->store->active(), 'Retry lost Apply plan');
 };
-$cases['unknown settings, failed reboot, cancelled reboot and boot recovery'] = function ($f) {
+$cases['unsupported changes rejected before saving; boot recovery still works'] = function ($f) {
     $f->start();
-    $f->save(str_replace('demo', 'changed', $f->baseline));
+    rejected(fn() => $f->save(str_replace('demo', 'changed', $f->baseline)), 'Unknown settings accepted');
+    check(file_get_contents($f->path('config.xml')) === $f->baseline, 'Unsupported save changed configuration');
+    check(!$f->marker()['countdown_active'], 'Rejected save armed countdown');
+    $f->save();
     $f->store->change('revert');
-    $f->tick();
-    check($f->reboots === 1 && !$f->applied && $f->store->active(), 'Unsupported setting silently live-applied');
-    $f->now += 15;
-    $f->store->tick(fn() => check(false, 'Unknown setting applied'), fn() => true);
-    check($f->store->state()['reboot_requested'], 'Successful reboot request lost marker');
-    rejected(fn() => $f->store->change('confirm'), 'Confirmed during accepted reboot');
-    $f->now += 60; // A cancelled reboot must not leave recovery stuck forever.
-    $f->tick();
-    check($f->reboots === 2, 'Cancelled reboot was not retried');
     $f->now = 5; // new boot, new monotonic clock origin
     $f->restart();
     $f->tick(true);
@@ -272,20 +266,20 @@ $cases['unknown settings, failed reboot, cancelled reboot and boot recovery'] = 
 $cases['revision metadata ignored, unknown attributes retained'] = function ($f) {
     $f->start();
     $f->save(str_replace('</opnsense>', '<revision><description>save</description></revision></opnsense>', $f->baseline));
-    check(!$f->marker()['reboot'] && !$f->marker()['services'], 'Revision metadata changed Apply plan');
-    $f->save(str_replace('<opnsense>', '<opnsense future="1">', $f->baseline));
-    check($f->marker()['reboot'], 'Unknown root attribute silently ignored');
+    check(!$f->marker()['unsupported'] && !$f->marker()['services'], 'Revision metadata changed Apply plan');
+    rejected(fn() => $f->save(str_replace('<opnsense>', '<opnsense future="1">', $f->baseline)),
+        'Unknown root attribute silently ignored');
 };
 $cases['Apply comparison normalizes XML without dropping unknown settings'] = function ($f) {
     $f->baseline = '<opnsense><system/><filter><rule z="2" a="1">allow</rule></filter></opnsense>';
     file_put_contents($f->path('config.xml'), $f->baseline);
     $f->start();
     $f->save("<opnsense>\n <system/>\n <filter><rule a=\"1\" z=\"2\">allow</rule></filter>\n</opnsense>");
-    check(!$f->marker()['services'] && !$f->marker()['reboot'], 'Formatting/attribute order caused Apply');
+    check(!$f->marker()['services'] && !$f->marker()['unsupported'], 'Formatting/attribute order caused Apply');
     $f->save('<opnsense><system/><OPNsense><Firewall/></OPNsense></opnsense>');
-    check(isset($f->marker()['services']['filter']) && !$f->marker()['reboot'], 'Deleted rules or empty MVC containers misclassified');
-    $f->save('<opnsense><system/><OPNsense><Firewall><futureModel>1</futureModel></Firewall></OPNsense></opnsense>');
-    check($f->marker()['reboot'], 'Unknown nested model silently ignored');
+    check(isset($f->marker()['services']['filter']) && !$f->marker()['unsupported'], 'Deleted rules or empty MVC containers misclassified');
+    rejected(fn() => $f->save('<opnsense><system/><OPNsense><Firewall><futureModel>1</futureModel></Firewall></OPNsense></opnsense>'),
+        'Unknown nested model silently ignored');
 };
 $cases['snapshot damage never overwrites config or discards evidence'] = function ($f) {
     $f->start();
@@ -294,7 +288,7 @@ $cases['snapshot damage never overwrites config or discards evidence'] = functio
     file_put_contents($f->path('commit_rollback/snapshot.xml'), '<opnsense>');
     $f->store->change('revert');
     $f->tick();
-    check(!$f->applied && !$f->reboots && $f->store->active(), 'Bad snapshot caused Apply/cleanup');
+    check(!$f->applied && $f->store->active(), 'Bad snapshot caused Apply/cleanup');
     check(file_get_contents($f->path('config.xml')) === $current, 'Bad snapshot overwrote config');
     rejected(fn() => $f->tick(true), 'Bad snapshot accepted at boot');
     $f->store->change('confirm');
@@ -318,7 +312,7 @@ $cases['missing DNSBL snapshot preserves recovery; initially absent DNSBL remove
     unlink($f->path('commit_rollback/dnsbl.json'));
     $f->store->change('revert');
     $f->tick();
-    check(!$f->applied && !$f->reboots && $f->store->active(), 'Missing DNSBL snapshot silently accepted');
+    check(!$f->applied && $f->store->active(), 'Missing DNSBL snapshot silently accepted');
     $f->store->change('confirm');
     unlink($f->path('dnsbl.json'));
     $f->start();
@@ -391,7 +385,7 @@ $cases['restore lock order and confirmation during Apply'] = function ($f) {
         $f->store->tick(function () use ($f) {
             file_put_contents($f->path('applying'), '1');
             awaitFile($f->path('finish-apply'));
-        }, fn() => false);
+        });
         exit(0);
     }
     $deadline = microtime(true) + 5;
@@ -413,7 +407,7 @@ $cases['worker crash during Apply replays persisted plan'] = function ($f) {
     $f->store->change('revert');
     $pid = pcntl_fork();
     if ($pid === 0) {
-        $f->store->tick(function () { exit(0); }, fn() => false);
+        $f->store->tick(function () { exit(0); });
         exit(1);
     }
     joinChild($pid);
@@ -451,6 +445,110 @@ $cases['worker liveness is an OS lock, not a stale PID'] = function ($f) {
     check($f->store->workerAlive(), 'Live worker not recognized');
     fclose($lock);
     check(!$f->store->workerAlive(), 'Stale lock file reported alive');
+};
+
+$cases['DNSBL deletion restores cached data and selects only Blocklists Apply'] = function ($f) {
+    $f->baseline = '<opnsense><OPNsense><unboundplus version="1.0.15"><general><enabled>1</enabled></general>' .
+        '<dnsbl><blocklist uuid="demo"><enabled>1</enabled></blocklist></dnsbl></unboundplus></OPNsense></opnsense>';
+    file_put_contents($f->path('config.xml'), $f->baseline);
+    $f->start();
+    $id = $f->marker()['session_id'];
+    $f->save(str_replace('<blocklist uuid="demo"><enabled>1</enabled></blocklist>', '', $f->baseline));
+    $f->store->apply('unbound.dnsbl', function () use ($f) {
+        check($f->marker()['services'] === ['unbound.dnsbl' => true], 'DNSBL selected a broader Apply');
+        file_put_contents($f->path('dnsbl.json'), '{"after":true}');
+    });
+    $f->store->change('revert');
+    $f->store->tick(function ($operations) use ($f) {
+        check($operations === ['unbound.dnsbl'], 'DNSBL rollback touched unrelated services');
+        check(file_get_contents($f->path('config.xml')) === $f->baseline, 'Apply ran before restoring XML');
+        check(file_get_contents($f->path('dnsbl.json')) === '{"before":true}', 'Apply ran before restoring DNSBL data');
+    });
+    check(!$f->store->active() && $f->store->state()['reverted_session_id'] === $id, 'Missing completed-session identity');
+};
+$cases['ordinary Unbound Apply and General coalescing'] = function ($f) {
+    $f->baseline = '<opnsense><OPNsense><unboundplus><general><enabled>1</enabled></general>' .
+        '<advanced><prefetch>0</prefetch></advanced></unboundplus></OPNsense></opnsense>';
+    file_put_contents($f->path('config.xml'), $f->baseline);
+    $f->start();
+    $f->save(str_replace('<prefetch>0', '<prefetch>1', $f->baseline));
+    check($f->marker()['services'] === ['unbound.reconfigure' => true], 'Advanced settings selected General Apply');
+    $f->save(str_replace('<enabled>1', '<enabled>0', $f->baseline));
+    $f->store->change('revert');
+    $f->tick();
+    check($f->applied === [['unbound.general']], 'Unbound was restarted twice');
+};
+$cases['standard services select shared reconfiguration operations'] = function ($f) {
+    $f->start();
+    $f->save(str_replace('</opnsense>', '<dnsmasq><enable>1</enable></dnsmasq><OPNsense>' .
+        '<Kea><dhcp4><general><enabled>1</enabled></general></dhcp4></Kea>' .
+        '<monit/><Syslog/><Hostwatch/></OPNsense></opnsense>', $f->baseline));
+    $f->store->change('revert');
+    $f->tick();
+    check($f->applied === [['dnsmasq.reconfigure', 'kea.reconfigure', 'syslog.reconfigure',
+        'monit.reconfigure', 'hostwatch.reconfigure']], 'Standard services lost their Apply operations');
+};
+$cases['Apply without Save is journaled; failures retain the operation'] = function ($f) {
+    $f->start();
+    rejected(fn() => $f->store->apply('unbound.dnsbl', function () use ($f) {
+        check(isset($f->marker()['services']['unbound.dnsbl']), 'Apply was not durable before execution');
+        file_put_contents($f->path('dnsbl.json'), '{"partial":true}');
+        throw new RuntimeException('partial Apply');
+    }), 'Apply failure was hidden');
+    check($f->marker()['countdown_active'] && $f->marker()['saves_count'] === 0, 'Apply did not arm recovery');
+    rejected(fn() => $f->store->apply('unknown', fn() => check(false, 'Unsupported Apply ran')),
+        'Unknown Apply accepted');
+    $f->now += 60;
+    rejected(fn() => $f->store->apply('filter', fn() => check(false, 'Expired Apply ran')), 'Expired Apply accepted');
+    $f->tick();
+    check($f->applied === [['unbound.dnsbl']], 'Partial Apply lost recovery');
+    check(file_get_contents($f->path('dnsbl.json')) === '{"before":true}', 'Apply-only DNSBL change not restored');
+};
+$cases['recovery and confirmation cannot cross an in-flight GUI Apply'] = function ($f) {
+    $f->start();
+    $f->save();
+    $pid = pcntl_fork();
+    if ($pid === 0) {
+        $f->store->apply('filter', function () use ($f) {
+            file_put_contents($f->path('applying'), '1');
+            awaitFile($f->path('finish-apply'));
+        });
+        exit(0);
+    }
+    awaitFile($f->path('applying'));
+    rejected(fn() => $f->store->change('confirm'), 'Confirmed while Apply still ran');
+    $f->store->change('revert');
+    $f->tick();
+    check(!$f->applied && !isset($f->marker()['snapshot_restored']), 'Recovery crossed GUI Apply');
+    file_put_contents($f->path('finish-apply'), '1');
+    joinChild($pid);
+    $f->tick();
+    check($f->applied === [['filter']] && !$f->store->active(), 'Recovery did not resume after GUI Apply');
+};
+$cases['old retry deadline does not stall a new boot'] = function ($f) {
+    $f->start();
+    $f->save();
+    $f->store->change('revert');
+    $f->store->tick(fn() => throw new RuntimeException('Apply failed'));
+    $f->now = 5;
+    $f->restart();
+    check($f->store->state()['next_retry_seconds'] === 0, 'Old uptime delayed recovery');
+    $f->tick();
+    check(!$f->store->active() && $f->applied === [['filter']], 'Worker did not recover in new boot');
+};
+$cases['legacy reboot marker retains recovery without scheduling another reboot'] = function ($f) {
+    $f->start();
+    $state = $f->marker();
+    $state['services'] = ['unbound' => true];
+    $state['reboot'] = true;
+    $state['reboot_requested'] = true;
+    file_put_contents($f->path('commit_rollback_pending.json'), json_encode($state));
+    $f->store->change('revert');
+    $f->tick();
+    check($f->applied === [['unbound.general', 'unbound.dnsbl']], 'Legacy Apply plan lost');
+    check($f->store->active() && !isset($f->marker()['reboot_requested']), 'Legacy session claimed recovery or requested reboot');
+    $f->tick(true);
+    check(!$f->store->active(), 'Legacy session could not recover at boot');
 };
 
 $cases['real Config save and restore hooks use the durable lease'] = function ($f) {

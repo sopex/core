@@ -35,41 +35,114 @@ namespace OPNsense\Core;
 class ServiceApply
 {
     private Backend $backend;
+    private \Closure $guard;
 
-    public function __construct(?Backend $backend = null)
+    public function __construct(?Backend $backend = null, ?\Closure $guard = null)
     {
         $this->backend = $backend ?? new Backend();
+        $this->guard = $guard ?? fn($operation, $apply) => CommitSession::getInstance()->apply($operation, $apply);
     }
 
     private function run(string $action): string
     {
         if (trim($this->backend->configdRun($action)) !== 'OK') {
-            throw new \RuntimeException(sprintf('Apply action failed: %s', $action));
+            throw new \RuntimeException(sprintf(gettext('Apply action failed: %s'), $action));
         }
         return 'OK';
     }
 
     public function firewall(bool $refreshAliases = false): string
     {
-        return $this->run($refreshAliases ? 'filter reload' : 'filter reload skip_alias');
+        return ($this->guard)('filter', fn() => $this->run($refreshAliases ? 'filter reload' : 'filter reload skip_alias'));
     }
 
     public function wireguard(): void
     {
-        $this->run('interface invoke registration');
-        // This action returns JSON rather than an OK status; force invalidation as in the GUI.
-        $this->backend->configdRun('!interface list assign-opts', false, 20);
-        $this->run('template reload OPNsense/Wireguard');
-        $this->run('wireguard configure');
+        ($this->guard)('wireguard', function () {
+            $this->run('interface invoke registration');
+            // Cache invalidation returns JSON, not an action status.
+            $this->backend->configdRun('!interface list assign-opts', false, 20);
+            $this->run('template reload OPNsense/Wireguard');
+            $this->run('wireguard configure');
+        });
     }
 
     public function unbound(bool $enabled): void
     {
-        $this->run('dns reload');
-        $this->run('unbound stop');
-        if ($enabled) {
-            $this->run('unbound start');
+        ($this->guard)('unbound.general', function () use ($enabled) {
+            // The existing "dns reload" action returns stdout. Use its status-returning variant.
+            $this->run('dns reload_status');
+            $this->configure('unbound', $enabled);
+            // ISC DHCP is optional; an absent legacy action is not an Apply failure.
+            if (is_file('/usr/local/opnsense/service/conf/actions.d/actions_dhcpd.conf')) {
+                $this->run('dhcpd restart');
+            }
+        });
+    }
+
+    public function unboundDnsbl(bool $enabled, bool $restored = false): string
+    {
+        return ($this->guard)('unbound.dnsbl', function () use ($enabled, $restored) {
+            $this->run('template reload OPNsense/Unbound/*');
+            if (!$restored) {
+                $this->run('unbound dnsbl_update');
+            }
+            // Recovery already restored dnsbl.json. Do not overwrite it or depend on Internet access.
+            return $enabled ? $this->run('unbound dnsbl_reload') : 'OK';
+        });
+    }
+
+    /** Shared implementation of ApiMutableServiceControllerBase's Apply operation. */
+    public function reconfigure(
+        string $service,
+        bool $enabled,
+        ?string $template = null,
+        bool $restart = true,
+        ?callable $status = null,
+        ?callable $registration = null,
+        bool $reloadFilter = false
+    ): void {
+        ($this->guard)($service . '.reconfigure', function () use (
+            $service, $enabled, $template, $restart, $status, $registration, $reloadFilter
+        ) {
+            $this->configure($service, $enabled, $template, $restart, $status, $registration, $reloadFilter);
+        });
+    }
+
+    private function configure(
+        string $service,
+        bool $enabled,
+        ?string $template = null,
+        bool $restart = true,
+        ?callable $status = null,
+        ?callable $registration = null,
+        bool $reloadFilter = false
+    ): void {
+        $name = escapeshellarg($service);
+        if ($restart || !$enabled) {
+            try {
+                $this->run($name . ' stop');
+            } catch (\RuntimeException $error) {
+                // rc(8) can fail "stop" when already stopped. Recovery must be repeatable.
+                $state = $this->backend->configdRun($name . ' status');
+                if (!str_contains($state, 'not running') || str_contains($state, 'is running')) {
+                    throw $error;
+                }
+            }
         }
-        $this->run('dhcpd restart');
+        if ($registration) {
+            $registration();
+        }
+        if ($reloadFilter) {
+            $this->run('filter reload skip_alias');
+        }
+        if ($template) {
+            $this->run('template reload ' . escapeshellarg($template));
+        }
+        if ($enabled) {
+            $running = !$restart && ($status ? $status() === 'running' :
+                str_contains($this->backend->configdRun($name . ' status'), 'is running'));
+            $this->run($name . ($running ? ' reload' : ' start'));
+        }
     }
 }

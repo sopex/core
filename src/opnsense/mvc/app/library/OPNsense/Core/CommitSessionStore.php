@@ -35,6 +35,22 @@ namespace OPNsense\Core;
  */
 class CommitSessionStore
 {
+    private const APPLY_PATHS = [
+        'filter' => 'filter', 'nat' => 'filter', 'aliases' => 'filter',
+        'OPNsense/Firewall/Filter' => 'filter', 'OPNsense/Firewall/Alias' => 'filter',
+        'OPNsense/Firewall/Category' => 'filter', 'OPNsense/wireguard' => 'wireguard',
+        // Remove the specific subtrees before comparing the rest of the Unbound model.
+        'OPNsense/unboundplus/dnsbl' => 'unbound.dnsbl',
+        'OPNsense/unboundplus/general' => 'unbound.general',
+        'OPNsense/unboundplus' => 'unbound.reconfigure',
+        'dnsmasq' => 'dnsmasq.reconfigure', 'OPNsense/Kea' => 'kea.reconfigure',
+        'OPNsense/Syslog' => 'syslog.reconfigure', 'OPNsense/monit' => 'monit.reconfigure',
+        'OPNsense/Hostwatch' => 'hostwatch.reconfigure', 'revision' => null
+    ];
+    private const APPLY_ORDER = [
+        'wireguard', 'dnsmasq.reconfigure', 'unbound.general', 'unbound.reconfigure', 'unbound.dnsbl',
+        'kea.reconfigure', 'filter', 'syslog.reconfigure', 'monit.reconfigure', 'hostwatch.reconfigure'
+    ];
     private \Closure $clock;
     private \Closure $wallclock;
 
@@ -54,11 +70,18 @@ class CommitSessionStore
         return $this->configDir . '/' . $name;
     }
 
-    private function lock()
+    private function lock(string $name = 'state', bool $wait = true)
     {
-        $handle = fopen($this->runDir . '/commit_session_state.lock', 'ce');
-        if (!$handle || !flock($handle, LOCK_EX)) {
+        $handle = fopen($this->runDir . '/commit_session_' . $name . '.lock', 'ce');
+        if (!$handle) {
             throw new \RuntimeException('Cannot lock protected session');
+        }
+        if (!flock($handle, LOCK_EX | ($wait ? 0 : LOCK_NB))) {
+            fclose($handle);
+            if ($wait) {
+                throw new \RuntimeException('Cannot lock protected session');
+            }
+            return null;
         }
         return $handle;
     }
@@ -82,6 +105,20 @@ class CommitSessionStore
         if (!is_array($state) || ($state['format'] ?? null) !== 1) {
             throw new \RuntimeException('Invalid session marker; keep the snapshot for recovery');
         }
+        // Read pending sessions written by earlier versions without losing their recovery plan.
+        if (isset($state['services']['unbound'])) {
+            unset($state['services']['unbound']);
+            $state['services'] += ['unbound.general' => true, 'unbound.dnsbl' => true];
+        }
+        $state['unsupported'] = ($state['unsupported'] ?? false) || ($state['reboot'] ?? false);
+        unset($state['reboot'], $state['reboot_requested']);
+        if (($state['last_clock'] ?? ($state['idle_deadline'] - 3600)) > ($this->clock)()) {
+            // A new monotonic origin must not carry an old retry deadline into this boot.
+            $state['status'] = 'reverting';
+            $state['countdown_active'] = false;
+            $state['retry_at'] = ($this->clock)();
+            $state['snapshot_restored'] = false;
+        }
         return $state;
     }
 
@@ -96,6 +133,7 @@ class CommitSessionStore
 
     private function write(array $state): void
     {
+        $state['last_clock'] = ($this->clock)();
         $this->atomic($this->path('commit_rollback_pending.json'), json_encode($state, JSON_THROW_ON_ERROR));
     }
 
@@ -179,17 +217,12 @@ class CommitSessionStore
         return $xml;
     }
 
-    /** Changed subtrees select the same backend operations used by the GUI. Unknown changes reboot. */
+    /** Changed subtrees select the same backend operations used by the GUI. */
     private function plan(string $proposed): array
     {
         $documents = [$this->xml($this->contents($this->path('commit_rollback/snapshot.xml'))), $this->xml($proposed)];
         $services = [];
-        foreach ([
-            'filter' => 'filter', 'nat' => 'filter', 'aliases' => 'filter',
-            'OPNsense/Firewall/Filter' => 'filter', 'OPNsense/Firewall/Alias' => 'filter',
-            'OPNsense/Firewall/Category' => 'filter', 'OPNsense/wireguard' => 'wireguard',
-            'OPNsense/unboundplus' => 'unbound', 'revision' => null
-        ] as $path => $service) {
+        foreach (self::APPLY_PATHS as $path => $service) {
             $values = [];
             foreach ($documents as $document) {
                 $values[] = '';
@@ -217,7 +250,7 @@ class CommitSessionStore
         if (isset($services['wireguard'])) {
             $services['filter'] = true;
         }
-        return ['services' => $services, 'reboot' => $documents[0]->C14N() !== $documents[1]->C14N()];
+        return ['services' => $services, 'unsupported' => $documents[0]->C14N() !== $documents[1]->C14N()];
     }
 
     public function active(): bool
@@ -247,7 +280,8 @@ class CommitSessionStore
         }
         $notice = is_file($this->path('commit_rollback_notice.json'));
         if (!$state) {
-            return ['active' => false, 'has_notice' => $notice];
+            $reverted = $notice ? json_decode($this->contents($this->path('commit_rollback_notice.json')), true) : [];
+            return ['active' => false, 'has_notice' => $notice, 'reverted_session_id' => $reverted['session_id'] ?? null];
         }
         $now = ($this->clock)();
         return $state + [
@@ -262,6 +296,7 @@ class CommitSessionStore
 
     public function start(string $username, string $source, array $settings, callable $guiUrl): array
     {
+        $applyLock = $this->lock('apply');
         $config = fopen($this->path('config.xml'), 'rbe');
         if (!$config || !flock($config, LOCK_EX)) {
             throw new \RuntimeException('Cannot lock configuration for snapshot');
@@ -287,13 +322,48 @@ class CommitSessionStore
                     'max_extensions' => $settings['max_extensions'], 'max_session_seconds' => $settings['max_session'] * 60,
                     'extensions_count' => 0, 'saves_count' => 0, 'revisions' => [],
                     'idle_deadline' => ($this->clock)() + 3600, 'dnsbl_snapshot_exists' => $dnsblExists,
-                    'services' => [], 'reboot' => false, 'revert_attempts' => 0, 'revert_running' => false
+                    'services' => [], 'unsupported' => false, 'revert_attempts' => 0, 'revert_running' => false
                 ];
                 $this->write($state);
                 return $state;
             });
         } finally {
             fclose($config);
+            fclose($applyLock);
+        }
+    }
+
+    /** Journal before touching runtime state; keep GUI Apply and recovery from crossing each other. */
+    public function apply(string $operation, callable $apply)
+    {
+        $lease = $this->lock('apply');
+        try {
+            $this->locked(function () use ($operation) {
+                $state = $this->read();
+                if (!$state) {
+                    return;
+                }
+                $now = ($this->clock)();
+                if ($state['status'] === 'reverting' || ($state['deadline'] ?? INF) <= $now) {
+                    throw new \RuntimeException(gettext('Configuration rollback is due; wait for recovery to finish.'));
+                }
+                if (!in_array($operation, self::APPLY_ORDER, true)) {
+                    throw new \RuntimeException(sprintf(gettext('Protected rollback does not support Apply operation: %s'), $operation));
+                }
+                $state['services'][$operation] = true;
+                if ($operation === 'wireguard') {
+                    $state['services']['filter'] = true;
+                }
+                if (!$state['countdown_active']) {
+                    $state['countdown_active'] = true;
+                    $state['limit_deadline'] = $now + $state['max_session_seconds'];
+                    $state['deadline'] = min($now + $state['countdown_seconds'], $state['limit_deadline']);
+                }
+                $this->write($state);
+            });
+            return $apply();
+        } finally {
+            fclose($lease);
         }
     }
 
@@ -315,8 +385,12 @@ class CommitSessionStore
                 throw new \RuntimeException(gettext('Configuration rollback is due; wait for recovery to finish.'));
             }
             $plan = $this->plan($proposed);
+            if ($plan['unsupported']) {
+                throw new \RuntimeException(gettext(
+                    'These settings have no supported live rollback operation. End the protected session before changing them.'
+                ));
+            }
             $state['services'] += $plan['services'];
-            $state['reboot'] = $state['reboot'] || $plan['reboot'];
             if (!$state['countdown_active']) {
                 $state['countdown_active'] = true;
                 $state['limit_deadline'] = $now + $state['max_session_seconds'];
@@ -354,48 +428,58 @@ class CommitSessionStore
 
     public function change(string $action): array
     {
-        return $this->locked(function () use ($action) {
-            $added = 0;
-            $state = $this->read();
-            if (!$state) {
-                throw new \RuntimeException(gettext('No active protected change session.'));
+        $applyLock = $action === 'confirm' ? $this->lock('apply', false) : null;
+        if ($action === 'confirm' && !$applyLock) {
+            throw new \RuntimeException(gettext('An Apply operation is running. Wait for it to finish.'));
+        }
+        try {
+            return $this->locked(function () use ($action) {
+                $added = 0;
+                $state = $this->read();
+                if (!$state) {
+                    throw new \RuntimeException(gettext('No active protected change session.'));
+                }
+                $now = ($this->clock)();
+                if ($action === 'revert') {
+                    $state['status'] = 'reverting';
+                    $state['countdown_active'] = false;
+                    $state['revert_reason'] = $state['revert_reason'] ?? 'manual';
+                    if (!$state['revert_running']) {
+                        $state['retry_at'] = $now;
+                    }
+                } elseif ($action === 'confirm') {
+                    $failed = $state['status'] === 'reverting' && !empty($state['last_revert_error']);
+                    if ($state['revert_running']) {
+                        throw new \RuntimeException(gettext('Configuration rollback is running. Wait for it to finish.'));
+                    }
+                    if (!$failed && ($state['status'] === 'reverting' || ($state['deadline'] ?? INF) <= $now)) {
+                        throw new \RuntimeException(gettext('The countdown has expired; rollback is due.'));
+                    }
+                    $this->audit($state, 'Confirmed');
+                    $this->cleanup();
+                    return [];
+                } elseif ($action === 'extend') {
+                    if (!$state['countdown_active'] || ($state['deadline'] ?? 0) <= $now || $state['status'] === 'reverting') {
+                        throw new \RuntimeException(gettext('No running countdown can be extended.'));
+                    }
+                    $deadline = min($state['deadline'] + $state['extension_seconds'], $state['limit_deadline']);
+                    if ($state['extensions_count'] >= $state['max_extensions'] || $deadline <= $state['deadline']) {
+                        throw new \RuntimeException(gettext('The extension or maximum session limit has been reached.'));
+                    }
+                    $added = $deadline - $state['deadline'];
+                    $state['extensions_count']++;
+                    $state['deadline'] = $deadline;
+                } else {
+                    throw new \InvalidArgumentException('Unknown session action');
+                }
+                $this->write($state);
+                return $this->state() + ['added_seconds' => $added];
+            });
+        } finally {
+            if ($applyLock) {
+                fclose($applyLock);
             }
-            $now = ($this->clock)();
-            if ($action === 'revert') {
-                $state['status'] = 'reverting';
-                $state['countdown_active'] = false;
-                $state['revert_reason'] = $state['revert_reason'] ?? 'manual';
-                if (!$state['revert_running'] && empty($state['reboot_requested'])) {
-                    $state['retry_at'] = $now;
-                }
-            } elseif ($action === 'confirm') {
-                $failed = $state['status'] === 'reverting' && !empty($state['last_revert_error']);
-                if ($state['revert_running'] || (!empty($state['reboot_requested']) && $state['retry_at'] > $now)) {
-                    throw new \RuntimeException(gettext('Configuration rollback is running. Wait for it to finish.'));
-                }
-                if (!$failed && ($state['status'] === 'reverting' || ($state['deadline'] ?? INF) <= $now)) {
-                    throw new \RuntimeException(gettext('The countdown has expired; rollback is due.'));
-                }
-                $this->audit($state, 'Confirmed');
-                $this->cleanup();
-                return [];
-            } elseif ($action === 'extend') {
-                if (!$state['countdown_active'] || ($state['deadline'] ?? 0) <= $now || $state['status'] === 'reverting') {
-                    throw new \RuntimeException(gettext('No running countdown can be extended.'));
-                }
-                $deadline = min($state['deadline'] + $state['extension_seconds'], $state['limit_deadline']);
-                if ($state['extensions_count'] >= $state['max_extensions'] || $deadline <= $state['deadline']) {
-                    throw new \RuntimeException(gettext('The extension or maximum session limit has been reached.'));
-                }
-                $added = $deadline - $state['deadline'];
-                $state['extensions_count']++;
-                $state['deadline'] = $deadline;
-            } else {
-                throw new \InvalidArgumentException('Unknown session action');
-            }
-            $this->write($state);
-            return $this->state() + ['added_seconds' => $added];
-        });
+        }
     }
 
     private function cleanup(): void
@@ -419,6 +503,7 @@ class CommitSessionStore
                 $this->atomic($this->path('backup/' . $backup), $this->contents($this->path('commit_rollback/snapshot.xml')));
                 $revisions[] = $backup;
                 $this->atomic($this->path('commit_rollback_notice.json'), json_encode([
+                    'session_id' => $state['session_id'],
                     'reverted_at' => ($this->wallclock)(), 'reverted_at_iso' => date('c', (int)($this->wallclock)()),
                     'username' => $state['username'], 'source' => $state['source'],
                     'reason' => $state['revert_reason'], 'backup_id' => $backup, 'gui_url' => $state['gui_url']
@@ -448,7 +533,7 @@ class CommitSessionStore
                 if (empty($state['snapshot_restored'])) {
                     $snapshot = $this->contents($this->path('commit_rollback/snapshot.xml'));
                     $this->xml($snapshot);
-                    if (!empty($state['services']['unbound'])) {
+                    if (array_intersect(['unbound.general', 'unbound.reconfigure', 'unbound.dnsbl'], array_keys($state['services']))) {
                         if ($state['dnsbl_snapshot_exists']) {
                             $this->copy($this->path('commit_rollback/dnsbl.json'), $this->dnsblFile, 0644);
                         } elseif (is_file($this->dnsblFile)) {
@@ -473,7 +558,20 @@ class CommitSessionStore
     }
 
     /** Called only by the worker holding worker.lock, or the early boot hook before services start. */
-    public function tick(callable $apply, callable $reboot, bool $boot = false): void
+    public function tick(callable $apply, bool $boot = false): void
+    {
+        $lease = $this->lock('apply', $boot);
+        if (!$lease) {
+            return; // A GUI Apply still owns runtime state. Try again on the next worker tick.
+        }
+        try {
+            $this->recover($apply, $boot);
+        } finally {
+            fclose($lease);
+        }
+    }
+
+    private function recover(callable $apply, bool $boot): void
     {
         if (!$this->active()) {
             return;
@@ -502,7 +600,6 @@ class CommitSessionStore
             $state['countdown_active'] = false;
             $state['revert_reason'] = $boot ? 'unconfirmed_at_boot' : ($state['revert_reason'] ?? 'countdown_expired');
             $state['revert_running'] = true;
-            $state['reboot_requested'] = false;
             $state['revert_attempts']++;
             if ($boot) {
                 $state['snapshot_restored'] = false;
@@ -513,18 +610,16 @@ class CommitSessionStore
         if (!$state) {
             return;
         }
-        $rebootRequested = false;
         try {
             $state = $this->restore();
             if (!$boot) {
-                try {
-                    if ($state['reboot']) {
-                        throw new \RuntimeException('Changed settings require boot-time reconfiguration');
-                    }
-                    $apply(array_values(array_intersect(['wireguard', 'unbound', 'filter'], array_keys($state['services']))));
-                } catch (\Throwable $error) {
-                    $rebootRequested = $reboot();
-                    throw new \RuntimeException($error->getMessage() . ($rebootRequested ? '; reboot requested' : '; reboot failed'));
+                $operations = array_values(array_intersect(self::APPLY_ORDER, array_keys($state['services'])));
+                if (in_array('unbound.general', $operations, true)) {
+                    $operations = array_values(array_diff($operations, ['unbound.reconfigure']));
+                }
+                $apply($operations);
+                if ($state['unsupported']) {
+                    throw new \RuntimeException(gettext('This saved session contains changes without a live rollback operation. Manual recovery is required.'));
                 }
             }
             $this->locked(function () use ($state) {
@@ -532,12 +627,11 @@ class CommitSessionStore
                 $this->cleanup();
             });
         } catch (\Throwable $error) {
-            $this->locked(function () use ($error, $rebootRequested) {
+            $this->locked(function () use ($error) {
                 $state = $this->read();
                 $state['last_revert_error'] = $error->getMessage();
                 $state['revert_running'] = false;
-                $state['reboot_requested'] = $rebootRequested;
-                $state['retry_at'] = ($this->clock)() + ($rebootRequested ? 60 : min(300, 15 * 2 ** min(5, $state['revert_attempts'] - 1)));
+                $state['retry_at'] = ($this->clock)() + min(300, 15 * 2 ** min(5, $state['revert_attempts'] - 1));
                 $this->write($state);
             });
             syslog(LOG_ERR, 'commit-session: ' . $error->getMessage());

@@ -249,6 +249,10 @@ class CommitSessionManager {
                         this.startPolling();
                     }
                 } else {
+                    if (data && this.sessionData && data.reverted_session_id === this.sessionData.session_id) {
+                        window.location.reload();
+                        return;
+                    }
                     this.active = false;
                     this.removeBanner();
                     this.stopTimer();
@@ -293,6 +297,10 @@ class CommitSessionManager {
                     }
                     this.renderBanner();
                 } else {
+                    if (data && this.sessionData && data.reverted_session_id === this.sessionData.session_id) {
+                        window.location.reload();
+                        return;
+                    }
                     this.active = false;
                     this.removeBanner();
                     this.stopTimer();
@@ -385,7 +393,7 @@ class CommitSessionManager {
                             <span style="margin: 0 8px;">|</span>
                             <span id="cs-banner-msg">
                                 ${msgHtml}
-                                ${failing && (!data.reboot_requested || data.next_retry_seconds === 0) ? '<button id="cs-btn-confirm" class="btn btn-danger btn-xs">Accept current state</button>' : ''}
+                                ${failing && !data.revert_running ? '<button id="cs-btn-confirm" class="btn btn-danger btn-xs">Accept current state</button>' : ''}
                             </span>
                         </div>
                     </div>
@@ -439,7 +447,6 @@ class CommitSessionManager {
                         <div style="font-size: 0.85em; opacity: 0.85; margin-top: 2px;">
                             Session by <strong>${userStr}</strong> via <strong>${sourceStr}</strong>.
                             Extensions remaining: <strong>${extensionsRemaining} of ${maxExtensions}</strong>.
-                            ${data.reboot ? '<br/>Rollback of these changes requires a firewall restart.' : ''}
                             ${sessionLimitHtml}
                         </div>
                     </div>

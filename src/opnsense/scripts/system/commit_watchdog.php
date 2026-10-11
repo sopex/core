@@ -47,23 +47,34 @@ $lock = fopen('/var/run/commit_session_worker.lock', 'ce');
 if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
     exit(1);
 }
-$run = function (array $command): bool {
+$apply = function (array $services): void {
+    if (!$services) {
+        return;
+    }
     // timeout also bounds a hung bootstrap or backend, independently of PHP execution limits.
-    exec('/usr/bin/timeout -k 5 180 ' . implode(' ', array_map('escapeshellarg', $command)) .
-        ' > /dev/null 2>&1', $output, $status);
-    return $status === 0;
-};
-$apply = function (array $services) use ($run): void {
-    if ($services && !$run(array_merge(
-        ['/usr/local/bin/php', '/usr/local/opnsense/scripts/system/commit_apply.php'], $services
-    ))) {
-        throw new RuntimeException('Apply failed: ' . implode(', ', $services));
+    $command = array_merge(['/usr/local/bin/php', '/usr/local/opnsense/scripts/system/commit_apply.php'], $services);
+    // A file avoids unbounded exec() output while preserving the actual failed action for the banner.
+    $log = tmpfile();
+    if (!$log) {
+        throw new RuntimeException('Cannot capture Apply diagnostics');
+    }
+    try {
+        $path = stream_get_meta_data($log)['uri'];
+        exec('/usr/bin/timeout -k 5 180 ' . implode(' ', array_map('escapeshellarg', $command)) .
+            ' > ' . escapeshellarg($path) . ' 2>&1', $output, $status);
+        if ($status !== 0) {
+            $size = fstat($log)['size'];
+            fseek($log, max(0, $size - 2048));
+            $detail = trim(stream_get_contents($log));
+            throw new RuntimeException($detail ?: 'Apply exited with status ' . $status . ': ' . implode(', ', $services));
+        }
+    } finally {
+        fclose($log);
     }
 };
-$reboot = fn() => $run(['/sbin/shutdown', '-r', 'now']) || $run(['/sbin/reboot']);
 if ($mode === '--boot-revert') {
     try {
-        $store->tick($apply, $reboot, true);
+        $store->tick($apply, true);
         exit(0);
     } catch (Throwable $error) {
         fwrite(STDERR, 'Protected session boot recovery failed: ' . $error->getMessage() . "\n");
@@ -73,7 +84,7 @@ if ($mode === '--boot-revert') {
 // Keep one supervised worker. Session completion never kills or unlinks another process's pidfile.
 while (true) {
     try {
-        $store->tick($apply, $reboot);
+        $store->tick($apply);
     } catch (Throwable $error) {
         syslog(LOG_ERR, $error->getMessage());
     }
