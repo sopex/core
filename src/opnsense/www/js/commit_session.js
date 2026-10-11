@@ -373,8 +373,8 @@ class CommitSessionManager {
                     : 'Retrying shortly.';
                 msgHtml = 'Rollback failed ' + attempts + ' time' + (attempts === 1 ? '' : 's') +
                     ' (' + $('<span>').text(data.last_revert_error).html() + '). ' + retryStr +
-                    ' The firewall is still running the unconfirmed configuration.' +
-                    ' Confirm the session to keep it and stop retrying.';
+                    ' Configuration and running services may be only partially restored.' +
+                    ' Accept the current state to stop retrying.';
             }
             let html = `
                 <div id="commit-session-banner" class="alert ${bannerClass}" style="margin: 10px 15px; padding: 12px 15px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
@@ -385,6 +385,7 @@ class CommitSessionManager {
                             <span style="margin: 0 8px;">|</span>
                             <span id="cs-banner-msg">
                                 ${msgHtml}
+                                ${failing && (!data.reboot_requested || data.next_retry_seconds === 0) ? '<button id="cs-btn-confirm" class="btn btn-danger btn-xs">Accept current state</button>' : ''}
                             </span>
                         </div>
                     </div>
@@ -392,6 +393,7 @@ class CommitSessionManager {
             `;
             $container.html(html);
             this.updateHeaderButton();
+            this.bindBannerActions();
             return;
         }
 
@@ -437,6 +439,7 @@ class CommitSessionManager {
                         <div style="font-size: 0.85em; opacity: 0.85; margin-top: 2px;">
                             Session by <strong>${userStr}</strong> via <strong>${sourceStr}</strong>.
                             Extensions remaining: <strong>${extensionsRemaining} of ${maxExtensions}</strong>.
+                            ${data.reboot ? '<br/>Rollback of these changes requires a firewall restart.' : ''}
                             ${sessionLimitHtml}
                         </div>
                     </div>
@@ -508,9 +511,12 @@ class CommitSessionManager {
 
     bindBannerActions() {
         $('#cs-btn-confirm').off('click').on('click', () => {
+            const acceptingRecovery = this.sessionData?.status === 'reverting';
             BootstrapDialog.confirm({
                 title: 'Confirm Configuration Changes',
-                message: 'Are you sure you want to confirm all changes and end the protected change session?',
+                message: acceptingRecovery
+                    ? 'Recovery may be incomplete. Stop automatic retries and accept the current configuration and service state?'
+                    : 'Are you sure you want to confirm all changes and end the protected change session?',
                 type: BootstrapDialog.TYPE_SUCCESS,
                 btnOKClass: 'btn-success',
                 btnOKLabel: 'Confirm',
@@ -528,7 +534,8 @@ class CommitSessionManager {
                                 }
                                 BootstrapDialog.show({
                                     title: 'Session Confirmed',
-                                    message: 'The protected change session has been ended. Your changes are confirmed.',
+                                    message: acceptingRecovery ? 'Automatic recovery stopped. Verify the current configuration and running services.'
+                                        : 'The protected change session has been ended. Your changes are confirmed.',
                                     type: BootstrapDialog.TYPE_INFO
                                 });
                             } else {
@@ -548,8 +555,8 @@ class CommitSessionManager {
             ajaxCall('/api/core/commit_session/extend', {}, (data) => {
                 if (data && data.status === 'ok') {
                     if (this.sessionData) {
-                        this.sessionData.extensions_count = data.extensions_count;
-                        this.localRemainingSeconds += (data.extension_seconds || 300);
+                        this.sessionData = data;
+                        this.localRemainingSeconds = data.remaining_seconds;
                     }
                     this.renderBanner();
                 } else {

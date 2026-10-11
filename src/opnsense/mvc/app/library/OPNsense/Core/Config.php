@@ -421,10 +421,10 @@ class Config extends Singleton
 
         if (!is_resource($this->config_file_handle)) {
             if (is_writable($this->config_file)) {
-                $this->config_file_handle = fopen($this->config_file, "r+");
+                $this->config_file_handle = fopen($this->config_file, "r+e");
             } else {
                 // open in read-only mode
-                $this->config_file_handle = fopen($this->config_file, "r");
+                $this->config_file_handle = fopen($this->config_file, "re");
             }
         }
 
@@ -642,12 +642,35 @@ class Config extends Singleton
     private function overwrite($filename)
     {
         $fhandle = fopen($this->config_file, "a+e");
-        if (flock($fhandle, LOCK_EX)) {
-            fseek($fhandle, 0);
-            chmod($this->config_file, 0640);
-            ftruncate($fhandle, 0);
-            fwrite($fhandle, file_get_contents($filename));
+        $session = CommitSession::getInstance();
+        $lease = null;
+        try {
+            if (!flock($fhandle, LOCK_EX)) {
+                throw new ConfigException("Unable to lock config");
+            }
+            $contents = file_get_contents($filename);
+            $lease = $session->beginSave($contents);
+            $this->writeConfigContents($fhandle, $contents, $lease !== null);
+        } finally {
+            $session->finishSave($lease, null);
             fclose($fhandle);
+        }
+    }
+
+    /** Caller holds the config lock and, for a protected write, the durable session lease. */
+    private function writeConfigContents($handle, string $contents, bool $durable): void
+    {
+        if (!chmod($this->config_file, 0640) || fseek($handle, 0) !== 0 || !ftruncate($handle, 0)) {
+            throw new ConfigException("Unable to prepare config for writing");
+        }
+        for ($offset = 0; $offset < strlen($contents); $offset += $written) {
+            $written = fwrite($handle, substr($contents, $offset));
+            if (!$written) {
+                throw new ConfigException("Unable to write config");
+            }
+        }
+        if (!fflush($handle) || ($durable && !fsync($handle))) {
+            throw new ConfigException("Unable to sync config");
         }
     }
 
@@ -751,42 +774,31 @@ class Config extends Singleton
         $this->checkvalid();
         $time = microtime(true);
 
-        // Notify protected change session if active
         $commitSession = CommitSession::getInstance();
-        if ($commitSession->isActive()) {
-            if (!is_array($revision)) {
-                $revision = $this->getRevisionContext();
-            }
-            $revision['session_tag'] = 'Pending';
-        }
-
-        // update revision information ROOT.revision tag, align timestamp to backup output
-        $revision = $this->updateRevision($revision, null, $time);
-
         if ($this->config_file_handle !== null) {
-            if (flock($this->config_file_handle, LOCK_EX)) {
-                fseek($this->config_file_handle, 0);
-                chmod($this->config_file, 0640);
-                ftruncate($this->config_file_handle, 0);
-                fwrite($this->config_file_handle, (string)$this);
-                // flush, unlock, but keep the handle open
-                fflush($this->config_file_handle);
+            if (!flock($this->config_file_handle, LOCK_EX)) {
+                throw new ConfigException("Unable to lock config");
+            }
+            $lease = null;
+            $backup_filename = null;
+            try {
+                $revision = $this->updateRevision($revision, null, $time);
+                $lease = $commitSession->beginSave((string)$this, $revision);
+                if ($lease !== null) {
+                    $revision['session_tag'] = 'Pending';
+                    $revision = $this->updateRevision($revision, null, $time);
+                }
+                $this->writeConfigContents($this->config_file_handle, (string)$this, $lease !== null);
                 $backup_filename = $backup ? $this->backup($time) : null;
                 if ($backup_filename) {
                     $this->auditLogChange($backup_filename, $revision);
-                    // use syslog to trigger a new configd event, which should signal a syshook config (in batch).
-                    // Although we include the backup filename, the event handler is responsible to determine the
-                    // last processed event itself. (it's merely added for debug purposes)
                     $logger = new Syslog('config', null, LOG_LOCAL5);
                     $logger->info("config-event: new_config " . $backup_filename);
                 }
-                if ($commitSession->isActive()) {
-                    $commitSession->onConfigSave($backup_filename ? basename($backup_filename) : null, $revision);
-                }
+            } finally {
+                $commitSession->finishSave($lease, $backup_filename ?: null);
                 flock($this->config_file_handle, LOCK_UN);
                 $this->mtime = fstat($this->config_file_handle)['mtime'];
-            } else {
-                throw new ConfigException("Unable to lock config");
             }
         }
 

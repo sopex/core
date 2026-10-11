@@ -84,7 +84,7 @@ if (!$cs->isActive()) {
     echo "Reconnect URL:  " . ($state['gui_url'] ?? 'N/A') . "\n";
     echo "\nActions:\n";
     echo "  1) Confirm changes (end protected session)\n";
-    echo "  2) Extend countdown (+5 minutes)\n";
+    echo "  2) Extend countdown (+" . (($state['extension_seconds'] ?? 300) / 60) . " minutes)\n";
     echo "  3) Revert configuration to snapshot now\n";
     echo "  4) View configuration diff\n";
     echo "  0) Return to main menu\n\n";
@@ -104,7 +104,7 @@ if (!$cs->isActive()) {
         case '2':
             $res = $cs->extend('root@console', 'console');
             if (!empty($res['status']) && $res['status'] === 'ok') {
-                echo "\nCountdown extended by " . ($res['extension_seconds'] / 60) . " minutes.\n";
+                echo "\nCountdown extended by " . ($res['added_seconds'] / 60) . " minutes.\n";
                 echo "Extensions used: {$res['extensions_count']} of {$res['max_extensions']}\n";
             } else {
                 echo "\nFailed to extend countdown: " . ($res['message'] ?? 'max extensions reached or not counting') . "\n";

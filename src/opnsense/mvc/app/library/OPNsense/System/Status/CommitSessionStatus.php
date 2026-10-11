@@ -55,10 +55,10 @@ class CommitSessionStatus extends AbstractStatus
             $attempts = (int)($state['revert_attempts'] ?? 0);
             $this->internalTitle = gettext('Reverting Configuration');
             if ($attempts > 0 && !empty($state['last_revert_error']) && empty($state['revert_running'])) {
-                // A failed rollback must be loud: the box is still on the unconfirmed configuration
+                // Recovery can fail after restoring XML but before all services have applied it.
                 $this->internalStatus = SystemStatusCode::ERROR;
                 $this->internalMessage = sprintf(
-                    gettext('Configuration rollback failed %d time(s) (%s). Retrying automatically; confirm the session to keep the current configuration instead.'),
+                    gettext('Configuration rollback failed %d time(s) (%s). Configuration and services may be partially restored. Retrying automatically; accept the current state to stop retrying.'),
                     $attempts,
                     $state['last_revert_error']
                 );

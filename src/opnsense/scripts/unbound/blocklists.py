@@ -43,8 +43,7 @@ if __name__ == '__main__':
         help="Action to perform"
     )
 
-    # generate/update/list subcommands
-    subparsers.add_parser("generate", help="Generate blocklist using cached downloads only")
+    # update/list subcommands
     subparsers.add_parser("update", help="Update blocklist")
     subparsers.add_parser("list", help="List blocklist configuration sorted by priority")
 
@@ -54,8 +53,6 @@ if __name__ == '__main__':
 
     if args.command == "modify":
         parser_obj.modify_blocklist(args.uuid, args.domain, args.action)
-    elif args.command == "generate":
-        parser_obj.update_blocklist(cache_only=True)
     elif args.command == "update":
         parser_obj.update_blocklist()
     elif args.command == "list":

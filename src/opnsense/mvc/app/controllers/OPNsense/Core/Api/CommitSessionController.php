@@ -47,72 +47,35 @@ class CommitSessionController extends ApiControllerBase
         return CommitSession::getInstance()->getState();
     }
 
-    /**
-     * Start a protected change session
-     * @return array
-     */
+    private function mutate(string $operation): array
+    {
+        $this->throwReadOnly();
+        if (!$this->request->isPost()) {
+            return ['status' => 'failed', 'message' => gettext('POST request required.')];
+        }
+        $source = $this->request->getHeader('X-Client-Type');
+        $source = in_array($source, ['gui', 'api', 'console'], true) ? $source : 'api';
+        return CommitSession::getInstance()->$operation($this->getUserName(), $source);
+    }
+
     public function startAction()
     {
-        $this->throwReadOnly();
-        if (!$this->request->isPost()) {
-            return ['status' => 'failed', 'message' => gettext('POST request required.')];
-        }
-
-        $source = $this->request->getHeader('X-Client-Type');
-        $source = in_array($source, ['gui', 'api', 'console'], true) ? $source : 'api';
-
-        return CommitSession::getInstance()->start($this->getUserName(), $source);
+        return $this->mutate('start');
     }
 
-    /**
-     * Confirm changes and end protected change session
-     * @return array
-     */
     public function confirmAction()
     {
-        $this->throwReadOnly();
-        if (!$this->request->isPost()) {
-            return ['status' => 'failed', 'message' => gettext('POST request required.')];
-        }
-
-        $source = $this->request->getHeader('X-Client-Type');
-        $source = in_array($source, ['gui', 'api', 'console'], true) ? $source : 'api';
-
-        return CommitSession::getInstance()->confirm($this->getUserName(), $source);
+        return $this->mutate('confirm');
     }
 
-    /**
-     * Extend countdown
-     * @return array
-     */
     public function extendAction()
     {
-        $this->throwReadOnly();
-        if (!$this->request->isPost()) {
-            return ['status' => 'failed', 'message' => gettext('POST request required.')];
-        }
-
-        $source = $this->request->getHeader('X-Client-Type');
-        $source = in_array($source, ['gui', 'api', 'console'], true) ? $source : 'api';
-
-        return CommitSession::getInstance()->extend($this->getUserName(), $source);
+        return $this->mutate('extend');
     }
 
-    /**
-     * Immediately revert configuration to pre-session snapshot
-     * @return array
-     */
     public function revertAction()
     {
-        $this->throwReadOnly();
-        if (!$this->request->isPost()) {
-            return ['status' => 'failed', 'message' => gettext('POST request required.')];
-        }
-
-        $source = $this->request->getHeader('X-Client-Type');
-        $source = in_array($source, ['gui', 'api', 'console'], true) ? $source : 'api';
-
-        return CommitSession::getInstance()->revert($this->getUserName(), $source, 'manual');
+        return $this->mutate('revert');
     }
 
     /**

@@ -552,12 +552,14 @@
 /usr/local/opnsense/mvc/app/library/OPNsense/Base/ViewTranslator.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/Backend.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/CommitSession.php
+/usr/local/opnsense/mvc/app/library/OPNsense/Core/CommitSessionStore.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/Config.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/ConfigException.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/ConfigMaintenance.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/File.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/FileObject.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/SanitizeFilter.php
+/usr/local/opnsense/mvc/app/library/OPNsense/Core/ServiceApply.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/Shell.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/Singleton.php
 /usr/local/opnsense/mvc/app/library/OPNsense/Core/Syslog.php
@@ -1110,7 +1112,6 @@
 /usr/local/opnsense/mvc/tests/app/config/config.php
 /usr/local/opnsense/mvc/tests/app/library/OPNsense/Core/ConfigConfig/backup/array.xml
 /usr/local/opnsense/mvc/tests/app/library/OPNsense/Core/ConfigConfig/backup/object.xml
-/usr/local/opnsense/mvc/tests/app/library/OPNsense/Core/CommitSessionTest.php
 /usr/local/opnsense/mvc/tests/app/library/OPNsense/Core/ConfigTest.php
 /usr/local/opnsense/mvc/tests/app/library/OPNsense/Core/ShellTest.php
 /usr/local/opnsense/mvc/tests/app/library/OPNsense/Firewall/FilterRuleTest.php
@@ -1164,7 +1165,8 @@
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Kea/FieldTypes/KeaOptionDataFieldTest.php
 /usr/local/opnsense/mvc/tests/phpunit.xml
 /usr/local/opnsense/mvc/tests/setup.php
-/usr/local/opnsense/mvc/tests/test_commit_watchdog.py
+/usr/local/opnsense/mvc/tests/test_commit_session.php
+/usr/local/opnsense/mvc/tests/test_service_apply.php
 /usr/local/opnsense/scripts/auth/add_user.php
 /usr/local/opnsense/scripts/auth/list_group_members.php
 /usr/local/opnsense/scripts/auth/sync_group.php
@@ -1456,7 +1458,8 @@
 /usr/local/opnsense/scripts/system/bectl.py
 /usr/local/opnsense/scripts/system/cert_fetch_local.py
 /usr/local/opnsense/scripts/system/certctl.py
-/usr/local/opnsense/scripts/system/commit_watchdog.py
+/usr/local/opnsense/scripts/system/commit_apply.php
+/usr/local/opnsense/scripts/system/commit_watchdog.php
 /usr/local/opnsense/scripts/system/cpu.py
 /usr/local/opnsense/scripts/system/crl_fetch.py
 /usr/local/opnsense/scripts/system/disk_info.py
