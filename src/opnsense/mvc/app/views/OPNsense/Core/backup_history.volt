@@ -46,7 +46,19 @@
                 Object.keys(data.items).forEach(function(key) {
                     let record = data.items[key];
                     let payload = $("<div>");
-                    payload.append(record.time_iso, "&nbsp;", record.username, "<br/>");
+                    payload.append(record.time_iso, "&nbsp;", record.username);
+                    if (record.session_tag) {
+                        let tagClass = 'label-info';
+                        if (record.session_tag === 'Pending') {
+                            tagClass = 'label-warning';
+                        } else if (record.session_tag === 'Confirmed') {
+                            tagClass = 'label-success';
+                        } else if (record.session_tag === 'Reverted') {
+                            tagClass = 'label-danger';
+                        }
+                        payload.append("&nbsp;", $("<span/>").addClass("label").addClass(tagClass).text(record.session_tag));
+                    }
+                    payload.append("<br/>");
                     payload.append($("<small/>").text(record.description));
                     target1.append($("<option/>").attr('value', record.id).attr('data-content', payload.html()));
                     target2.append($("<option/>").attr('value', record.id).attr('data-content', payload.html()));

@@ -31,6 +31,7 @@ namespace OPNsense\Unbound\Api;
 
 use OPNsense\Base\ApiMutableServiceControllerBase;
 use OPNsense\Core\Backend;
+use OPNsense\Core\ServiceApply;
 
 class ServiceController extends ApiMutableServiceControllerBase
 {
@@ -64,11 +65,11 @@ class ServiceController extends ApiMutableServiceControllerBase
             return ['status' => 'failed'];
         }
 
-        $backend = new Backend();
-        $backend->configdRun('dns reload');
-        $result = $this->reconfigureAction();
-        $backend->configdRun('dhcpd restart');
-
-        return $result;
+        try {
+            (new ServiceApply())->unbound($this->serviceEnabled());
+            return ['status' => 'ok'];
+        } catch (\RuntimeException $e) {
+            return ['status' => 'failed', 'status_msg' => gettext('Failed to apply Unbound configuration.')];
+        }
     }
 }

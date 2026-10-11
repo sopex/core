@@ -31,6 +31,7 @@ namespace OPNsense\Wireguard\Api;
 
 use OPNsense\Base\ApiMutableServiceControllerBase;
 use OPNsense\Core\Backend;
+use OPNsense\Core\ServiceApply;
 use OPNsense\Wireguard\Client;
 use OPNsense\Wireguard\Server;
 
@@ -54,10 +55,11 @@ class ServiceController extends ApiMutableServiceControllerBase
             return ['result' => 'failed'];
         }
 
-        $backend = new Backend();
-        $this->runInterfaceRegistration();
-        $backend->configdRun('template reload ' . escapeshellarg(static::$internalServiceTemplate));
-        $backend->configdpRun('wireguard configure');
+        try {
+            (new ServiceApply())->wireguard();
+        } catch (\RuntimeException $e) {
+            return ['result' => 'failed', 'message' => gettext('Failed to apply WireGuard configuration.')];
+        }
 
         return ['result' => 'ok'];
     }

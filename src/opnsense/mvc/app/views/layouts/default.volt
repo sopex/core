@@ -193,10 +193,12 @@
                 $("#menu_search_box").focus(function(){
                     $("#menu_search_box").css('width', '450px');
                     $("#system_status").hide();
+                    $("#btn-start-commit-session").hide();
                 });
                 $("#menu_search_box").focusout(function(){
                     $("#menu_search_box").css('width', '250px');
                     $("#system_status").show();
+                    $("#btn-start-commit-session").show();
                 });
                 // enable bootstrap tooltips
                 $('body').tooltip({
@@ -258,6 +260,11 @@
             </li>
             <li>
               <span class="navbar-text" style="margin-left: 0">
+                <i id="btn-start-commit-session" data-toggle="tooltip" data-placement="left" title="{{ lang._('Start protected change session') }}" style="cursor:pointer" class="fa fa-shield text-muted"></i>
+              </span>
+            </li>
+            <li>
+              <span class="navbar-text" style="margin-left: 0">
                 <i id="system_status" data-toggle="tooltip left" title="{{ lang._('Show system status') }}" style="cursor:pointer" class="fa fa-circle text-muted"></i>
               </span>
             </li>
@@ -290,6 +297,7 @@
             </ul>
           </div>
         </header>
+        <div id="commit-session-banner-area"></div>
 
         <!-- page content -->
         <section class="page-content-main">

@@ -39,6 +39,12 @@ class HasyncStatusController extends ApiControllerBase
 {
     private function remoteServiceAction($action, $service, $service_id)
     {
+        if (\OPNsense\Core\CommitSession::getInstance()->isActive()) {
+            return [
+                'status' => 'failed',
+                'message' => gettext('HA synchronization is disabled during an active protected change session.')
+            ];
+        }
         $backend = new Backend();
         $backend->configdRun('system ha exec exec_sync');
         $backend->configdRun('system ha exec reload_templates');

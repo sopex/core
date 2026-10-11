@@ -45,6 +45,7 @@ class Status {
             if (!data.subsystems || typeof data.subsystems !== 'object') {
                 data.subsystems = { };
             }
+            this.data = data;
             this.notify(data);
         }, (reject) => {
             // Either inaccessible or something went wrong on the backend.

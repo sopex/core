@@ -33,6 +33,7 @@ use OPNsense\Base\FieldTypes\PortField;
 use OPNsense\Base\UserException;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
+use OPNsense\Core\ServiceApply;
 use OPNsense\Firewall\Alias;
 use OPNsense\Firewall\Category;
 use OPNsense\Firewall\Util;
@@ -309,7 +310,11 @@ abstract class FilterBaseController extends ApiMutableModelControllerBase
     public function applyAction()
     {
         if ($this->request->isPost()) {
-            return ['status' => (new Backend())->configdRun('filter reload skip_alias')];
+            try {
+                return ['status' => (new ServiceApply())->firewall()];
+            } catch (\RuntimeException $e) {
+                return ['status' => 'error'];
+            }
         } else {
             return ['status' => 'error'];
         }

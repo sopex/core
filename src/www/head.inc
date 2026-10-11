@@ -116,6 +116,7 @@ $pagetitle .= html_safe(sprintf(' | %s.%s', $config['system']['hostname'], $conf
     <script src="<?= cache_safe("/ui/js/bootstrap3-typeahead.min.js") ?>"></script>
 
     <script src="<?= cache_safe("/ui/js/opnsense_status.js") ?>"></script>
+    <script src="<?= cache_safe("/ui/js/commit_session.js") ?>"></script>
 
 <?php if (get_themed_filename('/js/theme.js', true)): ?>
     <script src="<?= cache_safe(get_themed_filename('/js/theme.js')) ?>"></script>
@@ -250,10 +251,12 @@ $pagetitle .= html_safe(sprintf(' | %s.%s', $config['system']['hostname'], $conf
       $("#menu_search_box").focus(function(){
           $("#menu_search_box").css('width', '450px');
           $("#system_status").hide();
+          $("#btn-start-commit-session").hide();
       });
       $("#menu_search_box").focusout(function(){
           $("#menu_search_box").css('width', '250px');
           $("#system_status").show();
+          $("#btn-start-commit-session").show();
       });
       // convert input form tables for better mobile experience
       hook_stacked_form_tables(".opnsense_standard_table_form");

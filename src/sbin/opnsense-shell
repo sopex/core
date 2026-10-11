@@ -10,6 +10,7 @@ trap : 2
 trap : 3
 
 CMD_BANNER="/usr/local/opnsense/scripts/shell/banner.php"
+CMD_COMMIT_SESSION="/usr/local/opnsense/scripts/shell/commit_session.php"
 CMD_DEFAULTS="/usr/local/opnsense/scripts/shell/defaults.php"
 CMD_FIRMWARE="/usr/local/opnsense/scripts/shell/firmware.sh"
 CMD_HALT="/usr/local/opnsense/scripts/shell/halt.php"
@@ -125,6 +126,7 @@ echo "  3) Reset the root password            10) Firewall log"
 echo "  4) Reset to factory defaults          11) Reload all services"
 echo "  5) Power off system                   12) Update from console"
 echo "  6) Reboot system                      13) Restore a backup"
+echo "                                        14) Protected change session"
 echo
 read -p "Enter an option: " OPCODE
 echo
@@ -175,6 +177,9 @@ case ${OPCODE} in
 	;;
 13)
 	${CMD_RESTORE}
+	;;
+14)
+	${CMD_COMMIT_SESSION}
 	;;
 *)
 	;;
