@@ -96,6 +96,7 @@ function serviceApply(ApplyTestBackend $backend): ServiceApply
 }
 
 $cases = [
+    ['routing', [], ['interface routes configure']],
     ['wireguard', [], [
         'interface invoke registration', '!interface list assign-opts',
         'template reload OPNsense/Wireguard', 'wireguard configure'
@@ -165,10 +166,23 @@ $apply = new ServiceApply($backend, function ($operation, $run) use ($backend, &
 checkApply($apply->unboundDnsbl(true, true) === 'OK', 'DNSBL API response changed');
 checkApply($guarded === ['unbound.dnsbl'], 'DNSBL operation journaled as General');
 $backend = new ApplyTestBackend();
+$guarded = [];
+$apply = new ServiceApply($backend, function ($operation, $run) use ($backend, &$guarded) {
+    checkApply(!$backend->commands, 'Routing applied before the session guard');
+    $guarded[] = $operation;
+    return $run();
+});
+checkApply($apply->routing() === 'OK', 'Routing Apply did not return its action status');
+checkApply($guarded === ['routing'], 'Routing Apply was not journaled');
+$backend = new ApplyTestBackend();
 $apply = new ServiceApply($backend, fn() => throw new RuntimeException('rollback due'));
-try {
-    $apply->unboundDnsbl(true);
-} catch (RuntimeException $error) {
-    checkApply(!$backend->commands, 'Rejected Apply still changed runtime state');
+foreach (['unboundDnsbl', 'routing'] as $method) {
+    $thrown = false;
+    try {
+        $apply->$method(...($method === 'unboundDnsbl' ? [true] : []));
+    } catch (RuntimeException $error) {
+        $thrown = true;
+    }
+    checkApply($thrown && !$backend->commands, 'Rejected Apply still changed runtime state');
 }
 printf("%d shared Apply checks passed\n", $checks);

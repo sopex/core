@@ -39,6 +39,7 @@ class CommitSessionStore
         'filter' => 'filter', 'nat' => 'filter', 'aliases' => 'filter',
         'OPNsense/Firewall/Filter' => 'filter', 'OPNsense/Firewall/Alias' => 'filter',
         'OPNsense/Firewall/Category' => 'filter', 'OPNsense/wireguard' => 'wireguard',
+        'OPNsense/Gateways' => 'routing', 'gateways' => 'routing',
         // Remove the specific subtrees before comparing the rest of the Unbound model.
         'OPNsense/unboundplus/dnsbl' => 'unbound.dnsbl',
         'OPNsense/unboundplus/general' => 'unbound.general',
@@ -48,7 +49,7 @@ class CommitSessionStore
         'OPNsense/Hostwatch' => 'hostwatch.reconfigure', 'revision' => null
     ];
     private const APPLY_ORDER = [
-        'wireguard', 'dnsmasq.reconfigure', 'unbound.general', 'unbound.reconfigure', 'unbound.dnsbl',
+        'wireguard', 'routing', 'dnsmasq.reconfigure', 'unbound.general', 'unbound.reconfigure', 'unbound.dnsbl',
         'kea.reconfigure', 'filter', 'syslog.reconfigure', 'monit.reconfigure', 'hostwatch.reconfigure'
     ];
     private \Closure $clock;

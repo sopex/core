@@ -32,6 +32,7 @@ use OPNsense\Base\ApiMutableModelControllerBase;
 use OPNsense\Base\UserException;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
+use OPNsense\Core\ServiceApply;
 use OPNsense\Routing\GatewayGroups;
 
 class GroupSettingsController extends ApiMutableModelControllerBase
@@ -43,8 +44,12 @@ class GroupSettingsController extends ApiMutableModelControllerBase
     {
         $result = ["status" => "failed"];
         if ($this->request->isPost()) {
-            (new Backend())->configdRun('interface routes configure');
-            $result = ["status" => "ok"];
+            try {
+                (new ServiceApply())->routing();
+                $result = ["status" => "ok"];
+            } catch (\RuntimeException $e) {
+                $result['status_msg'] = $e->getMessage();
+            }
         }
 
         return $result;

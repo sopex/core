@@ -478,6 +478,59 @@ $cases['ordinary Unbound Apply and General coalescing'] = function ($f) {
     $f->tick();
     check($f->applied === [['unbound.general']], 'Unbound was restarted twice');
 };
+$cases['gateway models select routing Apply after snapshot restore'] = function ($f) {
+    foreach ([
+        '<OPNsense><Gateways version="1.0.0"><gateway_item uuid="bc3c4ec4-02a4-4000-8000-000000000001">' .
+            '<name>WAN_GW</name><disabled>0</disabled></gateway_item></Gateways></OPNsense>',
+        '<gateways><gateway_item><name>WAN_GW</name><disabled>0</disabled></gateway_item></gateways>',
+        '<gateways version="1.0.0"><gateway_group uuid="7c3c49bb-60fc-4000-8000-000000000002">' .
+            '<name>FAILOVER</name><item>WAN_GW|1</item></gateway_group></gateways>'
+    ] as $model) {
+        $f->baseline = '<opnsense>' . $model . '</opnsense>';
+        file_put_contents($f->path('config.xml'), $f->baseline);
+        $f->start();
+        $f->save(str_replace('WAN_GW', 'BACKUP_GW', $f->baseline));
+        check($f->marker()['services'] === ['routing' => true], 'Gateway edit lacks routing Apply');
+        $f->save('<opnsense/>'); // Deleting the last item/model must retain the same Apply plan.
+        $f->store->change('revert');
+        $f->store->tick(function ($operations) use ($f) {
+            check($operations === ['routing'], 'Gateway rollback selected the wrong operation');
+            check(file_get_contents($f->path('config.xml')) === $f->baseline, 'Routing applied before restoring XML');
+        });
+        check(!$f->store->active(), 'Gateway recovery did not complete');
+    }
+};
+$cases['routing Apply is durable and retries in network dependency order'] = function ($f) {
+    $f->start();
+    $f->save(str_replace('</opnsense>', '<OPNsense><wireguard/><Gateways/></OPNsense></opnsense>', $f->baseline));
+    rejected(fn() => $f->store->apply('routing', function () use ($f) {
+        check(isset($f->marker()['services']['routing']), 'Routing action ran before it was journaled');
+        throw new RuntimeException('Apply action failed: interface routes configure');
+    }), 'Routing Apply failure was hidden');
+    $f->store->change('revert');
+    $f->store->tick(function ($operations) {
+        check($operations === ['wireguard', 'routing', 'filter'], 'Routing dependency order changed');
+        throw new RuntimeException('Apply action failed: interface routes configure');
+    });
+    $state = $f->store->state();
+    check($state['snapshot_restored'] && $state['next_retry_seconds'] === 15, 'Routing failure lost retry state');
+    check(str_contains($state['last_revert_error'], 'interface routes configure'), 'Routing failure lost its action name');
+    $f->now += 15;
+    $f->restart();
+    $f->tick();
+    check($f->applied === [['wireguard', 'routing', 'filter']] && !$f->store->active(), 'Routing retry lost its plan');
+};
+$cases['routing support does not accept static-route or interface topology changes'] = function ($f) {
+    $f->start();
+    foreach (['<staticroutes><route><network>192.0.2.0/24</network></route></staticroutes>',
+        '<interfaces><wan><if>em1</if></wan></interfaces>'] as $unsupported) {
+        rejected(fn() => $f->save(str_replace('</opnsense>',
+            '<OPNsense><Gateways/></OPNsense>' . $unsupported . '</opnsense>', $f->baseline)),
+            'Routing support accepted an unsupported change');
+    }
+    check(file_get_contents($f->path('config.xml')) === $f->baseline, 'Unsupported routing save wrote config.xml');
+    check(!$f->marker()['countdown_active'], 'Rejected routing save armed the countdown');
+};
 $cases['standard services select shared reconfiguration operations'] = function ($f) {
     $f->start();
     $f->save(str_replace('</opnsense>', '<dnsmasq><enable>1</enable></dnsmasq><OPNsense>' .

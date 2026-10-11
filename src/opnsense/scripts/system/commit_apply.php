@@ -58,6 +58,9 @@ try {
             case 'wireguard':
                 $apply->wireguard();
                 break;
+            case 'routing':
+                $apply->routing();
+                break;
             case 'unbound.general':
                 $apply->unbound((string)(new Unbound())->general->enabled === '1');
                 break;

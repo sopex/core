@@ -30,7 +30,7 @@
 namespace OPNsense\Routes\Api;
 
 use OPNsense\Base\ApiMutableModelControllerBase;
-use OPNsense\Core\Backend;
+use OPNsense\Core\ServiceApply;
 use OPNsense\Routes\Route;
 
 /**
@@ -134,12 +134,11 @@ class RoutesController extends ApiMutableModelControllerBase
     public function reconfigureAction()
     {
         if ($this->request->isPost()) {
-            $backend = new Backend();
-            $bckresult = trim($backend->configdRun('interface routes configure'));
-            if ($bckresult == 'OK') {
+            try {
+                (new ServiceApply())->routing();
                 $status = 'ok';
-            } else {
-                $status = "error reloading routes ($bckresult)";
+            } catch (\RuntimeException $e) {
+                $status = "error reloading routes ({$e->getMessage()})";
             }
 
             return array('status' => $status);

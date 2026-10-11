@@ -56,6 +56,12 @@ class ServiceApply
         return ($this->guard)('filter', fn() => $this->run($refreshAliases ? 'filter reload' : 'filter reload skip_alias'));
     }
 
+    public function routing(): string
+    {
+        // The routing action also reconfigures gateway monitoring and firewall rules.
+        return ($this->guard)('routing', fn() => $this->run('interface routes configure'));
+    }
+
     public function wireguard(): void
     {
         ($this->guard)('wireguard', function () {
