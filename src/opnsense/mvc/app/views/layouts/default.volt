@@ -266,7 +266,7 @@
                       data-pending="{{ lang._('Unconfirmed changes will be reverted in %s.') }}"
                       data-reverted="{{ lang._('Unconfirmed changes have been reverted, all services are being reloaded.') }}"
                       data-enable="{{ lang._('Enable') }}" data-disable="{{ lang._('Disable') }}"
-                      data-confirm="{{ lang._('Confirm changes') }}" data-extend="{{ lang._('Add 10 minutes') }}" data-close="{{ lang._('Close') }}">
+                      data-confirm="{{ lang._('Confirm changes') }}" data-extend="{{ lang._('Add 10 minutes') }}" data-revert="{{ lang._('Revert now') }}" data-close="{{ lang._('Close') }}">
                   <i class="fa fa-shield"></i> <span id="config_protect_remaining"></span>
                 </span>
               </span>

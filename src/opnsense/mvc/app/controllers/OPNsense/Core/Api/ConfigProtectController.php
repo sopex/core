@@ -98,4 +98,13 @@ class ConfigProtectController extends ApiControllerBase
     {
         return $this->protectAction('extend');
     }
+
+    /**
+     * revert pending changes now instead of waiting for the timer
+     * @return array protection status
+     */
+    public function revertAction()
+    {
+        return $this->protectAction('revert');
+    }
 }

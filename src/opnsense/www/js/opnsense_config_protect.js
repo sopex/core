@@ -80,7 +80,7 @@ function initConfigProtect() {
         clearTimeout(pollTimer);
         if (status.enabled) {
             // pick up timers started by changes and actions from other sessions
-            pollTimer = setTimeout(poll, 10000);
+            pollTimer = setTimeout(poll, status.pending && status.remaining < 10 ? 2000 : 10000);
         }
     }
 
@@ -116,8 +116,12 @@ function initConfigProtect() {
                 action('extend');
                 dialog.close();
             }});
-        }
-        if (status.enabled) {
+            buttons.push({label: text.revert, cssClass: 'btn-danger', action: function (dialog) {
+                action('revert');
+                dialog.close();
+            }});
+        } else if (status.enabled) {
+            // pending changes are either confirmed or reverted, not left behind by disabling
             buttons.push({label: text.disable, action: function (dialog) {
                 action('disable');
                 dialog.close();

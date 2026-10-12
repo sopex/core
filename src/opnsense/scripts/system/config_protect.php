@@ -33,7 +33,7 @@
  * before the timer expires, the baseline configuration is restored and all services
  * are reloaded so the running state follows the restored configuration.
  *
- * usage: config_protect.php status|enable|disable|confirm|extend|check|watch
+ * usage: config_protect.php status|enable|disable|confirm|extend|revert|check|watch
  */
 
 require_once('script/load_phalcon.php');
@@ -124,18 +124,22 @@ function protect_spawn_watcher()
 }
 
 /**
- * restore the baseline configuration and reload all services to apply it
+ * restore the baseline configuration and apply it, there is no generic way to tell which
+ * apply actions belong to the changes, so regenerate all templates and reload all services
  */
 function protect_revert()
 {
-    syslog(LOG_WARNING, 'config protection: changes not confirmed in time, reverting configuration');
+    syslog(LOG_WARNING, 'config protection: reverting unconfirmed changes');
     $cnf = Config::getInstance();
     if (!$cnf->restoreBackup(PROTECT_BASELINE)) {
         syslog(LOG_ERR, 'config protection: unable to restore ' . PROTECT_BASELINE);
         return;
     }
     $cnf->save(['description' => 'config protection: reverted unconfirmed changes']);
-    (new Backend())->configdRun('service reload all', true);
+    $backend = new Backend();
+    /* service reload uses the generated files, wait for them to be written */
+    $backend->configdRun('template reload *');
+    $backend->configdRun('service reload all', true);
 }
 
 openlog('config', LOG_ODELAY, LOG_USER);
@@ -171,6 +175,18 @@ switch ($action) {
             }
             return $state;
         });
+        break;
+    case 'revert':
+        /* expire the timer now, the watcher performs the revert */
+        $state = protect_update(function ($state) {
+            if ($state['enabled'] && $state['deadline'] !== null) {
+                $state['deadline'] = time();
+            }
+            return $state;
+        });
+        if ($state['deadline'] !== null) {
+            protect_spawn_watcher();
+        }
         break;
     case 'check':
         /* called on config change (and boot), start the timer when the config deviates from the baseline */
@@ -214,7 +230,7 @@ switch ($action) {
     case 'status':
         break;
     default:
-        echo "usage: config_protect.php status|enable|disable|confirm|extend|check|watch\n";
+        echo "usage: config_protect.php status|enable|disable|confirm|extend|revert|check|watch\n";
         exit(1);
 }
 
