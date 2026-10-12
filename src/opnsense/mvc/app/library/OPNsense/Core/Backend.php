@@ -43,10 +43,39 @@ class Backend
     private $configdSocket = '/var/run/configd.socket';
 
     /**
+     * @var string apply actions journal, only exists while configuration protection is enabled
+     */
+    private $protectJournal = '/conf/config_protect.journal';
+
+    /**
      * init Backend component
      */
     public function __construct()
     {
+    }
+
+    /**
+     * Record apply type actions requested from the GUI/API while configuration protection is enabled,
+     * a revert replays them so the running state follows the restored configuration
+     * (e.g. Unbound blocklists are only rebuilt by "unbound dnsbl", not by a service reload).
+     * @param string $event event string
+     */
+    private function journalProtected($event)
+    {
+        if (PHP_SAPI == 'cli' || !file_exists($this->protectJournal) || strpbrk($event, "\r\n") !== false) {
+            return;
+        }
+        $words = explode(' ', $event);
+        if (
+            count($words) < 2 || in_array($words[0], ['configd', 'firmware', 'service', 'system']) ||
+            empty(array_intersect(array_slice($words, 1, 2), ['configure', 'dnsbl', 'reconfigure', 'reload', 'restart']))
+        ) {
+            return;
+        }
+        $journal = @file($this->protectJournal, FILE_IGNORE_NEW_LINES);
+        if (is_array($journal) && !in_array($event, $journal)) {
+            @file_put_contents($this->protectJournal, $event . "\n", FILE_APPEND | LOCK_EX);
+        }
     }
 
     /**
@@ -71,6 +100,8 @@ class Backend
      */
     public function configdStream($event, $detach = false, $connect_timeout = 10, $poll_timeout = 2)
     {
+        $this->journalProtected($event);
+
         // wait until socket exist for a maximum of $connect_timeout
         $simulate_mode = false;
         if (!file_exists($this->configdSocket) && (!empty((string)(new AppConfig())->globals->simulate_mode))) {

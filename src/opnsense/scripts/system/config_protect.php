@@ -30,8 +30,8 @@
 /*
  * Configuration protection: when enabled, the first saved change compared to the
  * accepted (baseline) configuration starts a timer. Unless the changes are confirmed
- * before the timer expires, the baseline configuration is restored and all services
- * are reloaded so the running state follows the restored configuration.
+ * before the timer expires, the baseline configuration is restored and applied again
+ * (see protect_revert()) so the running state follows the restored configuration.
  *
  * usage: config_protect.php status|enable|disable|confirm|extend|revert|check|watch
  */
@@ -43,6 +43,7 @@ use OPNsense\Core\Config;
 
 const PROTECT_STATE = '/conf/config_protect.json';
 const PROTECT_BASELINE = '/conf/config_protect.xml';
+const PROTECT_JOURNAL = '/conf/config_protect.journal';
 const PROTECT_WATCH_LOCK = '/var/run/config_protect.lock';
 const PROTECT_TIMEOUT = 600;
 
@@ -107,12 +108,15 @@ function protect_config_content($filename)
 }
 
 /**
- * accept the current configuration as the one to return to
+ * accept the current configuration as the one to return to, apply actions recorded
+ * (by OPNsense\Core\Backend) from here on are replayed on revert
  */
 function protect_set_baseline()
 {
     copy('/conf/config.xml', PROTECT_BASELINE);
     chmod(PROTECT_BASELINE, 0640);
+    file_put_contents(PROTECT_JOURNAL, '');
+    chmod(PROTECT_JOURNAL, 0600);
 }
 
 /**
@@ -124,8 +128,10 @@ function protect_spawn_watcher()
 }
 
 /**
- * restore the baseline configuration and apply it, there is no generic way to tell which
- * apply actions belong to the changes, so regenerate all templates and reload all services
+ * restore the baseline configuration and apply it: regenerate all templates, press the
+ * apply buttons used since the baseline again (they may do more than a service reload,
+ * e.g. rebuild Unbound blocklists) and finally reload all services for legacy pages
+ * which apply without configd.
  */
 function protect_revert()
 {
@@ -136,9 +142,19 @@ function protect_revert()
         return;
     }
     $cnf->save(['description' => 'config protection: reverted unconfirmed changes']);
+
+    $applied = @file(PROTECT_JOURNAL, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    if (file_exists(PROTECT_JOURNAL)) {
+        file_put_contents(PROTECT_JOURNAL, '');
+    }
+
     $backend = new Backend();
-    /* service reload uses the generated files, wait for them to be written */
+    /* actions below use the generated files, wait for them to be written */
     $backend->configdRun('template reload *');
+    foreach ($applied as $event) {
+        syslog(LOG_NOTICE, "config protection: replaying '{$event}'");
+        $backend->configdRun($event);
+    }
     $backend->configdRun('service reload all', true);
 }
 
@@ -156,6 +172,7 @@ switch ($action) {
     case 'disable':
         protect_update(function ($state) {
             @unlink(PROTECT_BASELINE);
+            @unlink(PROTECT_JOURNAL);
             return ['enabled' => false, 'deadline' => null];
         });
         break;
