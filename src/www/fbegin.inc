@@ -68,6 +68,7 @@ $aclObj = new \OPNsense\Core\ACL();
                     data-active="<?= html_safe(gettext('Protection is active, there are no unconfirmed changes.')) ?>"
                     data-pending="<?= html_safe(gettext('Unconfirmed changes will be reverted in %s.')) ?>"
                     data-reverted="<?= html_safe(gettext('Unconfirmed changes have been reverted and applied, reloading page.')) ?>"
+                    data-failed="<?= html_safe(gettext('Reverting unconfirmed changes did not complete successfully, please check the system log.')) ?>"
                     data-enable="<?= html_safe(gettext('Enable')) ?>" data-disable="<?= html_safe(gettext('Disable')) ?>"
                     data-confirm="<?= html_safe(gettext('Confirm changes')) ?>" data-extend="<?= html_safe(gettext('Add 10 minutes')) ?>" data-revert="<?= html_safe(gettext('Revert now')) ?>" data-close="<?= html_safe(gettext('Close')) ?>">
                 <i class="fa fa-shield"></i> <span id="config_protect_remaining"></span>

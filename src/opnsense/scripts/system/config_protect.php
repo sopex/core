@@ -38,8 +38,10 @@
 
 require_once('script/load_phalcon.php');
 
+use OPNsense\Core\AppConfig;
 use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
+use OPNsense\Core\File;
 
 const PROTECT_STATE = '/conf/config_protect.json';
 const PROTECT_BASELINE = '/conf/config_protect.xml';
@@ -94,15 +96,42 @@ function protect_update($callback)
 }
 
 /**
+ * read a config file under the lock Config::save() writes it with, so a save in progress is never seen half written
  * @param string $filename config file
- * @return string|null config content without revision information
+ * @return string|null file content when it contains a valid configuration
  */
-function protect_config_content($filename)
+function protect_read_config($filename)
 {
-    $xml = @simplexml_load_file($filename, 'SimpleXMLElement', LIBXML_NOERROR | LIBXML_ERR_NONE | LIBXML_NOBLANKS);
-    if ($xml === false) {
+    $fhandle = @fopen($filename, 'r');
+    if ($fhandle === false) {
         return null;
     }
+    flock($fhandle, LOCK_SH);
+    $content = stream_get_contents($fhandle);
+    flock($fhandle, LOCK_UN);
+    fclose($fhandle);
+    return protect_parse_config($content) !== null ? $content : null;
+}
+
+/**
+ * @param string|null $content config content
+ * @return SimpleXMLElement|null parsed configuration
+ */
+function protect_parse_config($content)
+{
+    if ($content === null) {
+        return null;
+    }
+    $xml = @simplexml_load_string($content, 'SimpleXMLElement', LIBXML_NOERROR | LIBXML_ERR_NONE | LIBXML_NOBLANKS);
+    return $xml !== false && $xml->getName() == 'opnsense' ? $xml : null;
+}
+
+/**
+ * @param SimpleXMLElement $xml parsed configuration (revision is removed)
+ * @return string config content without revision information
+ */
+function protect_config_content($xml)
+{
     unset($xml->revision);
     return $xml->asXML();
 }
@@ -110,13 +139,22 @@ function protect_config_content($filename)
 /**
  * accept the current configuration as the one to return to, apply actions recorded
  * (by OPNsense\Core\Backend) from here on are replayed on revert
+ * @return bool baseline written
  */
 function protect_set_baseline()
 {
-    copy('/conf/config.xml', PROTECT_BASELINE);
-    chmod(PROTECT_BASELINE, 0640);
-    file_put_contents(PROTECT_JOURNAL, '');
-    chmod(PROTECT_JOURNAL, 0600);
+    $content = protect_read_config('/conf/config.xml');
+    $tmp_filename = PROTECT_BASELINE . '.tmp';
+    if (
+        $content === null || File::file_put_contents($tmp_filename, $content, 0640) === false ||
+        !rename($tmp_filename, PROTECT_BASELINE)
+    ) {
+        syslog(LOG_ERR, 'config protection: unable to store the current configuration as baseline');
+        return false;
+    }
+    /* the GUI may run as non-root, it needs to be able to append to the journal */
+    File::file_put_contents(PROTECT_JOURNAL, '', 0640, 0, (new AppConfig())->globals->owner);
+    return true;
 }
 
 /**
@@ -132,7 +170,7 @@ function protect_spawn_watcher()
  * apply buttons used since the baseline again (they may do more than a service reload,
  * e.g. rebuild Unbound blocklists) and finally reload all services for legacy pages
  * which apply without configd.
- * @return bool configuration restored
+ * @return bool configuration restored and all actions succeeded
  */
 function protect_revert()
 {
@@ -150,16 +188,32 @@ function protect_revert()
     }
 
     $backend = new Backend();
+    $success = true;
+    /* configd reports failed scripts as "Error (n)", the fixed actions below always return output */
+    $run = function ($event, $timeout = 120, $require_output = false) use ($backend, &$success) {
+        $response = trim($backend->configdRun($event, false, $timeout));
+        if (strpos($response, 'Error') === 0 || ($require_output && $response === '')) {
+            syslog(LOG_ERR, "config protection: '{$event}' failed: {$response}");
+            $success = false;
+        }
+    };
+
     /* actions below use the generated files, wait for them to be written */
-    $backend->configdRun('template reload *');
-    foreach ($applied as $event) {
+    $run('template reload *', 120, true);
+    foreach (array_unique($applied) as $line) {
+        /* the journal is writable by the GUI, only replay what it is allowed to record */
+        $event = Backend::protectJournalEvent($line);
+        if ($event === null) {
+            syslog(LOG_WARNING, "config protection: ignoring unexpected journal entry '{$line}'");
+            continue;
+        }
         syslog(LOG_NOTICE, "config protection: replaying '{$event}'");
-        $backend->configdRun($event);
+        $run($event);
     }
     /* wait for the reload to finish, the GUI reloads the page when the revert is reported as done */
-    $backend->configdRun('service reload all', false, 900);
-    syslog(LOG_NOTICE, 'config protection: revert finished');
-    return true;
+    $run('service reload all', 900, true);
+    syslog($success ? LOG_NOTICE : LOG_ERR, 'config protection: revert finished' . ($success ? '' : ' with errors'));
+    return $success;
 }
 
 openlog('config', LOG_ODELAY, LOG_USER);
@@ -169,8 +223,7 @@ $action = $argv[1] ?? 'status';
 switch ($action) {
     case 'enable':
         protect_update(function ($state) {
-            protect_set_baseline();
-            return ['enabled' => true, 'deadline' => null];
+            return protect_set_baseline() ? ['enabled' => true, 'deadline' => null] : $state;
         });
         break;
     case 'disable':
@@ -182,8 +235,7 @@ switch ($action) {
         break;
     case 'confirm':
         protect_update(function ($state) {
-            if ($state['enabled']) {
-                protect_set_baseline();
+            if ($state['enabled'] && protect_set_baseline()) {
                 $state['deadline'] = null;
             }
             return $state;
@@ -212,12 +264,24 @@ switch ($action) {
     case 'check':
         /* called on config change (and boot), start the timer when the config deviates from the baseline */
         $state = protect_update(function ($state) {
-            if ($state['enabled'] && $state['deadline'] === null && is_file(PROTECT_BASELINE)) {
-                $baseline = protect_config_content(PROTECT_BASELINE);
-                if ($baseline !== null && $baseline !== protect_config_content('/conf/config.xml')) {
-                    $state['deadline'] = time() + PROTECT_TIMEOUT;
-                    syslog(LOG_NOTICE, 'config protection: unconfirmed changes, reverting in ' . PROTECT_TIMEOUT . ' seconds');
-                }
+            if (!$state['enabled'] || $state['deadline'] !== null) {
+                return $state;
+            }
+            $baseline = protect_parse_config(protect_read_config(PROTECT_BASELINE));
+            $current = protect_parse_config(protect_read_config('/conf/config.xml'));
+            if ($baseline === null || $current === null) {
+                return $state;
+            }
+            /* GUI and API users are registered as "user@address", scripts and cron jobs as "(user)" */
+            $username = (string)$current->revision->username;
+            if (protect_config_content($baseline) === protect_config_content($current)) {
+                return $state;
+            } elseif (strpos($username, '(') === 0) {
+                syslog(LOG_NOTICE, "config protection: accepting automatic change by {$username}");
+                protect_set_baseline();
+            } else {
+                $state['deadline'] = time() + PROTECT_TIMEOUT;
+                syslog(LOG_NOTICE, 'config protection: unconfirmed changes, reverting in ' . PROTECT_TIMEOUT . ' seconds');
             }
             return $state;
         });
@@ -242,18 +306,24 @@ switch ($action) {
                 return $state;
             });
             if ($revert) {
-                $reverted = protect_revert();
-                protect_update(function ($state) use ($reverted) {
+                $success = protect_revert();
+                /* changes saved while reverting started a new timer, the loop keeps watching it */
+                $state = protect_update(function ($state) use ($success) {
                     $state['reverting'] = false;
-                    if ($reverted) {
-                        $state['reverted'] = time();
-                    }
+                    $state['reverted'] = time();
+                    $state['revert_failed'] = !$success;
                     return $state;
                 });
             } elseif ($state['enabled'] && $state['deadline'] !== null) {
                 sleep(max(1, min(5, $state['deadline'] - time())));
             }
-        } while (!$revert && $state['enabled'] && $state['deadline'] !== null);
+        } while ($state['enabled'] && $state['deadline'] !== null);
+        /* a timer started while exiting may have found the lock still taken, hand over */
+        flock($lock, LOCK_UN);
+        $state = protect_read();
+        if ($state['enabled'] && $state['deadline'] !== null) {
+            protect_spawn_watcher();
+        }
         exit(0);
     case 'status':
         break;
@@ -270,4 +340,5 @@ echo json_encode([
     'reverting' => !empty($state['reverting']),
     'timeout' => PROTECT_TIMEOUT,
     'reverted' => $state['reverted'] ?? null,
+    'revert_failed' => !empty($state['revert_failed']),
 ]) . PHP_EOL;

@@ -74,7 +74,21 @@ function initConfigProtect() {
             }
             return;
         }
-        if (lastReverted !== undefined && data.reverted && data.reverted !== lastReverted) {
+        if (lastReverted !== undefined && data.reverted && data.reverted !== lastReverted && data.revert_failed) {
+            // keep the failure visible, load the page with the restored settings when acknowledged
+            BootstrapDialog.show({
+                type: BootstrapDialog.TYPE_DANGER,
+                title: text.title,
+                message: text.failed,
+                buttons: [{label: text.close, action: function (dialog) {
+                    dialog.close();
+                }}],
+                onhidden: function () {
+                    window.location.reload();
+                }
+            });
+            return;
+        } else if (lastReverted !== undefined && data.reverted && data.reverted !== lastReverted) {
             // revert finished, show the result shortly and load the page with the restored settings
             BootstrapDialog.show({
                 type: BootstrapDialog.TYPE_WARNING,

@@ -62,20 +62,46 @@ class Backend
      */
     private function journalProtected($event)
     {
-        if (PHP_SAPI == 'cli' || !file_exists($this->protectJournal) || strpbrk($event, "\r\n") !== false) {
+        if (PHP_SAPI == 'cli' || !file_exists($this->protectJournal)) {
             return;
         }
-        $words = explode(' ', $event);
-        if (
-            count($words) < 2 || in_array($words[0], ['configd', 'firmware', 'service', 'system']) ||
-            empty(array_intersect(array_slice($words, 1, 2), ['configure', 'dnsbl', 'reconfigure', 'reload', 'restart']))
-        ) {
+        $event = static::protectJournalEvent($event);
+        if ($event === null) {
             return;
         }
         $journal = @file($this->protectJournal, FILE_IGNORE_NEW_LINES);
         if (is_array($journal) && !in_array($event, $journal)) {
-            @file_put_contents($this->protectJournal, $event . "\n", FILE_APPEND | LOCK_EX);
+            if (@file_put_contents($this->protectJournal, $event . "\n", FILE_APPEND | LOCK_EX) === false) {
+                $this->getLogger()->error("config protection: unable to record '{$event}'");
+            }
         }
+    }
+
+    /**
+     * Determine the action to replay when reverting protected configuration changes, also used to
+     * validate the journal before it is replayed as root.
+     * @param string $event event string
+     * @return string|null event to replay, null when not an apply type action
+     */
+    public static function protectJournalEvent($event)
+    {
+        if (strpbrk($event, "\r\n") !== false) {
+            return null;
+        }
+        $words = explode(' ', trim($event));
+        $module = trim($words[0], "'");
+        /* actions which change runtime state in place, a revert needs the full rebuild */
+        $mapped = ['unbound dnsblquick' => 'unbound dnsbl'];
+        if (count($words) >= 2 && isset($mapped["{$module} {$words[1]}"])) {
+            return $mapped["{$module} {$words[1]}"];
+        }
+        if (
+            count($words) < 2 || in_array($module, ['configd', 'firmware', 'service', 'system']) ||
+            empty(array_intersect(array_slice($words, 1, 2), ['configure', 'dnsbl', 'reconfigure', 'reload', 'restart']))
+        ) {
+            return null;
+        }
+        return trim($event);
     }
 
     /**
