@@ -64,7 +64,7 @@ $aclObj = new \OPNsense\Core\ACL();
             <span class="navbar-text" style="margin-left: 0">
               <span id="config_protect" style="cursor:pointer; display:none" data-toggle="tooltip left" title="<?= html_safe(gettext('Configuration protection')) ?>"
                     data-title="<?= html_safe(gettext('Configuration protection')) ?>"
-                    data-help="<?= html_safe(gettext('When enabled, saving a change starts a 10 minute timer. \n If the changes are not confirmed before the timer expires, the previous configuration is restored and all services are reloaded.')) ?>"
+                    data-help="<?= html_safe(gettext('When enabled, saving a change starts a 10 minute timer. If the changes are not confirmed before the timer expires, the previous configuration is restored and all services are reloaded.')) ?>"
                     data-active="<?= html_safe(gettext('Protection is active, there are no unconfirmed changes.')) ?>"
                     data-pending="<?= html_safe(gettext('Unconfirmed changes will be reverted in %s.')) ?>"
                     data-reverted="<?= html_safe(gettext('Unconfirmed changes have been reverted and applied, reloading page.')) ?>"
