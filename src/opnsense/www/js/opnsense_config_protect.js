@@ -47,9 +47,14 @@ function initConfigProtect() {
 
     function render() {
         const $icon = $toggle.find('i');
+        const reverting = status.reverting || (status.pending && deadline <= Date.now());
         $icon.removeClass('text-muted text-success text-warning text-danger');
+        $icon.toggleClass('fa-shield', !reverting).toggleClass('fa-spinner fa-pulse', reverting);
         if (!status.enabled) {
             $icon.addClass('text-muted');
+            $('#config_protect_remaining').text('');
+        } else if (reverting) {
+            $icon.addClass('text-warning');
             $('#config_protect_remaining').text('');
         } else if (!status.pending) {
             $icon.addClass('text-success');
@@ -61,26 +66,36 @@ function initConfigProtect() {
     }
 
     function update(data) {
+        clearTimeout(pollTimer);
         if (data.enabled === undefined) {
-            // no access or backend failure, keep the button hidden
+            // no access (button stays hidden) or backend failure, the GUI may be unreachable while reverting
+            if (status !== null && status.enabled) {
+                pollTimer = setTimeout(poll, 5000);
+            }
             return;
         }
         if (lastReverted !== undefined && data.reverted && data.reverted !== lastReverted) {
+            // revert finished, show the result shortly and load the page with the restored settings
             BootstrapDialog.show({
                 type: BootstrapDialog.TYPE_WARNING,
                 title: text.title,
-                message: text.reverted
+                message: text.reverted,
+                closable: false
             });
+            setTimeout(function () {
+                window.location.reload();
+            }, 2000);
+            return;
         }
         lastReverted = data.reverted ?? null;
         status = data;
         deadline = data.pending ? Date.now() + data.remaining * 1000 : null;
         $toggle.show();
         render();
-        clearTimeout(pollTimer);
         if (status.enabled) {
             // pick up timers started by changes and actions from other sessions
-            pollTimer = setTimeout(poll, status.pending && status.remaining < 10 ? 2000 : 10000);
+            const soon = status.reverting || (status.pending && status.remaining < 10);
+            pollTimer = setTimeout(poll, soon ? 2000 : 10000);
         }
     }
 

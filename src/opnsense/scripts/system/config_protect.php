@@ -132,6 +132,7 @@ function protect_spawn_watcher()
  * apply buttons used since the baseline again (they may do more than a service reload,
  * e.g. rebuild Unbound blocklists) and finally reload all services for legacy pages
  * which apply without configd.
+ * @return bool configuration restored
  */
 function protect_revert()
 {
@@ -139,7 +140,7 @@ function protect_revert()
     $cnf = Config::getInstance();
     if (!$cnf->restoreBackup(PROTECT_BASELINE)) {
         syslog(LOG_ERR, 'config protection: unable to restore ' . PROTECT_BASELINE);
-        return;
+        return false;
     }
     $cnf->save(['description' => 'config protection: reverted unconfirmed changes']);
 
@@ -155,7 +156,10 @@ function protect_revert()
         syslog(LOG_NOTICE, "config protection: replaying '{$event}'");
         $backend->configdRun($event);
     }
-    $backend->configdRun('service reload all', true);
+    /* wait for the reload to finish, the GUI reloads the page when the revert is reported as done */
+    $backend->configdRun('service reload all', false, 900);
+    syslog(LOG_NOTICE, 'config protection: revert finished');
+    return true;
 }
 
 openlog('config', LOG_ODELAY, LOG_USER);
@@ -232,13 +236,20 @@ switch ($action) {
             $state = protect_update(function ($state) use (&$revert) {
                 if ($state['enabled'] && $state['deadline'] !== null && $state['deadline'] <= time()) {
                     $state['deadline'] = null;
-                    $state['reverted'] = time();
+                    $state['reverting'] = true;
                     $revert = true;
                 }
                 return $state;
             });
             if ($revert) {
-                protect_revert();
+                $reverted = protect_revert();
+                protect_update(function ($state) use ($reverted) {
+                    $state['reverting'] = false;
+                    if ($reverted) {
+                        $state['reverted'] = time();
+                    }
+                    return $state;
+                });
             } elseif ($state['enabled'] && $state['deadline'] !== null) {
                 sleep(max(1, min(5, $state['deadline'] - time())));
             }
@@ -256,6 +267,7 @@ echo json_encode([
     'enabled' => $state['enabled'],
     'pending' => $state['deadline'] !== null,
     'remaining' => $state['deadline'] !== null ? max(0, $state['deadline'] - time()) : null,
+    'reverting' => !empty($state['reverting']),
     'timeout' => PROTECT_TIMEOUT,
     'reverted' => $state['reverted'] ?? null,
 ]) . PHP_EOL;

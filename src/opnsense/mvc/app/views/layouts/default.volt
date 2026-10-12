@@ -264,7 +264,7 @@
                       data-help="{{ lang._('When enabled, saving a change starts a 10 minute timer. If the changes are not confirmed before the timer expires, the previous configuration is restored and all services are reloaded. Note that many settings only take effect after pressing the respective Apply button, so apply and verify your changes before confirming them.') }}"
                       data-active="{{ lang._('Protection is active, there are no unconfirmed changes.') }}"
                       data-pending="{{ lang._('Unconfirmed changes will be reverted in %s.') }}"
-                      data-reverted="{{ lang._('Unconfirmed changes have been reverted, all services are being reloaded.') }}"
+                      data-reverted="{{ lang._('Unconfirmed changes have been reverted and applied, reloading page.') }}"
                       data-enable="{{ lang._('Enable') }}" data-disable="{{ lang._('Disable') }}"
                       data-confirm="{{ lang._('Confirm changes') }}" data-extend="{{ lang._('Add 10 minutes') }}" data-revert="{{ lang._('Revert now') }}" data-close="{{ lang._('Close') }}">
                   <i class="fa fa-shield"></i> <span id="config_protect_remaining"></span>
