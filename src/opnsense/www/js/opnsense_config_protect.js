@@ -123,7 +123,8 @@ function initConfigProtect() {
 
         let buttons = [];
         if (status.pending) {
-            buttons.push({label: text.confirm, cssClass: 'btn-primary', action: function (dialog) {
+            // keep confirm apart from the other choices
+            buttons.push({label: text.confirm, cssClass: 'btn-primary pull-left', action: function (dialog) {
                 action('confirm');
                 dialog.close();
             }});
@@ -137,7 +138,7 @@ function initConfigProtect() {
             }});
         } else if (status.enabled) {
             // pending changes are either confirmed or reverted, not left behind by disabling
-            buttons.push({label: text.disable, action: function (dialog) {
+            buttons.push({label: text.disable, cssClass: 'btn-primary', action: function (dialog) {
                 action('disable');
                 dialog.close();
             }});
@@ -147,9 +148,12 @@ function initConfigProtect() {
                 dialog.close();
             }});
         }
-        buttons.push({label: text.close, action: function (dialog) {
-            dialog.close();
-        }});
+        if (!status.pending) {
+            // the pending dialog has enough choices, it can still be closed from the header
+            buttons.push({label: text.close, action: function (dialog) {
+                dialog.close();
+            }});
+        }
 
         BootstrapDialog.show({
             type: status.pending ? BootstrapDialog.TYPE_WARNING : BootstrapDialog.TYPE_INFO,
