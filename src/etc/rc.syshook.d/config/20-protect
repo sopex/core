@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# start the configuration protection timer when unconfirmed changes are saved
+/usr/local/opnsense/scripts/system/config_protect.php check > /dev/null

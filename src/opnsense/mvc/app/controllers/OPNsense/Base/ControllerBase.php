@@ -77,6 +77,7 @@ class ControllerBase extends ControllerRoot
           '/ui/js/opnsense_theme.js',
           '/ui/js/opnsense_ui.js',
           '/ui/js/opnsense_status.js',
+          '/ui/js/opnsense_config_protect.js',
           '/ui/js/opnsense_favorites.js',
           // OPNsense Menusystem access
           '/ui/js/opnsense_menusystem.js',

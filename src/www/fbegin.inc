@@ -62,6 +62,20 @@ $aclObj = new \OPNsense\Core\ACL();
           <li id="menu_messages"><?= get_menu_user() ?></li>
           <li>
             <span class="navbar-text" style="margin-left: 0">
+              <span id="config_protect" style="cursor:pointer; display:none" data-toggle="tooltip left" title="<?= html_safe(gettext('Configuration protection')) ?>"
+                    data-title="<?= html_safe(gettext('Configuration protection')) ?>"
+                    data-help="<?= html_safe(gettext('When enabled, saving a change starts a 10 minute timer. If the changes are not confirmed before the timer expires, the previous configuration is restored and all services are reloaded. Note that many settings only take effect after pressing the respective Apply button, so apply and verify your changes before confirming them.')) ?>"
+                    data-active="<?= html_safe(gettext('Protection is active, there are no unconfirmed changes.')) ?>"
+                    data-pending="<?= html_safe(gettext('Unconfirmed changes will be reverted in %s.')) ?>"
+                    data-reverted="<?= html_safe(gettext('Unconfirmed changes have been reverted, all services are being reloaded.')) ?>"
+                    data-enable="<?= html_safe(gettext('Enable')) ?>" data-disable="<?= html_safe(gettext('Disable')) ?>"
+                    data-confirm="<?= html_safe(gettext('Confirm changes')) ?>" data-extend="<?= html_safe(gettext('Add 10 minutes')) ?>" data-close="<?= html_safe(gettext('Close')) ?>">
+                <i class="fa fa-shield"></i> <span id="config_protect_remaining"></span>
+              </span>
+            </span>
+          </li>
+          <li>
+            <span class="navbar-text" style="margin-left: 0">
               <i id="system_status" data-toggle="tooltip left" title="<?= html_safe(gettext('Show system status')) ?>" style="cursor:pointer" class="fa fa-circle text-muted"></i>
             </span>
           </li>

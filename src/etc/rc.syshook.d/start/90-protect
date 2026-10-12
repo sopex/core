@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# resume a pending configuration protection timer after reboot
+/usr/local/opnsense/scripts/system/config_protect.php check > /dev/null
