@@ -122,6 +122,7 @@
                 initGlobalOpenShortcuts();
 
                 updateSystemStatus();
+                initConfigProtect();
 
                 // Register collapsible table headers
                 $('.table').on('click', 'thead', function(event) {
@@ -258,6 +259,21 @@
           <ul class="nav navbar-nav navbar-right">
             <li id="menu_messages">
               <span class="navbar-text">{{session_username}}@{{system_hostname}}.{{system_domain}}</span>
+            </li>
+            <li>
+              <span class="navbar-text" style="margin-left: 0">
+                <span id="config_protect" style="cursor:pointer; display:none" data-toggle="tooltip left" title="{{ lang._('Configuration protection') }}"
+                      data-title="{{ lang._('Configuration protection') }}"
+                      data-help="{{ lang._('When enabled, saving a change starts a 10 minute timer. If the changes are not confirmed before the timer expires, the previous configuration is restored.') }}"
+                      data-active="{{ lang._('Protection is active, there are no unconfirmed changes.') }}"
+                      data-pending="{{ lang._('Unconfirmed changes will be reverted in %s.') }}"
+                      data-reverted="{{ lang._('Unconfirmed changes have been reverted and applied, reloading page.') }}"
+                      data-failed="{{ lang._('Reverting unconfirmed changes did not complete successfully, please check the system log.') }}"
+                      data-enable="{{ lang._('Enable') }}" data-disable="{{ lang._('Disable') }}"
+                      data-confirm="{{ lang._('Confirm changes') }}" data-extend="{{ lang._('Add 10 minutes') }}" data-revert="{{ lang._('Revert now') }}" data-close="{{ lang._('Close') }}">
+                  <i class="fa fa-shield"></i> <span id="config_protect_remaining"></span>
+                </span>
+              </span>
             </li>
             <li>
               <span class="navbar-text" style="margin-left: 0">

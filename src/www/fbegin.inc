@@ -62,6 +62,21 @@ $aclObj = new \OPNsense\Core\ACL();
           <li id="menu_messages"><?= get_menu_user() ?></li>
           <li>
             <span class="navbar-text" style="margin-left: 0">
+              <span id="config_protect" style="cursor:pointer; display:none" data-toggle="tooltip left" title="<?= html_safe(gettext('Configuration protection')) ?>"
+                    data-title="<?= html_safe(gettext('Configuration protection')) ?>"
+                    data-help="<?= html_safe(gettext('When enabled, saving a change starts a 10 minute timer. If the changes are not confirmed before the timer expires, the previous configuration is restored.')) ?>"
+                    data-active="<?= html_safe(gettext('Protection is active, there are no unconfirmed changes.')) ?>"
+                    data-pending="<?= html_safe(gettext('Unconfirmed changes will be reverted in %s.')) ?>"
+                    data-reverted="<?= html_safe(gettext('Unconfirmed changes have been reverted and applied, reloading page.')) ?>"
+                    data-failed="<?= html_safe(gettext('Reverting unconfirmed changes did not complete successfully, please check the system log.')) ?>"
+                    data-enable="<?= html_safe(gettext('Enable')) ?>" data-disable="<?= html_safe(gettext('Disable')) ?>"
+                    data-confirm="<?= html_safe(gettext('Confirm changes')) ?>" data-extend="<?= html_safe(gettext('Add 10 minutes')) ?>" data-revert="<?= html_safe(gettext('Revert now')) ?>" data-close="<?= html_safe(gettext('Close')) ?>">
+                <i class="fa fa-shield"></i> <span id="config_protect_remaining"></span>
+              </span>
+            </span>
+          </li>
+          <li>
+            <span class="navbar-text" style="margin-left: 0">
               <i id="system_status" data-toggle="tooltip left" title="<?= html_safe(gettext('Show system status')) ?>" style="cursor:pointer" class="fa fa-circle text-muted"></i>
             </span>
           </li>

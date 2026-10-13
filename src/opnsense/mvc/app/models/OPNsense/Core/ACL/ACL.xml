@@ -327,6 +327,12 @@
             <pattern>api/core/initial_setup/*</pattern>
         </patterns>
     </page-wizard-system>
+    <page-system-configuration-protection>
+        <name>System: Configuration: Protection</name>
+        <patterns>
+            <pattern>api/core/config_protect/*</pattern>
+        </patterns>
+    </page-system-configuration-protection>
     <page-services-opendns>
         <name>Services: DNS Filter</name>
         <patterns>
