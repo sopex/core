@@ -39,7 +39,10 @@
             </landing_page>
             <comment type="TextField"/>
             <email type="TextField"/>
-            <apikeys type=".\ApiKeyField"/>
+            <apikeys type=".\ApiKeyField">
+                <Mask>/\A[^|\r\n]{0,255}\z/</Mask>
+                <ValidationMessage>Description should be a simple string between 1 and 255 characters.</ValidationMessage>
+            </apikeys>
             <priv type=".\PrivField">
                 <Multiple>Y</Multiple>
             </priv>
