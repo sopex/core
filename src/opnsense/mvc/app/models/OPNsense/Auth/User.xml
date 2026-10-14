@@ -40,8 +40,8 @@
             <comment type="TextField"/>
             <email type="TextField"/>
             <apikeys type=".\ApiKeyField">
-                <Mask>/\A[^|\r\n]{0,255}\z/</Mask>
-                <ValidationMessage>Description should be a simple string between 1 and 255 characters.</ValidationMessage>
+                <Mask>/\A[^|\p{Cc}]{0,255}\z/u</Mask>
+                <ValidationMessage>Description can be up to 255 characters and cannot contain "|" or control characters such as line breaks.</ValidationMessage>
             </apikeys>
             <priv type=".\PrivField">
                 <Multiple>Y</Multiple>
