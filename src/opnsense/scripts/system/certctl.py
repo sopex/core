@@ -35,7 +35,7 @@ import warnings
 warnings.filterwarnings('ignore', message='.*cryptography', )
 import OpenSSL.crypto
 from cryptography import x509
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
 
 TRUSTPATH = ['/usr/share/certs/trusted', '/usr/local/share/certs']
 UNTRUSTEDPATH = ['/usr/share/certs/untrusted', '/usr/local/share/certs/untrusted']
@@ -47,7 +47,7 @@ def certificate_iterator(filename):
     needs_copy = False
     try:
         if fext == 'crl':
-            x509_items = [filename]
+            x509_items = [x509.load_pem_x509_crl(open(filename, 'rb').read())]
         elif fext in ['pem', 'cer', 'crt']:
             x509_items = x509.load_pem_x509_certificates(open(filename, 'rb').read())
             needs_copy = len(x509_items) > 1
@@ -71,13 +71,12 @@ def certificate_iterator(filename):
                 x509_item.public_bytes(serialization.Encoding.PEM)
             )
             hashval = hex(cert.subject_name_hash()).lstrip('0x').zfill(8)
-        if isinstance(x509_item, x509.Certificate):
-            payload = x509_item.public_bytes(serialization.Encoding.PEM)
-        else:
-            payload = open(filename, 'rb').read()
+        payload = x509_item.public_bytes(serialization.Encoding.PEM)
+        fingerprint = x509_item.fingerprint(hashes.SHA256()).hex()
 
         yield {
             'hash': hashval,
+            'fingerprint': fingerprint,
             'target_pattern': '%s.%s%%d' % (hashval, 'r' if fext == 'crl' else ''),
             'type': 'copy' if needs_copy else 'link',
             'data': payload,
@@ -119,6 +118,7 @@ def cmd_untrusted(*args, **kwargs):
 
 def cmd_rehash(*args, **kwargs):
     targets = {'trusted': {}, 'untrusted': {}}
+    untrusted = {}
     for path in UNTRUSTEDPATH + TRUSTPATH:
         if os.path.isdir(path):
             targetname = 'trusted' if path in TRUSTPATH else 'untrusted'
@@ -126,10 +126,18 @@ def cmd_rehash(*args, **kwargs):
             for filename in glob.glob('%s/*' % path):
                 for record in certificate_iterator(filename):
                     pattern = record['target_pattern']
+                    if targetname == 'untrusted':
+                        untrusted[record['fingerprint']] = record['filename']
+                    elif record['fingerprint'] in untrusted:
+                        print("Skipping untrusted certificate %s (%s)" % (
+                            record['filename'], untrusted[record['fingerprint']]
+                        ))
+                        continue
                     if pattern not in targets[targetname]:
                         targets[targetname][pattern] = []
-                    if record['type'] == 'copy' and len(targets[targetname][pattern]) > 0:
-                        # skip hardcopies when a link or hardcopy already exists
+                    if record['type'] == 'copy' and any(
+                        x['fingerprint'] == record['fingerprint'] for x in targets[targetname][pattern]
+                    ):
                         continue
                     targets[targetname][pattern].append(record)
 
@@ -143,14 +151,6 @@ def cmd_rehash(*args, **kwargs):
                 is_ut = target_name == 'untrusted'
                 src_filename = record['filename']
                 dst_filename = "%s/%s" % (UNTRUSTDESTDIR if is_ut else CERTDESTDIR, pattern % seq)
-                if not is_ut and pattern in targets['untrusted']:
-                    print(
-                        "Skipping untrusted certificate %s (%s/%s)" % (filename, UNTRUSTDESTDIR, pattern % seq)
-                    )
-                    if os.path.isfile('%s/%s' % (CERTDESTDIR, pattern % seq)):
-                        changes += 1
-                    continue
-
                 current_target_files.append(dst_filename)
                 if (use_links and record['type'] != 'copy' and os.path.islink(dst_filename) and
                     os.readlink(dst_filename) == src_filename):
