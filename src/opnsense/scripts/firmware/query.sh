@@ -59,7 +59,10 @@ remote)
 	;;
 tiers)
 	# fetching annotations is not as easy to query so always ask for annotations from remote end
-	${PKG} update -q && ${PKG} rquery '%n|||%At|||%Av' | grep '|||product_tier|||'
+	if ${PKG} update -q; then
+		${PKG} rquery -U '%n|||%At|||%Av' | grep '|||product_tier|||'
+		${PKG} rquery -U '%n|||category|||%C'
+	fi
 	;;
 *)
 	;;

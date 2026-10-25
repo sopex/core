@@ -467,7 +467,7 @@
                 }
                 let category = '';
                 if (row['installed'] == "0" && row['configured'] == "0") {
-                    category = row['origin'].split('/')[0];
+                    category = row['category'];
                     if (category != last_category) {
                         $('#pluginlist > tbody').append(
                             '<tr class="plugin_category" data-category="' + category + '" style="cursor:pointer;">' +

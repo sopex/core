@@ -820,6 +820,7 @@ class FirmwareController extends ApiMutableModelControllerBase
         $devel = count($devel) == 2 ? $devel[1] == 'devel' : false;
 
         /* need both remote and local, create array earlier */
+        $categories = [];
         $packages = [];
         $plugins = [];
         $tiers = [];
@@ -830,7 +831,11 @@ class FirmwareController extends ApiMutableModelControllerBase
         foreach ($current as $line) {
             $expanded = explode('|||', $line);
             if (count($expanded) == 3) {
-                $tiers[$expanded[0]] = $expanded[2];
+                if ($expanded[1] == 'category') {
+                    $categories[$expanded[0]] ??= $expanded[2];
+                } else {
+                    $tiers[$expanded[0]] = $expanded[2];
+                }
             }
         }
 
@@ -904,17 +909,7 @@ class FirmwareController extends ApiMutableModelControllerBase
             }
         }
 
-        uasort($plugins, function ($a, $b) {
-            $cat_a = !$a['configured'] && !$a['installed'] ? explode('/', $a['origin'])[0] : '';
-            $cat_b = !$b['configured'] && !$b['installed'] ? explode('/', $b['origin'])[0] : '';
-            return strnatcasecmp(
-                ($a['configured'] && !$a['installed'] ? '0' : ($a['installed'] ? '1' : '2')) . $cat_a,
-                ($b['configured'] && !$b['installed'] ? '0' : ($b['installed'] ? '1' : '2')) . $cat_b
-            ) ?: strnatcasecmp($a['name'], $b['name']);
-        });
-
-        $response['plugin'] = [];
-        foreach ($plugins as $plugin) {
+        foreach ($plugins as &$plugin) {
             /* for any community repository, orphaned package or otherwise unknown force the lowest tier */
             $plugin['tier'] = '4';
 
@@ -923,8 +918,20 @@ class FirmwareController extends ApiMutableModelControllerBase
                 $plugin['tier'] = $tiers[$plugin['name']];
             }
 
-            $response['plugin'][] = $plugin;
+            $plugin['category'] = $categories[$plugin['name']] ?? gettext('N/A');
         }
+        unset($plugin);
+
+        uasort($plugins, function ($a, $b) {
+            $cat_a = !$a['configured'] && !$a['installed'] ? $a['category'] : '';
+            $cat_b = !$b['configured'] && !$b['installed'] ? $b['category'] : '';
+            return strnatcasecmp(
+                ($a['configured'] && !$a['installed'] ? '0' : ($a['installed'] ? '1' : '2')) . $cat_a,
+                ($b['configured'] && !$b['installed'] ? '0' : ($b['installed'] ? '1' : '2')) . $cat_b
+            ) ?: strnatcasecmp($a['name'], $b['name']);
+        });
+
+        $response['plugin'] = array_values($plugins);
 
         /* also pull in changelogs from here */
         $changelogs = json_decode(trim($backend->configdRun('firmware changelog list')), true);
