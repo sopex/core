@@ -905,10 +905,12 @@ class FirmwareController extends ApiMutableModelControllerBase
         }
 
         uasort($plugins, function ($a, $b) {
+            $cat_a = !$a['configured'] && !$a['installed'] ? explode('/', $a['origin'])[0] : '';
+            $cat_b = !$b['configured'] && !$b['installed'] ? explode('/', $b['origin'])[0] : '';
             return strnatcasecmp(
-                ($a['configured'] && !$a['installed'] ? '0' : '1') . ($a['installed'] ? '0' : '1') . $a['name'],
-                ($b['configured'] && !$b['installed'] ? '0' : '1') . ($b['installed'] ? '0' : '1') . $b['name']
-            );
+                ($a['configured'] && !$a['installed'] ? '0' : ($a['installed'] ? '1' : '2')) . $cat_a,
+                ($b['configured'] && !$b['installed'] ? '0' : ($b['installed'] ? '1' : '2')) . $cat_b
+            ) ?: strnatcasecmp($a['name'], $b['name']);
         });
 
         $response['plugin'] = [];

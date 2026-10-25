@@ -41,19 +41,37 @@
 
     function generic_search(that, entries) {
         let search = $(that).val().toLowerCase();
+        let visible_categories = {};
         $('.' + entries).each(function () {
             let row_by_col = $(this).find('td').map(function () {
                 return $(this).text();
             }).get();
-            let name = row_by_col.join(',').toLowerCase();
+            let category = $(this).data('category');
+            let name = row_by_col.join(',').toLowerCase() + ',' + (category || '').toLowerCase();
             if (entries == 'plugin_entry' && !$(this).hasClass('filter_sup_inst') && $.plugins_keep_full == undefined) {
                 $(this).hide();
             } else if (search.length != 0 && name.indexOf(search) == -1) {
                 $(this).hide();
             } else {
-                $(this).show();
+                if (category) {
+                    visible_categories[category] = true;
+                }
+                if (category && $('.plugin_category[data-category="' + category + '"]').hasClass('collapsed')) {
+                    $(this).hide();
+                } else {
+                    $(this).show();
+                }
             }
         });
+        if (entries == 'plugin_entry') {
+            $('.plugin_category').each(function () {
+                if (visible_categories[$(this).data('category')]) {
+                    $(this).show();
+                } else {
+                    $(this).hide();
+                }
+            });
+        }
     }
 
     function cancel_update() {
@@ -416,6 +434,7 @@
                 );
             }
 
+            let last_category = '';
             $.each(data['plugin'], function(index, row) {
                 if (row['provided'] == "1") {
                     plugin_count += 1;
@@ -446,8 +465,20 @@
                 if (['1', '2'].includes(row['tier']) || row['installed'] == '1' || row['configured'] == "1") {
                     cls_filter_sup_inst = 'filter_sup_inst'; // supported [tier 1,2] or (should be) installed
                 }
+                let category = '';
+                if (row['installed'] == "0" && row['configured'] == "0") {
+                    category = row['origin'].split('/')[0];
+                    if (category != last_category) {
+                        $('#pluginlist > tbody').append(
+                            '<tr class="plugin_category" data-category="' + category + '" style="cursor:pointer;">' +
+                            '<td colspan=7><i class="fa fa-angle-down fa-fw"></i> <b>' + category + '</b></td>' +
+                            '</tr>'
+                        );
+                        last_category = category;
+                    }
+                }
                 $('#pluginlist > tbody').append(
-                    '<tr class="plugin_entry '+cls_filter_sup_inst+'">' +
+                    '<tr class="plugin_entry ' + cls_filter_sup_inst + '" data-category="' + category + '">' +
                     '<td>' + bold_on + row['name'] + status_text + bold_off + '</td>' +
                     '<td>' + bold_on + row['version'] + bold_off + '</td>' +
                     '<td>' + bold_on + row['flatsize'] + bold_off + '</td>' +
@@ -555,6 +586,11 @@
             }
 
             // link buttons to actions
+            $(".plugin_category").click(function() {
+                $(this).toggleClass('collapsed');
+                $(this).find('i').toggleClass('fa-angle-down fa-angle-right');
+                $("#plugin_search").keyup();
+            });
             $(".act_reinstall").click(function(event) {
                 event.preventDefault();
                 action_may_reboot('reinstall', $(this).data('package'));
