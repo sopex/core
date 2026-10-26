@@ -324,6 +324,22 @@ function filter_core_rules_system($fw, $defaults)
         );
     }
 
+    // block quarantined client devices from reaching non-firewall destinations
+    $fw->registerTable('__client_quarantine', true);
+    $fw->registerFilterRule(
+        1,
+        [
+            'from' => '<__client_quarantine>',
+            'to' => '(self)',
+            'to_not' => true,
+            'type' => 'block',
+            'quick' => true,
+            'descr' => 'Client-centric quarantine block',
+            '#ref' => 'ui/interfaces/neighbor',
+        ],
+        $defaults['block']
+    );
+
     // block bogons and private nets
     $bogontmpl = ['type' => 'block', 'log' => !isset($config['syslog']['nologbogons']), 'disablereplyto' => 1];
     $privtmpl = ['type' => 'block', 'log' => !isset($config['syslog']['nologprivatenets']), 'disablereplyto' => 1];

@@ -3800,6 +3800,9 @@ function _interfaces_neighbors_configure($device = null, $ifconfig_details = nul
 
     $current_neightbors = [];
     foreach ((new \OPNsense\Interfaces\Neighbor())->neighbor->iterateItems() as $key => $node) {
+        if (empty((string)$node->ipaddress) || empty((string)$node->etheraddr)) {
+            continue;
+        }
         $found = empty($if);    /* unfiltered when no $if provided */
         foreach ($subnets as $subnet) {
             $found = ip_in_subnet((string)$node->ipaddress, $subnet);
