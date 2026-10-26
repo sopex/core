@@ -1,6 +1,6 @@
 <model>
     <mount>//OPNsense/Interfaces/neighbors</mount>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <description>Neighbor configuration</description>
     <items>
         <neighbor type=".\NeighborField">
@@ -12,7 +12,27 @@
                 <NetMaskAllowed>N</NetMaskAllowed>
             </ipaddress>
             <descr type="DescriptionField"/>
+            <quarantined type="BooleanField">
+                <Default>0</Default>
+            </quarantined>
             <origin type="TextField" volatile="true"/>
         </neighbor>
+        <client type="ArrayField">
+            <etheraddr type="MacAddressField">
+                <Required>Y</Required>
+                <Constraints>
+                    <check001>
+                        <ValidationMessage>Duplicate client MAC entry exists.</ValidationMessage>
+                        <type>UniqueConstraint</type>
+                        <caseInsensitive>Y</caseInsensitive>
+                    </check001>
+                </Constraints>
+            </etheraddr>
+            <descr type="DescriptionField"/>
+            <quarantined type="BooleanField">
+                <Default>0</Default>
+                <Required>Y</Required>
+            </quarantined>
+        </client>
     </items>
 </model>

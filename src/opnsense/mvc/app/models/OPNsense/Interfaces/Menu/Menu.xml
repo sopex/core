@@ -15,6 +15,7 @@
         </Devices>
         <Neighbors order="220" cssClass="fa fa-users fa-fw">
             <Manual VisibleName="Static Assignments" url="/ui/interfaces/neighbor"/>
+            <Topology VisibleName="Topology Map" url="/ui/interfaces/neighbor#topology"/>
         </Neighbors>
         <Overview order="230" url="/ui/interfaces/overview" cssClass="fa fa-tasks fa-fw"/>
         <Settings order="240" url="/ui/interfaces/settings" cssClass="fa fa-cogs fa-fw"/>

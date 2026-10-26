@@ -4,6 +4,7 @@
         <patterns>
             <pattern>ui/interfaces/neighbor</pattern>
             <pattern>api/interfaces/neighbor_settings/*</pattern>
+            <pattern>api/interfaces/topology/*</pattern>
         </patterns>
     </page-interfaces-neighbor>
     <page-system-advanced-network>
