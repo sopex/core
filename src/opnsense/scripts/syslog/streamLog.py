@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
     result = deque()
     if inputargs.filename == "":
-        exit
+        exit()
 
     offset = int(inputargs.offset) if inputargs.offset.isdigit() else 0
 
