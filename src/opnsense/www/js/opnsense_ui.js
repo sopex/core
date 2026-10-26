@@ -558,7 +558,7 @@ function initFormAdvancedUI() {
 
     //  handle "advanced mode" toggle
     let elements = $('[id*="show_advanced"]');
-    if (window.sessionStorage && sessionStorage.getItem('show_advanced_preset') === 1) {
+    if (window.sessionStorage && sessionStorage.getItem('show_advanced_preset') === '1') {
         // show advanced options when preset was stored
         elements.toggleClass("fa-toggle-on fa-toggle-off");
         elements.toggleClass("text-success text-danger");
