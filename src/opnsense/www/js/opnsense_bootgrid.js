@@ -1760,7 +1760,7 @@ class UIBootgrid {
      * @param {*} id dataIdentifier option value
      */
     setPageByRowId(id) {
-        let page = typeof(this.curRowCount !== "boolean") ? parseInt((id / this.curRowCount) + 1) : 1;
+        let page = typeof this.curRowCount !== "boolean" ? parseInt((id / this.curRowCount) + 1) : 1;
 
         this.searchPhrase = "";
         $(`#${this.id}-search-field`).val("");
