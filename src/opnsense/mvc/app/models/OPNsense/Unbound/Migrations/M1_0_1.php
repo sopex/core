@@ -96,7 +96,7 @@ class M1_0_1 extends BaseModelMigration
                 $new_item = $model->dots->dot->add();
                 $new_item->enabled = '1';
                 $new_item->type = 'forward';
-                $new_item->domain = (string)$domain->domain;
+                $new_item->domain = (string)$old_domain->domain;
                 $parts = explode('@', (string)$old_domain->ip);
                 $new_item->server = $parts[0];
                 if (isset($parts[1])) {
