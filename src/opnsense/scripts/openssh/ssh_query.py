@@ -40,8 +40,6 @@ if __name__ == '__main__':
         for l in subprocess.run(['/usr/local/bin/ssh', '-Q', opt], capture_output=True).stdout.decode().split('\n'):
             if len(l.strip()) > 1:
                 partial.append(l.strip())
-        sorted(partial)
-        result[opt] = partial
+        result[opt] = sorted(partial)
 
-    sorted(result)
     print(ujson.dumps(result))
