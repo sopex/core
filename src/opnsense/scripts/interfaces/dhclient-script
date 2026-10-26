@@ -228,6 +228,30 @@ BOUND|RENEW|REBIND|REBOOT)
 	add_new_resolv_conf
 	if [ "$changes" = "yes" ] ; then
 		/usr/local/sbin/configctl -d interface newip $interface force
+		if [ ! -f /conf/ztp.done ] && {
+		    [ -f /conf/ztp.pending ] ||
+		    [ -f /conf/ztp.enable ] ||
+		    [ -s /conf/ztp.pub ] ||
+		    [ -s /usr/local/etc/ztp.pub ] ||
+		    grep -q "<ztp" /conf/config.xml 2>/dev/null;
+		}; then
+			if [ -d /var/db ] && [ -w /var/db ]; then
+				(
+					umask 077
+					{
+						echo "lease {"
+						[ -n "$new_vendor_encapsulated_options" ] && printf '  option vendor-encapsulated-options "%s";\n' "$new_vendor_encapsulated_options"
+						[ -n "$new_option_224" ] && printf '  option option-224 "%s";\n' "$new_option_224"
+						[ -n "$new_tftp_server_name" ] && printf '  option tftp-server-name "%s";\n' "$new_tftp_server_name"
+						[ -n "$new_bootfile_name" ] && printf '  option bootfile-name "%s";\n' "$new_bootfile_name"
+						[ -n "$new_url" ] && printf '  option url "%s";\n' "$new_url"
+						[ -n "$new_option_143" ] && printf '  option option-143 "%s";\n' "$new_option_143"
+						echo "}"
+					} > "/var/db/dhclient.ztp.${interface}" 2>/dev/null || true
+				)
+			fi
+			/usr/local/sbin/configctl -d system ztp dhcp "${interface}"
+		fi
 	fi
 	;;
 

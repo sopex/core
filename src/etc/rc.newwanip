@@ -141,3 +141,19 @@ if (is_ipaddr($cachegw) && is_ipaddr($gw) && $gw != $cachegw) {
 
 plugins_configure('vpn', false, [$interfaces, $family]);
 plugins_configure('newwanip', false, [$interfaces, $family]);
+
+if (
+    $interface === 'wan' &&
+    !file_exists('/conf/ztp.done') &&
+    (
+        file_exists('/conf/ztp.pending') ||
+        file_exists('/conf/ztp.enable') ||
+        file_exists('/conf/ztp.pub') ||
+        file_exists('/usr/local/etc/ztp.pub') ||
+        !empty($config['ztp']['enable']) ||
+        !empty($config['system']['ztp']['enable']) ||
+        !empty($config['system']['ztp_enable'])
+    )
+) {
+    mwexecfb('/usr/local/sbin/configctl -d system ztp dhcp %s', [$device]);
+}

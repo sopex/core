@@ -3243,6 +3243,8 @@ function interfaces_dhcp_split($option)
 
 function interface_dhcp_configure($interface = 'wan')
 {
+    global $config;
+
     $wancfg = config_read_array('interfaces', $interface, false);
     if (empty($wancfg)) {
         log_msg("interface_dhcp_configure: '{$interface}' does not have a configuration.", LOG_ERR);
@@ -3264,6 +3266,23 @@ function interface_dhcp_configure($interface = 'wan')
     $conf .= interfaces_dhcp_safe('  supersede interface-mtu %s;', 0, empty($wancfg['dhcphonourmtu']));
     $conf .= interfaces_dhcp_safe('  reject %s;', $wancfg['dhcprejectfrom'] ?? '', !empty($wancfg['dhcprejectfrom']));
     $conf .= interfaces_dhcp_safe('  vlan-pcp %s;', $wancfg['dhcpvlanprio'] ?? '', isset($wancfg['dhcpvlanprio']));
+    $ztp_enabled = !file_exists('/conf/ztp.done') && (
+        file_exists('/conf/ztp.pending') ||
+        file_exists('/conf/ztp.enable') ||
+        file_exists('/conf/ztp.pub') ||
+        file_exists('/usr/local/etc/ztp.pub') ||
+        !empty($config['ztp']['enable']) ||
+        !empty($config['system']['ztp']['enable']) ||
+        !empty($config['system']['ztp_enable'])
+    );
+    if ($ztp_enabled && $interface == 'wan' && empty($wancfg['dhcp_request_options'])) {
+        $conf .= interfaces_dhcp_safe(
+            '  request %s;',
+            'subnet-mask, broadcast-address, time-offset, routers, domain-name, domain-name-servers, domain-search, ' .
+            'host-name, static-routes, classless-routes, vendor-encapsulated-options, tftp-server-name, ' .
+            'bootfile-name, url, option-143, option-224'
+        );
+    }
     foreach (['dhcp_send_options' => 'send' , 'dhcp_request_options' => 'request'] as $prop => $tag) {
         if (!empty($wancfg[$prop])) {
             foreach (explode("\n", $wancfg[$prop]) as $line) {

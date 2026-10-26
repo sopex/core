@@ -1,0 +1,1642 @@
+#!/bin/sh
+
+# Copyright (c) 2026 Deciso B.V.
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+# INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+# AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+# AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+# OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+# Zero-Touch Provisioning (ZTP) early syshook and provisioning worker:
+# 1. Local ZTP: USB / Cloud-Init seed token (OPNSENSE_ZTP / cidata)
+# 2. Network ZTP: Opt-in DHCP Option 43 / 224 / 66 / 67 or mDNS claim URL
+
+ZTP_CONF_DIR="${ZTP_CONF_DIR:-/conf}"
+ZTP_CONFIG_XML="${ZTP_CONFIG_XML:-${ZTP_CONF_DIR}/config.xml}"
+ZTP_DEFAULT_XML="${ZTP_DEFAULT_XML:-/usr/local/etc/config.xml}"
+ZTP_DONE_MARKER="${ZTP_DONE_MARKER:-${ZTP_CONF_DIR}/ztp.done}"
+ZTP_PENDING_FILE="${ZTP_PENDING_FILE:-${ZTP_CONF_DIR}/ztp.pending}"
+ZTP_ENABLE_FILE="${ZTP_ENABLE_FILE:-${ZTP_CONF_DIR}/ztp.enable}"
+ZTP_PUBKEY_FILE="${ZTP_PUBKEY_FILE:-}"
+ZTP_VERIFY_REPO="${ZTP_VERIFY_REPO:-}"
+ZTP_LEASE_DIR="${ZTP_LEASE_DIR:-/var/db}"
+ZTP_DEV_DIR="${ZTP_DEV_DIR:-/dev}"
+ZTP_MNT_BASE="${ZTP_MNT_BASE:-/tmp}"
+ZTP_LOCK_DIR="${ZTP_LOCK_DIR:-${ZTP_MNT_BASE}/ztp.lock}"
+ZTP_SEED_DIR="${ZTP_SEED_DIR:-}"
+ZTP_DEV_LIST="${ZTP_DEV_LIST:-}"
+ZTP_VERIFY_CMD="${ZTP_VERIFY_CMD:-opnsense-verify}"
+ZTP_CRYPT_CMD="${ZTP_CRYPT_CMD:-opnsense-crypt}"
+ZTP_FIRMWARE_CMD="${ZTP_FIRMWARE_CMD:-/usr/local/etc/rc.firmware}"
+ZTP_REBOOT_CMD="${ZTP_REBOOT_CMD:-/usr/local/etc/rc.reboot}"
+ZTP_CA_BUNDLE="${ZTP_CA_BUNDLE:-${REQUESTS_CA_BUNDLE:-/usr/local/etc/ssl/cert.pem}}"
+ZTP_ALLOW_DOWNGRADE="${ZTP_ALLOW_DOWNGRADE:-0}"
+
+if [ -z "${PHP_BIN}" ]; then
+	if [ -x /usr/local/bin/php ]; then
+		PHP_BIN="/usr/local/bin/php"
+	else
+		PHP_BIN="$(command -v php 2>/dev/null || true)"
+	fi
+fi
+
+if [ -z "${ZTP_PHP_HELPER}" ]; then
+	if [ -f /usr/local/opnsense/scripts/system/ztp.php ]; then
+		ZTP_PHP_HELPER="/usr/local/opnsense/scripts/system/ztp.php"
+	else
+		SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+		if [ -f "${SCRIPT_DIR}/../../../opnsense/scripts/system/ztp.php" ]; then
+			ZTP_PHP_HELPER="${SCRIPT_DIR}/../../../opnsense/scripts/system/ztp.php"
+		fi
+	fi
+fi
+
+ZTP_WORKDIR=
+ZTP_MNTDIR=
+ZTP_MOUNTED=0
+ZTP_LOCK_HELD=0
+
+ztp_log()
+{
+	echo "ZTP: ${*}"
+	if command -v logger >/dev/null 2>&1; then
+		logger -t ztp "${*}" 2>/dev/null || true
+	fi
+}
+
+release_lock()
+{
+	if [ "${ZTP_LOCK_HELD}" = "1" ] && [ -n "${ZTP_LOCK_DIR}" ]; then
+		rm -f "${ZTP_LOCK_DIR}/pid" 2>/dev/null || true
+		rmdir "${ZTP_LOCK_DIR}" 2>/dev/null || true
+		ZTP_LOCK_HELD=0
+	fi
+}
+
+acquire_lock()
+{
+	local EXISTING_PID=""
+
+	if [ "${ZTP_LOCK_HELD}" = "1" ]; then
+		return 0
+	fi
+
+	mkdir -p "${ZTP_MNT_BASE}" 2>/dev/null || true
+
+	if mkdir "${ZTP_LOCK_DIR}" 2>/dev/null; then
+		printf '%s\n' "$$" > "${ZTP_LOCK_DIR}/pid" 2>/dev/null || true
+		ZTP_LOCK_HELD=1
+		return 0
+	fi
+
+	if [ -f "${ZTP_LOCK_DIR}/pid" ]; then
+		EXISTING_PID=$(cat "${ZTP_LOCK_DIR}/pid" 2>/dev/null || true)
+		if [ -n "${EXISTING_PID}" ] && ! kill -0 "${EXISTING_PID}" 2>/dev/null; then
+			rm -f "${ZTP_LOCK_DIR}/pid" 2>/dev/null || true
+			rmdir "${ZTP_LOCK_DIR}" 2>/dev/null || true
+			if mkdir "${ZTP_LOCK_DIR}" 2>/dev/null; then
+				printf '%s\n' "$$" > "${ZTP_LOCK_DIR}/pid" 2>/dev/null || true
+				ZTP_LOCK_HELD=1
+				return 0
+			fi
+		fi
+	fi
+
+	ztp_log "Provisioning worker already active; skipping concurrent invocation"
+	return 1
+}
+
+ztp_cleanup()
+{
+	if [ "${ZTP_MOUNTED}" = "1" ] && [ -n "${ZTP_MNTDIR}" ]; then
+		umount "${ZTP_MNTDIR}" 2>/dev/null || umount -f "${ZTP_MNTDIR}" 2>/dev/null || true
+		ZTP_MOUNTED=0
+	fi
+	if [ -n "${ZTP_MNTDIR}" ] && [ -d "${ZTP_MNTDIR}" ]; then
+		rmdir "${ZTP_MNTDIR}" 2>/dev/null || true
+	fi
+	if [ -n "${ZTP_WORKDIR}" ] && [ -d "${ZTP_WORKDIR}" ]; then
+		rm -rf "${ZTP_WORKDIR}" 2>/dev/null || true
+	fi
+	release_lock
+}
+
+trap ztp_cleanup EXIT INT TERM
+
+run_php_helper()
+{
+	if [ -z "${PHP_BIN}" ] || [ -z "${ZTP_PHP_HELPER}" ] || [ ! -f "${ZTP_PHP_HELPER}" ]; then
+		return 1
+	fi
+	"${PHP_BIN}" "${ZTP_PHP_HELPER}" "$@"
+}
+
+file_checksum()
+{
+	local FILE="${1}"
+
+	if [ ! -f "${FILE}" ]; then
+		return 1
+	fi
+
+	if command -v sha256 >/dev/null 2>&1; then
+		sha256 -q "${FILE}" 2>/dev/null
+	elif command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "${FILE}" 2>/dev/null | awk '{ print $1 }'
+	elif command -v openssl >/dev/null 2>&1; then
+		openssl dgst -sha256 "${FILE}" 2>/dev/null | awk '{ print $NF }'
+	else
+		cksum "${FILE}" 2>/dev/null | awk '{ print $1 ":" $2 }'
+	fi
+}
+
+get_factory_xml()
+{
+	if [ -f "${ZTP_DEFAULT_XML}" ]; then
+		echo "${ZTP_DEFAULT_XML}"
+	elif [ -f "${ZTP_DEFAULT_XML}.sample" ]; then
+		echo "${ZTP_DEFAULT_XML}.sample"
+	fi
+}
+
+is_factory_default()
+{
+	local FACTORY_XML
+	local CONF_SUM
+	local FACT_SUM
+
+	if [ -f "${ZTP_DONE_MARKER}" ]; then
+		return 1
+	fi
+
+	if [ ! -f "${ZTP_CONFIG_XML}" ]; then
+		return 0
+	fi
+
+	FACTORY_XML=$(get_factory_xml)
+	if [ -z "${FACTORY_XML}" ]; then
+		return 1
+	fi
+
+	CONF_SUM=$(file_checksum "${ZTP_CONFIG_XML}")
+	FACT_SUM=$(file_checksum "${FACTORY_XML}")
+
+	if [ -n "${CONF_SUM}" ] && [ "${CONF_SUM}" = "${FACT_SUM}" ]; then
+		return 0
+	fi
+
+	return 1
+}
+
+is_unconfigured()
+{
+	if [ -f "${ZTP_DONE_MARKER}" ]; then
+		return 1
+	fi
+
+	if [ -f "${ZTP_PENDING_FILE}" ]; then
+		return 0
+	fi
+
+	if is_factory_default; then
+		return 0
+	fi
+
+	return 1
+}
+
+resolve_trust_anchor()
+{
+	local KENV_PUB=""
+	local KENV_REPO=""
+
+	if [ -z "${ZTP_PUBKEY_FILE}" ]; then
+		if [ -s "${ZTP_CONF_DIR}/ztp.pub" ]; then
+			ZTP_PUBKEY_FILE="${ZTP_CONF_DIR}/ztp.pub"
+		elif [ -s /usr/local/etc/ztp.pub ]; then
+			ZTP_PUBKEY_FILE="/usr/local/etc/ztp.pub"
+		elif command -v kenv >/dev/null 2>&1; then
+			KENV_PUB=$(kenv -q opnsense.ztp.pubkey 2>/dev/null || true)
+			if [ -n "${KENV_PUB}" ] && [ -s "${KENV_PUB}" ]; then
+				ZTP_PUBKEY_FILE="${KENV_PUB}"
+			fi
+		fi
+	fi
+
+	if [ -z "${ZTP_VERIFY_REPO}" ] && command -v kenv >/dev/null 2>&1; then
+		KENV_REPO=$(kenv -q opnsense.ztp.verify_repo 2>/dev/null || true)
+		case "${KENV_REPO}" in
+		""|*[!A-Za-z0-9._-]*|-*)
+			;;
+		*)
+			ZTP_VERIFY_REPO="${KENV_REPO}"
+			;;
+		esac
+	fi
+
+	if [ -z "${ZTP_VERIFY_REPO}" ] && [ -d /usr/local/etc/pkg/fingerprints/ZTP ]; then
+		ZTP_VERIFY_REPO="ZTP"
+	fi
+}
+
+is_network_ztp_enabled()
+{
+	local KENV_ENABLE=""
+	local KENV_URL=""
+
+	if [ -f "${ZTP_DONE_MARKER}" ]; then
+		return 1
+	fi
+
+	if [ -f "${ZTP_PENDING_FILE}" ]; then
+		return 0
+	fi
+
+	if [ -f "${ZTP_ENABLE_FILE}" ]; then
+		return 0
+	fi
+
+	if [ "${ZTP_ENABLE}" = "1" ]; then
+		return 0
+	fi
+
+	if [ -n "${ZTP_PROV_URL}" ]; then
+		return 0
+	fi
+
+	resolve_trust_anchor
+	if [ -n "${ZTP_PUBKEY_FILE}" ] && [ -s "${ZTP_PUBKEY_FILE}" ] && is_factory_default; then
+		return 0
+	fi
+
+	if command -v kenv >/dev/null 2>&1; then
+		KENV_ENABLE=$(kenv -q opnsense.ztp.enable 2>/dev/null || true)
+		KENV_URL=$(kenv -q opnsense.ztp.url 2>/dev/null || true)
+		case "${KENV_ENABLE}" in
+		1|[Yy][Ee][Ss]|[Tt][Rr][Uu][Ee])
+			return 0
+			;;
+		esac
+		if [ -n "${KENV_URL}" ]; then
+			return 0
+		fi
+	fi
+
+	if [ -f "${ZTP_CONFIG_XML}" ] && run_php_helper is_ztp_enabled_xml "${ZTP_CONFIG_XML}" >/dev/null 2>&1; then
+		return 0
+	fi
+
+	return 1
+}
+
+init_workdir()
+{
+	if [ -z "${ZTP_WORKDIR}" ] || [ ! -d "${ZTP_WORKDIR}" ]; then
+		mkdir -p "${ZTP_MNT_BASE}" || return 1
+		ZTP_WORKDIR=$(mktemp -d "${ZTP_MNT_BASE}/ztp_work.XXXXXX") || return 1
+		chmod 700 "${ZTP_WORKDIR}" || return 1
+	fi
+}
+
+collect_mac_inventory()
+{
+	if [ -n "${ZTP_MAC_INVENTORY}" ]; then
+		echo "${ZTP_MAC_INVENTORY}"
+		return 0
+	fi
+
+	if command -v ifconfig >/dev/null 2>&1; then
+		ifconfig 2>/dev/null | run_php_helper parse_ifconfig
+		return 0
+	fi
+
+	echo "{}"
+}
+
+collect_system_uuid()
+{
+	local UUID=""
+
+	if command -v kenv >/dev/null 2>&1; then
+		UUID=$(kenv -q smbios.system.uuid 2>/dev/null || true)
+	fi
+	if [ -z "${UUID}" ] && command -v sysctl >/dev/null 2>&1; then
+		UUID=$(sysctl -n kern.hostuuid 2>/dev/null || true)
+	fi
+	if [ -z "${UUID}" ] && [ -r /sys/class/dmi/id/product_uuid ]; then
+		UUID=$(cat /sys/class/dmi/id/product_uuid 2>/dev/null || true)
+	fi
+
+	echo "${UUID}"
+}
+
+collect_system_serial()
+{
+	local SERIAL=""
+
+	if command -v kenv >/dev/null 2>&1; then
+		SERIAL=$(kenv -q smbios.system.serial 2>/dev/null || true)
+		if [ -z "${SERIAL}" ]; then
+			SERIAL=$(kenv -q smbios.planar.serial 2>/dev/null || true)
+		fi
+	fi
+	if [ -z "${SERIAL}" ] && [ -r /sys/class/dmi/id/product_serial ]; then
+		SERIAL=$(cat /sys/class/dmi/id/product_serial 2>/dev/null || true)
+	fi
+
+	echo "${SERIAL}"
+}
+
+verify_artifact_signature()
+{
+	local DATA_FILE="${1}"
+	local SIG_FILE="${2}"
+
+	if [ ! -s "${DATA_FILE}" ] || [ ! -s "${SIG_FILE}" ]; then
+		return 1
+	fi
+
+	resolve_trust_anchor
+
+	if ! run_php_helper verify_sig "${DATA_FILE}" "${SIG_FILE}" \
+	    "${ZTP_VERIFY_CMD}" "${ZTP_PUBKEY_FILE}" "${ZTP_VERIFY_REPO}" >/dev/null 2>&1; then
+		return 1
+	fi
+
+	return 0
+}
+
+verify_seed_file()
+{
+	local SRC_FILE="${1}"
+	local DST_FILE="${2}"
+	local SEED_ROOT="${3:-}"
+	local SRC_SIG=""
+	local SIG_REL=""
+
+	if [ ! -s "${SRC_FILE}" ]; then
+		return 1
+	fi
+
+	if [ -s "${SRC_FILE}.sig" ]; then
+		SRC_SIG="${SRC_FILE}.sig"
+	elif [ -s "${SRC_FILE%.*}.sig" ]; then
+		SRC_SIG="${SRC_FILE%.*}.sig"
+	else
+		ztp_log "Missing signature file for '${SRC_FILE}'"
+		return 1
+	fi
+
+	if [ -n "${SEED_ROOT}" ]; then
+		SIG_REL="${SRC_SIG#${SEED_ROOT}/}"
+		if ! SRC_SIG=$(run_php_helper resolve_seed_file "${SEED_ROOT}" "${SIG_REL}" 2>/dev/null); then
+			ztp_log "Refusing signature file outside seed directory '${SRC_FILE}'"
+			return 1
+		fi
+	fi
+
+	if ! cp "${SRC_FILE}" "${DST_FILE}"; then
+		rm -f "${DST_FILE}" 2>/dev/null || true
+		return 1
+	fi
+
+	if ! cp "${SRC_SIG}" "${DST_FILE}.sig"; then
+		rm -f "${DST_FILE}" "${DST_FILE}.sig" 2>/dev/null || true
+		return 1
+	fi
+
+	if ! verify_artifact_signature "${DST_FILE}" "${DST_FILE}.sig"; then
+		ztp_log "Cryptographic signature verification failed for '${SRC_FILE}'"
+		rm -f "${DST_FILE}" "${DST_FILE}.sig" 2>/dev/null || true
+		return 1
+	fi
+
+	return 0
+}
+
+install_config_xml()
+{
+	local SRC_XML="${1}"
+	local DST_XML="${2}"
+	local SRC_SUM=""
+	local TMP_XML=""
+	local TMP_SUM=""
+	local DST_SUM=""
+	local BACKUP_FILE=""
+
+	if [ ! -s "${SRC_XML}" ]; then
+		ztp_log "Cannot install missing or empty configuration '${SRC_XML}'"
+		return 1
+	fi
+
+	if ! run_php_helper validate_xml "${SRC_XML}" >/dev/null 2>&1; then
+		ztp_log "Refusing to install invalid XML configuration '${SRC_XML}'"
+		return 1
+	fi
+
+	SRC_SUM=$(file_checksum "${SRC_XML}")
+	if [ -z "${SRC_SUM}" ]; then
+		ztp_log "Failed to compute checksum for '${SRC_XML}'"
+		return 1
+	fi
+
+	if ! mkdir -p "${ZTP_CONF_DIR}/backup" "${ZTP_CONF_DIR}/sshd"; then
+		ztp_log "Failed to create configuration directories under '${ZTP_CONF_DIR}'"
+		return 1
+	fi
+
+	if [ -s "${DST_XML}" ]; then
+		BACKUP_FILE="${ZTP_CONF_DIR}/backup/config-$(date +%s).$$.xml"
+		if ! cp "${DST_XML}" "${BACKUP_FILE}" || ! chmod 640 "${BACKUP_FILE}"; then
+			ztp_log "Failed to back up existing configuration to '${BACKUP_FILE}'"
+			rm -f "${BACKUP_FILE}" 2>/dev/null || true
+			return 1
+		fi
+	fi
+
+	TMP_XML="${DST_XML}.ztp.tmp.$$"
+	if ! cp "${SRC_XML}" "${TMP_XML}"; then
+		ztp_log "Failed to copy configuration to '${TMP_XML}'"
+		rm -f "${TMP_XML}" "${BACKUP_FILE}" 2>/dev/null || true
+		return 1
+	fi
+
+	if ! chmod 640 "${TMP_XML}"; then
+		ztp_log "Failed to set permissions on '${TMP_XML}'"
+		rm -f "${TMP_XML}" "${BACKUP_FILE}" 2>/dev/null || true
+		return 1
+	fi
+
+	TMP_SUM=$(file_checksum "${TMP_XML}")
+	if [ -z "${TMP_SUM}" ] || [ "${TMP_SUM}" != "${SRC_SUM}" ]; then
+		ztp_log "Partial or corrupted copy detected in '${TMP_XML}'"
+		rm -f "${TMP_XML}" "${BACKUP_FILE}" 2>/dev/null || true
+		return 1
+	fi
+
+	if ! run_php_helper validate_xml "${TMP_XML}" >/dev/null 2>&1; then
+		ztp_log "Temporary configuration '${TMP_XML}' failed XML validation"
+		rm -f "${TMP_XML}" "${BACKUP_FILE}" 2>/dev/null || true
+		return 1
+	fi
+
+	if ! mv "${TMP_XML}" "${DST_XML}"; then
+		ztp_log "Failed to move '${TMP_XML}' to '${DST_XML}'"
+		rm -f "${TMP_XML}" "${BACKUP_FILE}" 2>/dev/null || true
+		return 1
+	fi
+
+	DST_SUM=$(file_checksum "${DST_XML}")
+	if [ ! -s "${DST_XML}" ] || [ "${DST_SUM}" != "${SRC_SUM}" ] || ! run_php_helper validate_xml "${DST_XML}" >/dev/null 2>&1; then
+		ztp_log "Post-install verification failed for '${DST_XML}'"
+		if [ -n "${BACKUP_FILE}" ] && [ -s "${BACKUP_FILE}" ]; then
+			cp "${BACKUP_FILE}" "${DST_XML}" 2>/dev/null || true
+		fi
+		return 1
+	fi
+
+	return 0
+}
+
+trigger_firmware_sync()
+{
+	local FW_VER="${1}"
+	local CURRENT_VER=""
+
+	if [ -z "${FW_VER}" ]; then
+		return 0
+	fi
+
+	case "${FW_VER}" in
+	*[!A-Za-z0-9._-]*)
+		ztp_log "Ignoring invalid firmware_version '${FW_VER}'"
+		return 1
+		;;
+	esac
+
+	if command -v opnsense-version >/dev/null 2>&1; then
+		CURRENT_VER=$(opnsense-version -v 2>/dev/null || true)
+	fi
+
+	if ! run_php_helper check_fw_version "${FW_VER}" "${CURRENT_VER}" "${ZTP_ALLOW_DOWNGRADE}" >/dev/null 2>&1; then
+		ztp_log "Refusing firmware downgrade from '${CURRENT_VER}' to '${FW_VER}'"
+		return 1
+	fi
+
+	ztp_log "Triggering firmware sync for version '${FW_VER}'"
+
+	if [ -x "${ZTP_FIRMWARE_CMD}" ]; then
+		if [ "${FW_VER}" = "sync" ] || [ "${FW_VER}" = "latest" ] || [ "${FW_VER}" = "${CURRENT_VER}" ]; then
+			"${ZTP_FIRMWARE_CMD}"
+		else
+			"${ZTP_FIRMWARE_CMD}" upgrade "${FW_VER}"
+		fi
+	elif command -v opnsense-update >/dev/null 2>&1; then
+		if [ "${FW_VER}" = "sync" ] || [ "${FW_VER}" = "latest" ] || [ "${FW_VER}" = "${CURRENT_VER}" ]; then
+			opnsense-update -u
+		else
+			opnsense-update -u -r "${FW_VER}"
+		fi
+	elif command -v configctl >/dev/null 2>&1; then
+		configctl firmware sync
+	fi
+}
+
+is_mounted_or_system_dev()
+{
+	local CANDIDATE="${1}"
+	local MOUNTED_LIST="${2}"
+	local MDEV
+
+	case "${CANDIDATE}" in
+	*/EFISYS|*/efifs|*/rootfs|*/swapfs|*/OPNsense_Install)
+		return 0
+		;;
+	esac
+
+	for MDEV in ${MOUNTED_LIST}; do
+		if [ "${CANDIDATE}" = "${MDEV}" ]; then
+			return 0
+		fi
+	done
+
+	return 1
+}
+
+discover_geom_devices()
+{
+	local SUBDIR
+	local LABEL
+	local DEV
+	local DISK
+	local PART
+	local MOUNTED_DEVS
+
+	if [ -n "${ZTP_DEV_LIST}" ]; then
+		for DEV in ${ZTP_DEV_LIST}; do
+			echo "${DEV}"
+		done
+		return 0
+	fi
+
+	MOUNTED_DEVS=$(mount 2>/dev/null | awk '{ print $1 }')
+
+	# Priority 1: Explicit ZTP / Cloud-Init volume labels (OPNSENSE_ZTP, cidata)
+	for SUBDIR in msdosfs iso9660 gpt ufs label; do
+		for LABEL in OPNSENSE_ZTP opnsense_ztp cidata CIDATA config-2 CONFIG-2; do
+			DEV="${ZTP_DEV_DIR}/${SUBDIR}/${LABEL}"
+			if [ -e "${DEV}" ]; then
+				echo "${DEV}"
+			fi
+		done
+	done
+
+	# Priority 2: glabel status scan for OPNSENSE_ZTP / cidata / FAT32 / ISO9660 labels
+	if command -v glabel >/dev/null 2>&1; then
+		glabel status -as 2>/dev/null | while read LABEL _STATUS PROVIDER _MORE; do
+			case "${LABEL}" in
+			*OPNSENSE_ZTP*|*opnsense_ztp*|*cidata*|*CIDATA*|*config-2*|*CONFIG-2*|msdosfs/*|iso9660/*)
+				if [ -e "${ZTP_DEV_DIR}/${LABEL}" ] && ! is_mounted_or_system_dev "${ZTP_DEV_DIR}/${LABEL}" "${MOUNTED_DEVS}"; then
+					echo "${ZTP_DEV_DIR}/${LABEL}"
+				fi
+				if [ -n "${PROVIDER}" ] && [ -e "${ZTP_DEV_DIR}/${PROVIDER}" ] && ! is_mounted_or_system_dev "${ZTP_DEV_DIR}/${PROVIDER}" "${MOUNTED_DEVS}"; then
+					echo "${ZTP_DEV_DIR}/${PROVIDER}"
+				fi
+				;;
+			esac
+		done
+	fi
+
+	# Priority 3: Remaining FAT32 / ISO9660 labeled devices in /dev
+	for SUBDIR in msdosfs iso9660; do
+		if [ -d "${ZTP_DEV_DIR}/${SUBDIR}" ]; then
+			for DEV in "${ZTP_DEV_DIR}/${SUBDIR}"/*; do
+				if [ -e "${DEV}" ] && ! is_mounted_or_system_dev "${DEV}" "${MOUNTED_DEVS}"; then
+					echo "${DEV}"
+				fi
+			done
+		fi
+	done
+
+	# Priority 4: geom part (gpart) partitions (FAT32 / ISO9660 / UFS)
+	if command -v gpart >/dev/null 2>&1; then
+		gpart show -p 2>/dev/null | awk '
+			$1 != "=>" && NF >= 4 {
+				part = $3;
+				type = $4;
+				if (type ~ /msdos|fat|efi|cd9660|iso9660|ufs|!12|!11|!6|!14|linux-data/) {
+					print part;
+				}
+			}
+		' | while read PART; do
+			if [ -e "${ZTP_DEV_DIR}/${PART}" ] && ! is_mounted_or_system_dev "${ZTP_DEV_DIR}/${PART}" "${MOUNTED_DEVS}"; then
+				echo "${ZTP_DEV_DIR}/${PART}"
+			fi
+		done
+	fi
+
+	# Priority 5: Block devices from kern.disks
+	if command -v sysctl >/dev/null 2>&1; then
+		for DISK in $(sysctl -n kern.disks 2>/dev/null); do
+			for PART in "${DISK}s1" "${DISK}p1" "${DISK}s1a" "${DISK}p3" "${DISK}"; do
+				DEV="${ZTP_DEV_DIR}/${PART}"
+				if [ -e "${DEV}" ] && ! is_mounted_or_system_dev "${DEV}" "${MOUNTED_DEVS}"; then
+					echo "${DEV}"
+				fi
+			done
+		done
+	fi
+}
+
+mount_seed_device()
+{
+	local DEV="${1}"
+	local MNT="${2}"
+	local FSTYPES="msdosfs cd9660 ufs"
+	local DETECTED=""
+	local FS
+
+	case "${DEV}" in
+	*iso9660*|*/cd[0-9]*|*/acd[0-9]*)
+		FSTYPES="cd9660 msdosfs ufs"
+		;;
+	*msdosfs*)
+		FSTYPES="msdosfs cd9660 ufs"
+		;;
+	*ufs*)
+		FSTYPES="ufs msdosfs cd9660"
+		;;
+	esac
+
+	if command -v fstyp >/dev/null 2>&1; then
+		DETECTED=$(fstyp -u "${DEV}" 2>/dev/null || true)
+		if [ -n "${DETECTED}" ]; then
+			FSTYPES="${DETECTED} ${FSTYPES}"
+		fi
+	fi
+
+	for FS in ${FSTYPES}; do
+		if mount -r -t "${FS}" "${DEV}" "${MNT}" 2>/dev/null; then
+			return 0
+		fi
+	done
+
+	if mount -o ro "${DEV}" "${MNT}" 2>/dev/null; then
+		return 0
+	fi
+
+	return 1
+}
+
+process_seed_directory()
+{
+	local SEED_DIR="${1}"
+	local REL=""
+	local RESOLVED=""
+	local ZTP_JSON=""
+	local SEED_XML=""
+	local SEED_XML_REL=""
+	local HAS_SEED_XML="0"
+	local SEED_XML_HASH_VERIFIED="0"
+	local SEC_REL=""
+	local SEC_FILE=""
+	local TRUST_OUT=""
+	local FACTORY_XML=""
+	local MAC_INV=""
+	local APPLY_OUT=""
+	local FW_VER=""
+	local HASH_CHECK=""
+	local WAN_IF=""
+	local SEED_CFG_SHA=""
+	local ZTP_NET_ENABLE="0"
+	local PENDING_TMP=""
+	local LINE=""
+	local KEY=""
+	local VAL=""
+
+	if [ ! -d "${SEED_DIR}" ]; then
+		return 1
+	fi
+
+	for REL in \
+	    "ztp.json" \
+	    "opnsense/ztp.json" \
+	    "conf/ztp.json" \
+	    "user-data"; do
+		if [ -f "${SEED_DIR}/${REL}" ]; then
+			if RESOLVED=$(run_php_helper resolve_seed_file "${SEED_DIR}" "${REL}" 2>/dev/null); then
+				ZTP_JSON="${RESOLVED}"
+				break
+			else
+				ztp_log "Refusing symlinked or out-of-bounds '${SEED_DIR}/${REL}'"
+				return 1
+			fi
+		fi
+	done
+
+	for REL in \
+	    "config.xml" \
+	    "conf/config.xml" \
+	    "opnsense/config.xml"; do
+		if [ -f "${SEED_DIR}/${REL}" ]; then
+			if RESOLVED=$(run_php_helper resolve_seed_file "${SEED_DIR}" "${REL}" 2>/dev/null); then
+				SEED_XML="${RESOLVED}"
+				SEED_XML_REL="${REL}"
+				break
+			else
+				ztp_log "Refusing symlinked or out-of-bounds '${SEED_DIR}/${REL}'"
+				return 1
+			fi
+		fi
+	done
+
+	if [ -z "${ZTP_JSON}" ] && [ -z "${SEED_XML}" ]; then
+		return 1
+	fi
+
+	init_workdir || return 1
+	rm -f "${ZTP_WORKDIR}/ztp.json" "${ZTP_WORKDIR}/ztp.json.sig" \
+	    "${ZTP_WORKDIR}/ztp.json.pinned.pub" \
+	    "${ZTP_WORKDIR}/config.xml" "${ZTP_WORKDIR}/config.xml.sig" \
+	    "${ZTP_WORKDIR}/config.secret" "${ZTP_WORKDIR}/staged_config.xml"
+
+	if [ -n "${ZTP_JSON}" ]; then
+		if [ -z "${ZTP_VERIFY_REPO}" ]; then
+			TRUST_OUT=$(run_php_helper extract_seed_trust "${ZTP_JSON}" "${SEED_DIR}" repo 2>/dev/null || true)
+			while IFS= read -r LINE; do
+				case "${LINE}" in
+				*=*)
+					KEY="${LINE%%=*}"
+					VAL="${LINE#*=}"
+					if [ "${KEY}" = "VERIFY_REPO" ] && [ -n "${VAL}" ]; then
+						ZTP_VERIFY_REPO="${VAL}"
+					fi
+					;;
+				esac
+			done <<EOF
+${TRUST_OUT}
+EOF
+		fi
+		if ! verify_seed_file "${ZTP_JSON}" "${ZTP_WORKDIR}/ztp.json" "${SEED_DIR}"; then
+			return 1
+		fi
+		if ! TRUST_OUT=$(run_php_helper extract_seed_trust "${ZTP_WORKDIR}/ztp.json" "${SEED_DIR}" full 2>/dev/null); then
+			ztp_log "Invalid trust anchor specification in '${ZTP_JSON}'"
+			return 1
+		fi
+		while IFS= read -r LINE; do
+			case "${LINE}" in
+			*=*)
+				KEY="${LINE%%=*}"
+				VAL="${LINE#*=}"
+				case "${KEY}" in
+				VERIFY_REPO)
+					if [ -n "${VAL}" ]; then
+						ZTP_VERIFY_REPO="${VAL}"
+					fi
+					;;
+				PUBKEY_FILE)
+					if [ -n "${VAL}" ] && [ -s "${VAL}" ]; then
+						ZTP_PUBKEY_FILE="${VAL}"
+					fi
+					;;
+				esac
+				;;
+			esac
+		done <<EOF
+${TRUST_OUT}
+EOF
+	fi
+
+	if [ -n "${SEED_XML}" ]; then
+		if [ -n "${ZTP_JSON}" ] && [ ! -f "${SEED_XML}.sig" ] && [ ! -f "${SEED_XML%.*}.sig" ]; then
+			HASH_CHECK=$(run_php_helper check_seed_xml_hash "${ZTP_WORKDIR}/ztp.json" "${SEED_XML}" 2>/dev/null || echo "NONE")
+			if [ "${HASH_CHECK}" = "MATCH" ]; then
+				if ! cp "${SEED_XML}" "${ZTP_WORKDIR}/config.xml"; then
+					return 1
+				fi
+				SEED_XML_HASH_VERIFIED="1"
+				HAS_SEED_XML="1"
+			elif [ "${HASH_CHECK}" = "MISMATCH" ]; then
+				if grep -qx -- '---- BEGIN config.xml ----' "${SEED_XML}" 2>/dev/null; then
+					if ! cp "${SEED_XML}" "${ZTP_WORKDIR}/config.xml"; then
+						return 1
+					fi
+					SEED_XML_HASH_VERIFIED="0"
+					HAS_SEED_XML="1"
+				else
+					ztp_log "SHA256 hash mismatch for '${SEED_XML}'"
+					return 1
+				fi
+			else
+				ztp_log "Ignoring unsigned '${SEED_XML}' without config_sha256 in ztp.json"
+				SEED_XML=""
+			fi
+		else
+			if ! verify_seed_file "${SEED_XML}" "${ZTP_WORKDIR}/config.xml" "${SEED_DIR}"; then
+				return 1
+			fi
+			SEED_XML_HASH_VERIFIED="1"
+			HAS_SEED_XML="1"
+		fi
+	fi
+
+	if [ -f "${ZTP_WORKDIR}/config.xml" ]; then
+		if grep -qx -- '---- BEGIN config.xml ----' "${ZTP_WORKDIR}/config.xml" 2>/dev/null; then
+			SEC_REL="${SEED_XML_REL%.xml}.secret"
+			SEC_FILE=$(run_php_helper resolve_seed_file "${SEED_DIR}" "${SEC_REL}" 2>/dev/null || true)
+			if [ -z "${SEC_FILE}" ]; then
+				SEC_FILE=$(run_php_helper resolve_seed_file "${SEED_DIR}" "config.secret" 2>/dev/null || true)
+			fi
+			if [ -n "${SEC_FILE}" ] && [ -f "${SEC_FILE}" ]; then
+				if ! cp "${SEC_FILE}" "${ZTP_WORKDIR}/config.secret"; then
+					return 1
+				fi
+				if ! "${ZTP_CRYPT_CMD}" "${ZTP_WORKDIR}/config.xml" >/dev/null 2>&1; then
+					ztp_log "Failed to decrypt '${SEED_XML}'"
+					return 1
+				fi
+				if [ "${SEED_XML_HASH_VERIFIED}" = "0" ]; then
+					HASH_CHECK=$(run_php_helper check_seed_xml_hash "${ZTP_WORKDIR}/ztp.json" "${ZTP_WORKDIR}/config.xml" 2>/dev/null || echo "NONE")
+					if [ "${HASH_CHECK}" != "MATCH" ]; then
+						ztp_log "SHA256 hash mismatch for decrypted '${SEED_XML}'"
+						return 1
+					fi
+					SEED_XML_HASH_VERIFIED="1"
+				fi
+			else
+				ztp_log "Encrypted config.xml requires accompanying config.secret"
+				return 1
+			fi
+		fi
+
+		if ! FW_VER=$(run_php_helper validate_xml "${ZTP_WORKDIR}/config.xml"); then
+			ztp_log "Invalid config.xml on seed device '${SEED_DIR}'"
+			return 1
+		fi
+		if ! cp "${ZTP_WORKDIR}/config.xml" "${ZTP_WORKDIR}/staged_config.xml"; then
+			return 1
+		fi
+	elif [ -s "${ZTP_CONFIG_XML}" ]; then
+		if ! cp "${ZTP_CONFIG_XML}" "${ZTP_WORKDIR}/staged_config.xml"; then
+			return 1
+		fi
+	else
+		FACTORY_XML=$(get_factory_xml)
+		if [ -n "${FACTORY_XML}" ] && [ -s "${FACTORY_XML}" ]; then
+			if ! cp "${FACTORY_XML}" "${ZTP_WORKDIR}/staged_config.xml"; then
+				return 1
+			fi
+		else
+			ztp_log "No base configuration found to stage local seed"
+			return 1
+		fi
+	fi
+
+	if [ -f "${ZTP_WORKDIR}/ztp.json" ]; then
+		MAC_INV=$(collect_mac_inventory)
+		resolve_trust_anchor
+		if ! APPLY_OUT=$(run_php_helper apply_ztp_json \
+		    "${ZTP_WORKDIR}/ztp.json" "${ZTP_WORKDIR}/staged_config.xml" \
+		    "${SEED_DIR}" "${MAC_INV}" "${ZTP_VERIFY_CMD}" \
+		    "${ZTP_PUBKEY_FILE}" "${ZTP_VERIFY_REPO}" \
+		    "${HAS_SEED_XML}" "${ZTP_CRYPT_CMD}"); then
+			ztp_log "Failed to apply ztp.json from '${SEED_DIR}'"
+			return 1
+		fi
+
+		while IFS= read -r LINE; do
+			case "${LINE}" in
+			*=*)
+				KEY="${LINE%%=*}"
+				VAL="${LINE#*=}"
+				case "${KEY}" in
+				FIRMWARE_VERSION) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/meta_fw_ver" ;;
+				PROVISIONING_URL) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/meta_prov_url" ;;
+				NETWORK_ZTP) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/meta_net_ztp" ;;
+				ENROLLMENT_TOKEN) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/meta_token" ;;
+				VERIFY_REPO) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/meta_verify_repo" ;;
+				CONFIG_SHA256) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/meta_cfg_sha" ;;
+				PINNED_PUBKEY_B64) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/meta_pubkey_b64" ;;
+				PINNED_CA_B64) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/meta_ca_b64" ;;
+				WAN_IF) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/meta_wan_if" ;;
+				esac
+				;;
+			esac
+		done <<EOF
+${APPLY_OUT}
+EOF
+
+		if [ -s "${ZTP_WORKDIR}/meta_fw_ver" ]; then
+			FW_VER=$(cat "${ZTP_WORKDIR}/meta_fw_ver")
+		fi
+		if [ -s "${ZTP_WORKDIR}/meta_prov_url" ]; then
+			ZTP_PROV_URL=$(cat "${ZTP_WORKDIR}/meta_prov_url")
+			export ZTP_PROV_URL
+		fi
+		if [ -s "${ZTP_WORKDIR}/meta_net_ztp" ]; then
+			ZTP_NET_ENABLE=$(cat "${ZTP_WORKDIR}/meta_net_ztp")
+		fi
+		if [ -s "${ZTP_WORKDIR}/meta_token" ]; then
+			ZTP_ENROLLMENT_TOKEN=$(cat "${ZTP_WORKDIR}/meta_token")
+			export ZTP_ENROLLMENT_TOKEN
+		fi
+		if [ -s "${ZTP_WORKDIR}/meta_verify_repo" ]; then
+			ZTP_VERIFY_REPO=$(cat "${ZTP_WORKDIR}/meta_verify_repo")
+			export ZTP_VERIFY_REPO
+		fi
+		if [ -s "${ZTP_WORKDIR}/meta_cfg_sha" ]; then
+			SEED_CFG_SHA=$(cat "${ZTP_WORKDIR}/meta_cfg_sha")
+		fi
+		if [ -s "${ZTP_WORKDIR}/meta_wan_if" ]; then
+			WAN_IF=$(cat "${ZTP_WORKDIR}/meta_wan_if")
+		fi
+	fi
+
+	if ! install_config_xml "${ZTP_WORKDIR}/staged_config.xml" "${ZTP_CONFIG_XML}"; then
+		ztp_log "Failed to install local seed configuration to ${ZTP_CONFIG_XML}"
+		return 1
+	fi
+
+	if [ -f "${ZTP_WORKDIR}/ztp.json" ]; then
+		if [ -s "${ZTP_WORKDIR}/meta_pubkey_b64" ] && [ -f "${ZTP_WORKDIR}/ztp.json.pinned.pub" ]; then
+			if ! cp "${ZTP_WORKDIR}/ztp.json.pinned.pub" "${ZTP_CONF_DIR}/ztp.pub" || ! chmod 640 "${ZTP_CONF_DIR}/ztp.pub"; then
+				ztp_log "Failed to persist pinned operator public key to ${ZTP_CONF_DIR}/ztp.pub"
+				return 1
+			fi
+			ZTP_PUBKEY_FILE="${ZTP_CONF_DIR}/ztp.pub"
+			export ZTP_PUBKEY_FILE
+		fi
+		if [ -s "${ZTP_WORKDIR}/meta_ca_b64" ]; then
+			if ! "${PHP_BIN}" -r 'file_put_contents($argv[2], base64_decode(file_get_contents($argv[1])));' \
+			    "${ZTP_WORKDIR}/meta_ca_b64" "${ZTP_CONF_DIR}/ztp.ca" || ! chmod 640 "${ZTP_CONF_DIR}/ztp.ca"; then
+				ztp_log "Failed to persist pinned CA certificate to ${ZTP_CONF_DIR}/ztp.ca"
+				return 1
+			fi
+			ZTP_CA_BUNDLE="${ZTP_CONF_DIR}/ztp.ca"
+			export ZTP_CA_BUNDLE
+		fi
+		ztp_log "Applied initial WAN/management credentials from ztp.json"
+	else
+		ztp_log "Copied verified config.xml to ${ZTP_CONFIG_XML}"
+	fi
+
+	if [ -x /usr/local/opnsense/service/template_ctl.py ]; then
+		/usr/local/opnsense/service/template_ctl.py \* >/dev/null 2>&1 || true
+	fi
+
+	if [ -n "${ZTP_PROV_URL}" ] || [ "${ZTP_NET_ENABLE}" = "1" ]; then
+		PENDING_TMP="${ZTP_PENDING_FILE}.tmp.$$"
+		if ! {
+			echo "ZTP_PROV_URL=${ZTP_PROV_URL}"
+			echo "ZTP_ENROLLMENT_TOKEN=${ZTP_ENROLLMENT_TOKEN}"
+			echo "ZTP_PENDING_FW_VER=${FW_VER}"
+			echo "ZTP_PUBKEY_FILE=${ZTP_PUBKEY_FILE}"
+			echo "ZTP_VERIFY_REPO=${ZTP_VERIFY_REPO}"
+			echo "ZTP_CA_BUNDLE=${ZTP_CA_BUNDLE}"
+			echo "ZTP_CONFIG_SHA256=${SEED_CFG_SHA}"
+			echo "ZTP_WAN_IF=${WAN_IF}"
+		} > "${PENDING_TMP}" || ! chmod 600 "${PENDING_TMP}" || ! mv "${PENDING_TMP}" "${ZTP_PENDING_FILE}"; then
+			rm -f "${PENDING_TMP}" 2>/dev/null || true
+			ztp_log "Failed to write pending ZTP state to ${ZTP_PENDING_FILE}"
+			return 1
+		fi
+	else
+		if [ -n "${FW_VER}" ]; then
+			trigger_firmware_sync "${FW_VER}"
+		fi
+		if ! touch "${ZTP_DONE_MARKER}"; then
+			ztp_log "Failed to create completion marker ${ZTP_DONE_MARKER}"
+			return 1
+		fi
+	fi
+
+	return 0
+}
+
+ztp_local()
+{
+	local DEV
+	local SEEN=""
+
+	if ! is_factory_default; then
+		return 1
+	fi
+
+	init_workdir || return 1
+
+	if [ -n "${ZTP_SEED_DIR}" ]; then
+		for DEV in $(echo "${ZTP_SEED_DIR}" | tr ':' ' '); do
+			if [ -d "${DEV}" ] && process_seed_directory "${DEV}"; then
+				return 0
+			fi
+		done
+		return 1
+	fi
+
+	ZTP_MNTDIR=$(mktemp -d "${ZTP_MNT_BASE}/ztp_mnt.XXXXXX") || return 1
+
+	for DEV in $(discover_geom_devices); do
+		case " ${SEEN} " in
+		*" ${DEV} "*)
+			continue
+			;;
+		esac
+		SEEN="${SEEN} ${DEV}"
+
+		if [ -d "${DEV}" ]; then
+			if process_seed_directory "${DEV}"; then
+				return 0
+			fi
+			continue
+		fi
+
+		if [ ! -e "${DEV}" ]; then
+			continue
+		fi
+
+		if mount_seed_device "${DEV}" "${ZTP_MNTDIR}"; then
+			ZTP_MOUNTED=1
+			if process_seed_directory "${ZTP_MNTDIR}"; then
+				umount "${ZTP_MNTDIR}" 2>/dev/null || umount -f "${ZTP_MNTDIR}" 2>/dev/null || true
+				ZTP_MOUNTED=0
+				return 0
+			fi
+			umount "${ZTP_MNTDIR}" 2>/dev/null || umount -f "${ZTP_MNTDIR}" 2>/dev/null || true
+			ZTP_MOUNTED=0
+		fi
+	done
+
+	return 1
+}
+
+discover_mdns_claim_url()
+{
+	local MDNS_OUT=""
+	local PARSED_MDNS=""
+
+	if [ -n "${ZTP_MDNS_URL}" ]; then
+		echo "${ZTP_MDNS_URL}"
+		return 0
+	fi
+
+	if command -v avahi-browse >/dev/null 2>&1; then
+		MDNS_OUT=$(avahi-browse -tpr _opnsense-ztp._tcp 2>/dev/null || true)
+		if [ -n "${MDNS_OUT}" ]; then
+			PARSED_MDNS=$(echo "${MDNS_OUT}" | awk -F';' '$1 == "=" && NF >= 10 { for (i = 10; i <= NF; i++) print $i }' | tr -d '"' | grep -E '(^|[[:space:]])(url=|https?://)' | head -n 1)
+			if [ -n "${PARSED_MDNS}" ]; then
+				echo "${PARSED_MDNS}"
+				return 0
+			fi
+		fi
+	fi
+
+	if command -v dns-sd >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+		MDNS_OUT=$(timeout 2 dns-sd -L "OPNsense ZTP" _opnsense-ztp._tcp local 2>/dev/null || true)
+		if [ -n "${MDNS_OUT}" ]; then
+			PARSED_MDNS=$(echo "${MDNS_OUT}" | tr ' ' '\n' | grep -E '^(url=|token=|https?://)' | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+			if [ -n "${PARSED_MDNS}" ]; then
+				echo "${PARSED_MDNS}"
+				return 0
+			fi
+		fi
+	fi
+
+	PARSED_MDNS=$(run_php_helper query_mdns "${ZTP_MDNS_ADDR:-224.0.0.251}" "${ZTP_MDNS_PORT:-5353}" "${ZTP_MDNS_TIMEOUT:-1}" 2>/dev/null || true)
+	if [ -n "${PARSED_MDNS}" ]; then
+		echo "${PARSED_MDNS}"
+		return 0
+	fi
+
+	return 1
+}
+
+http_request()
+{
+	local METHOD="${1}"
+	local URL="${2}"
+	local TOKEN="${3}"
+	local PAYLOAD_FILE="${4}"
+	local OUTPUT_FILE="${5}"
+	local CURL_ARGS=""
+	local FETCH_ARGS=""
+
+	if command -v curl >/dev/null 2>&1; then
+		CURL_ARGS="-fsSL --connect-timeout 15 --max-time 60 -X ${METHOD}"
+		if [ -f "${ZTP_CA_BUNDLE}" ]; then
+			CURL_ARGS="${CURL_ARGS} --cacert ${ZTP_CA_BUNDLE}"
+		fi
+		if [ "${METHOD}" = "POST" ] && [ -n "${PAYLOAD_FILE}" ]; then
+			if [ -n "${TOKEN}" ]; then
+				curl ${CURL_ARGS} \
+				    -H "Content-Type: application/json" \
+				    -H "Accept: application/xml, text/xml, application/json" \
+				    -H "Authorization: Bearer ${TOKEN}" \
+				    -H "X-Enrollment-Token: ${TOKEN}" \
+				    --data-binary "@${PAYLOAD_FILE}" \
+				    -o "${OUTPUT_FILE}" \
+				    "${URL}"
+			else
+				curl ${CURL_ARGS} \
+				    -H "Content-Type: application/json" \
+				    -H "Accept: application/xml, text/xml, application/json" \
+				    --data-binary "@${PAYLOAD_FILE}" \
+				    -o "${OUTPUT_FILE}" \
+				    "${URL}"
+			fi
+		else
+			if [ -n "${TOKEN}" ]; then
+				curl ${CURL_ARGS} \
+				    -H "Accept: application/xml, text/xml, application/json" \
+				    -H "Authorization: Bearer ${TOKEN}" \
+				    -H "X-Enrollment-Token: ${TOKEN}" \
+				    -o "${OUTPUT_FILE}" \
+				    "${URL}"
+			else
+				curl ${CURL_ARGS} \
+				    -H "Accept: application/xml, text/xml, application/json" \
+				    -o "${OUTPUT_FILE}" \
+				    "${URL}"
+			fi
+		fi
+		return ${?}
+	fi
+
+	if command -v fetch >/dev/null 2>&1; then
+		FETCH_ARGS="-qT 30"
+		if [ -f "${ZTP_CA_BUNDLE}" ]; then
+			FETCH_ARGS="${FETCH_ARGS} --ca-cert=${ZTP_CA_BUNDLE}"
+		fi
+		if [ "${METHOD}" = "POST" ] && [ -n "${PAYLOAD_FILE}" ]; then
+			fetch ${FETCH_ARGS} \
+			    --post-file="${PAYLOAD_FILE}" \
+			    -o "${OUTPUT_FILE}" \
+			    "${URL}"
+		else
+			fetch ${FETCH_ARGS} -o "${OUTPUT_FILE}" "${URL}"
+		fi
+		return ${?}
+	fi
+
+	return 1
+}
+
+ztp_network()
+{
+	local TARGET_IF="${1}"
+	local SEED_URL="${ZTP_PROV_URL:-}"
+	local SEED_TOKEN="${ZTP_ENROLLMENT_TOKEN:-}"
+	local SEED_FW_VER=""
+	local SEED_CFG_SHA=""
+	local SEED_WAN_IF=""
+	local CONFIG_WAN_IF=""
+	local KENV_URL=""
+	local KENV_TOKEN=""
+	local XML_CFG_OUT=""
+	local OPT_43=""
+	local OPT_224=""
+	local OPT_66=""
+	local OPT_67=""
+	local OPT_DHCP_URL=""
+	local LEASE_FILES=""
+	local LF
+	local PARSED_OUT=""
+	local PROV_URL=""
+	local PROV_TOKEN=""
+	local PROV_FW_VER=""
+	local DL_TOKEN=""
+	local SIG_DL_TOKEN=""
+	local MDNS_RAW=""
+	local SYS_UUID=""
+	local SYS_SERIAL=""
+	local MAC_INV=""
+	local CURRENT_VER=""
+	local RESP_OUT=""
+	local RESP_CONFIG_URL=""
+	local RESP_SIG_URL=""
+	local RESP_CFG_SHA=""
+	local RESP_FW_VER=""
+	local DL_FW_VER=""
+	local FINAL_FW_VER=""
+	local ACTUAL_SHA=""
+	local LINE=""
+	local PKEY=""
+	local PVAL=""
+	local KEY=""
+	local VAL=""
+
+	if [ -f "${ZTP_DONE_MARKER}" ]; then
+		return 0
+	fi
+
+	if [ -f "${ZTP_PENDING_FILE}" ]; then
+		while IFS= read -r LINE; do
+			case "${LINE}" in
+			*=*)
+				PKEY="${LINE%%=*}"
+				PVAL="${LINE#*=}"
+				case "${PKEY}" in
+				ZTP_PROV_URL)
+					if [ -z "${SEED_URL}" ] && [ -n "${PVAL}" ]; then
+						SEED_URL="${PVAL}"
+					fi
+					;;
+				ZTP_ENROLLMENT_TOKEN)
+					if [ -z "${SEED_TOKEN}" ] && [ -n "${PVAL}" ]; then
+						SEED_TOKEN="${PVAL}"
+					fi
+					;;
+				ZTP_PENDING_FW_VER)
+					if [ -z "${SEED_FW_VER}" ] && [ -n "${PVAL}" ]; then
+						SEED_FW_VER="${PVAL}"
+					fi
+					;;
+				ZTP_PUBKEY_FILE)
+					if [ -z "${ZTP_PUBKEY_FILE}" ] && [ -n "${PVAL}" ]; then
+						ZTP_PUBKEY_FILE="${PVAL}"
+					fi
+					;;
+				ZTP_VERIFY_REPO)
+					if [ -z "${ZTP_VERIFY_REPO}" ] && [ -n "${PVAL}" ]; then
+						ZTP_VERIFY_REPO="${PVAL}"
+					fi
+					;;
+				ZTP_CA_BUNDLE)
+					if [ -n "${PVAL}" ] && [ -f "${PVAL}" ]; then
+						ZTP_CA_BUNDLE="${PVAL}"
+					fi
+					;;
+				ZTP_CONFIG_SHA256)
+					if [ -z "${SEED_CFG_SHA}" ] && [ -n "${PVAL}" ]; then
+						SEED_CFG_SHA="${PVAL}"
+					fi
+					;;
+				ZTP_WAN_IF)
+					if [ -z "${SEED_WAN_IF}" ] && [ -n "${PVAL}" ]; then
+						SEED_WAN_IF="${PVAL}"
+					fi
+					;;
+				esac
+				;;
+			esac
+		done < "${ZTP_PENDING_FILE}"
+	fi
+
+	if ! is_network_ztp_enabled; then
+		return 0
+	fi
+
+	if [ -n "${TARGET_IF}" ]; then
+		if [ -n "${SEED_WAN_IF}" ] && [ "${TARGET_IF}" != "${SEED_WAN_IF}" ]; then
+			return 0
+		fi
+		if [ -z "${SEED_WAN_IF}" ] && [ -f "${ZTP_CONFIG_XML}" ]; then
+			CONFIG_WAN_IF=$(run_php_helper get_wan_if "${ZTP_CONFIG_XML}" 2>/dev/null || true)
+			if [ -n "${CONFIG_WAN_IF}" ] && [ "${TARGET_IF}" != "${CONFIG_WAN_IF}" ]; then
+				return 0
+			fi
+		fi
+	fi
+
+	init_workdir || return 1
+
+	if command -v kenv >/dev/null 2>&1; then
+		if [ -z "${SEED_URL}" ]; then
+			KENV_URL=$(kenv -q opnsense.ztp.url 2>/dev/null || true)
+			if [ -n "${KENV_URL}" ]; then
+				SEED_URL="${KENV_URL}"
+			fi
+		fi
+		if [ -z "${SEED_TOKEN}" ]; then
+			KENV_TOKEN=$(kenv -q opnsense.ztp.token 2>/dev/null || true)
+			if [ -n "${KENV_TOKEN}" ]; then
+				SEED_TOKEN="${KENV_TOKEN}"
+			fi
+		fi
+	fi
+
+	if [ -f "${ZTP_CONFIG_XML}" ]; then
+		XML_CFG_OUT=$(run_php_helper get_ztp_xml_config "${ZTP_CONFIG_XML}" 2>/dev/null || true)
+		if [ -n "${XML_CFG_OUT}" ]; then
+			while IFS= read -r LINE; do
+				case "${LINE}" in
+				*=*)
+					KEY="${LINE%%=*}"
+					VAL="${LINE#*=}"
+					case "${KEY}" in
+					XML_ZTP_URL)
+						if [ -z "${SEED_URL}" ] && [ -n "${VAL}" ]; then
+							SEED_URL="${VAL}"
+						fi
+						;;
+					XML_ZTP_TOKEN)
+						if [ -z "${SEED_TOKEN}" ] && [ -n "${VAL}" ]; then
+							SEED_TOKEN="${VAL}"
+						fi
+						;;
+					XML_ZTP_VERIFY_REPO)
+						if [ -z "${ZTP_VERIFY_REPO}" ] && [ -n "${VAL}" ]; then
+							ZTP_VERIFY_REPO="${VAL}"
+						fi
+						;;
+					XML_ZTP_PUBKEY_B64)
+						if [ -z "${ZTP_PUBKEY_FILE}" ] && [ -n "${VAL}" ]; then
+							printf '%s' "${VAL}" > "${ZTP_WORKDIR}/xml_pubkey_b64"
+							if "${PHP_BIN}" -r 'file_put_contents($argv[2], base64_decode(file_get_contents($argv[1])));' \
+							    "${ZTP_WORKDIR}/xml_pubkey_b64" "${ZTP_WORKDIR}/xml_ztp.pub" 2>/dev/null; then
+								ZTP_PUBKEY_FILE="${ZTP_WORKDIR}/xml_ztp.pub"
+							fi
+						fi
+						;;
+					esac
+					;;
+				esac
+			done <<EOF
+${XML_CFG_OUT}
+EOF
+		fi
+	fi
+
+	resolve_trust_anchor
+
+	# Precedence and token binding:
+	# 1. If a local seed / kenv / config.xml supplied SEED_URL, use it authoritatively
+	#    with SEED_TOKEN and ignore DHCP/mDNS endpoints.
+	# 2. Otherwise, parse DHCP/mDNS options with an empty seed token so SEED_TOKEN
+	#    is never leaked to an untrusted DHCP/mDNS host.
+	if [ -n "${SEED_URL}" ]; then
+		PARSED_OUT=$(run_php_helper parse_dhcp "" "" "" "" "${SEED_URL}" "${SEED_TOKEN}")
+	else
+		OPT_43="${new_vendor_encapsulated_options:-${new_option_43:-${ZTP_OPTION_43:-}}}"
+		OPT_224="${new_option_224:-${ZTP_OPTION_224:-}}"
+		OPT_66="${new_tftp_server_name:-${new_option_66:-${ZTP_OPTION_66:-}}}"
+		OPT_67="${new_bootfile_name:-${new_option_67:-${ZTP_OPTION_67:-}}}"
+		OPT_DHCP_URL="${new_url:-${new_option_114:-${new_option_143:-}}}"
+
+		if [ -n "${ZTP_LEASE_FILE}" ] && [ -f "${ZTP_LEASE_FILE}" ]; then
+			LEASE_FILES="${ZTP_LEASE_FILE}"
+		elif [ -n "${TARGET_IF}" ]; then
+			for LF in \
+			    "${ZTP_LEASE_DIR}/dhclient.ztp.${TARGET_IF}" \
+			    "${ZTP_LEASE_DIR}/dhclient.leases.${TARGET_IF}"; do
+				if [ -f "${LF}" ]; then
+					LEASE_FILES="${LEASE_FILES} ${LF}"
+				fi
+			done
+		elif [ -d "${ZTP_LEASE_DIR}" ]; then
+			for LF in "${ZTP_LEASE_DIR}"/dhclient.ztp.* "${ZTP_LEASE_DIR}"/dhclient.leases.*; do
+				if [ -f "${LF}" ]; then
+					LEASE_FILES="${LEASE_FILES} ${LF}"
+				fi
+			done
+		fi
+
+		PARSED_OUT=$(run_php_helper parse_dhcp \
+		    "${OPT_43}" "${OPT_224}" "${OPT_66}" "${OPT_67}" "" "" "${OPT_DHCP_URL}" ${LEASE_FILES})
+	fi
+
+	while IFS= read -r LINE; do
+		case "${LINE}" in
+		*=*)
+			KEY="${LINE%%=*}"
+			VAL="${LINE#*=}"
+			case "${KEY}" in
+			PROV_URL) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/net_url" ;;
+			PROV_TOKEN) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/net_token" ;;
+			PROV_FW_VER) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/net_fw" ;;
+			esac
+			;;
+		esac
+	done <<EOF
+${PARSED_OUT}
+EOF
+
+	if [ -f "${ZTP_WORKDIR}/net_url" ]; then
+		PROV_URL=$(cat "${ZTP_WORKDIR}/net_url")
+	fi
+	if [ -f "${ZTP_WORKDIR}/net_token" ]; then
+		PROV_TOKEN=$(cat "${ZTP_WORKDIR}/net_token")
+	fi
+
+	if [ -z "${PROV_URL}" ] && [ -z "${SEED_URL}" ]; then
+		MDNS_RAW=$(discover_mdns_claim_url || true)
+		if [ -n "${MDNS_RAW}" ]; then
+			PARSED_OUT=$(run_php_helper parse_dhcp "" "" "" "" "${MDNS_RAW}" "")
+			while IFS= read -r LINE; do
+				case "${LINE}" in
+				*=*)
+					KEY="${LINE%%=*}"
+					VAL="${LINE#*=}"
+					case "${KEY}" in
+					PROV_URL) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/net_url" ;;
+					PROV_TOKEN) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/net_token" ;;
+					esac
+					;;
+				esac
+			done <<EOF
+${PARSED_OUT}
+EOF
+			PROV_URL=$(cat "${ZTP_WORKDIR}/net_url" 2>/dev/null || true)
+			PROV_TOKEN=$(cat "${ZTP_WORKDIR}/net_token" 2>/dev/null || true)
+		fi
+	fi
+
+	if [ -z "${PROV_URL}" ]; then
+		return 1
+	fi
+
+	SYS_UUID=$(collect_system_uuid)
+	SYS_SERIAL=$(collect_system_serial)
+	MAC_INV=$(collect_mac_inventory)
+	if command -v opnsense-version >/dev/null 2>&1; then
+		CURRENT_VER=$(opnsense-version -v 2>/dev/null || true)
+	fi
+
+	if ! run_php_helper build_payload "${ZTP_WORKDIR}/post_payload.json" \
+	    "${SYS_UUID}" "${SYS_SERIAL}" "${MAC_INV}" "${PROV_TOKEN}" "${CURRENT_VER}"; then
+		ztp_log "Failed to construct provisioning payload"
+		return 1
+	fi
+
+	ztp_log "Enrolling appliance (UUID=${SYS_UUID}, serial=${SYS_SERIAL}) with '${PROV_URL}'"
+
+	if ! http_request "POST" "${PROV_URL}" "${PROV_TOKEN}" \
+	    "${ZTP_WORKDIR}/post_payload.json" "${ZTP_WORKDIR}/prov_response"; then
+		ztp_log "HTTPS POST to provisioning endpoint '${PROV_URL}' failed"
+		return 1
+	fi
+
+	if ! RESP_OUT=$(run_php_helper parse_response \
+	    "${ZTP_WORKDIR}/prov_response" "${ZTP_WORKDIR}/assigned_config.xml"); then
+		ztp_log "Invalid provisioning response from '${PROV_URL}'"
+		return 1
+	fi
+
+	while IFS= read -r LINE; do
+		case "${LINE}" in
+		*=*)
+			KEY="${LINE%%=*}"
+			VAL="${LINE#*=}"
+			case "${KEY}" in
+			RESP_CONFIG_URL) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/resp_cfg_url" ;;
+			RESP_SIG_URL) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/resp_sig_url" ;;
+			RESP_CONFIG_SHA256) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/resp_cfg_sha" ;;
+			RESP_FW_VER) printf '%s' "${VAL}" > "${ZTP_WORKDIR}/resp_fw_ver" ;;
+			esac
+			;;
+		esac
+	done <<EOF
+${RESP_OUT}
+EOF
+
+	if [ -s "${ZTP_WORKDIR}/resp_cfg_url" ]; then
+		RESP_CONFIG_URL=$(cat "${ZTP_WORKDIR}/resp_cfg_url")
+		DL_TOKEN=""
+		if run_php_helper same_origin "${PROV_URL}" "${RESP_CONFIG_URL}" >/dev/null 2>&1; then
+			DL_TOKEN="${PROV_TOKEN}"
+		fi
+		if ! http_request "GET" "${RESP_CONFIG_URL}" "${DL_TOKEN}" "" "${ZTP_WORKDIR}/assigned_config.xml"; then
+			ztp_log "Failed to download config.xml from '${RESP_CONFIG_URL}'"
+			return 1
+		fi
+		if [ ! -s "${ZTP_WORKDIR}/assigned_config.xml.sig" ]; then
+			if [ -s "${ZTP_WORKDIR}/resp_sig_url" ]; then
+				RESP_SIG_URL=$(cat "${ZTP_WORKDIR}/resp_sig_url")
+				SIG_DL_TOKEN=""
+				if run_php_helper same_origin "${PROV_URL}" "${RESP_SIG_URL}" >/dev/null 2>&1; then
+					SIG_DL_TOKEN="${PROV_TOKEN}"
+				fi
+				http_request "GET" "${RESP_SIG_URL}" "${SIG_DL_TOKEN}" "" "${ZTP_WORKDIR}/assigned_config.xml.sig" 2>/dev/null || true
+			else
+				http_request "GET" "${RESP_CONFIG_URL}.sig" "${DL_TOKEN}" "" "${ZTP_WORKDIR}/assigned_config.xml.sig" 2>/dev/null || true
+			fi
+		fi
+	elif [ ! -s "${ZTP_WORKDIR}/assigned_config.xml.sig" ]; then
+		if [ -s "${ZTP_WORKDIR}/resp_sig_url" ]; then
+			RESP_SIG_URL=$(cat "${ZTP_WORKDIR}/resp_sig_url")
+			SIG_DL_TOKEN=""
+			if run_php_helper same_origin "${PROV_URL}" "${RESP_SIG_URL}" >/dev/null 2>&1; then
+				SIG_DL_TOKEN="${PROV_TOKEN}"
+			fi
+			http_request "GET" "${RESP_SIG_URL}" "${SIG_DL_TOKEN}" "" "${ZTP_WORKDIR}/assigned_config.xml.sig" 2>/dev/null || true
+		else
+			http_request "GET" "${PROV_URL}.sig" "${PROV_TOKEN}" "" "${ZTP_WORKDIR}/assigned_config.xml.sig" 2>/dev/null || true
+		fi
+	fi
+
+	if [ ! -s "${ZTP_WORKDIR}/assigned_config.xml" ]; then
+		ztp_log "No valid config.xml obtained from provisioning endpoint"
+		return 1
+	fi
+
+	if ! DL_FW_VER=$(run_php_helper validate_xml "${ZTP_WORKDIR}/assigned_config.xml"); then
+		ztp_log "Provisioned config.xml is invalid XML"
+		return 1
+	fi
+
+	# Fail-closed signature verification: a valid cryptographic signature is mandatory
+	if [ ! -s "${ZTP_WORKDIR}/assigned_config.xml.sig" ]; then
+		ztp_log "Rejecting unsigned network configuration from '${PROV_URL}' (signature required)"
+		return 1
+	fi
+
+	if ! verify_artifact_signature "${ZTP_WORKDIR}/assigned_config.xml" "${ZTP_WORKDIR}/assigned_config.xml.sig"; then
+		ztp_log "Signature verification failed for downloaded config.xml"
+		return 1
+	fi
+
+	if [ -s "${ZTP_WORKDIR}/resp_cfg_sha" ]; then
+		RESP_CFG_SHA=$(cat "${ZTP_WORKDIR}/resp_cfg_sha")
+	fi
+	if [ -n "${SEED_CFG_SHA}" ]; then
+		ACTUAL_SHA=$(file_checksum "${ZTP_WORKDIR}/assigned_config.xml")
+		if [ "${ACTUAL_SHA}" != "${SEED_CFG_SHA}" ]; then
+			ztp_log "Downloaded config.xml does not match pinned seed SHA256"
+			return 1
+		fi
+	elif [ -n "${RESP_CFG_SHA}" ]; then
+		ACTUAL_SHA=$(file_checksum "${ZTP_WORKDIR}/assigned_config.xml")
+		if [ "${ACTUAL_SHA}" != "${RESP_CFG_SHA}" ]; then
+			ztp_log "Downloaded config.xml does not match response SHA256"
+			return 1
+		fi
+	fi
+
+	if ! install_config_xml "${ZTP_WORKDIR}/assigned_config.xml" "${ZTP_CONFIG_XML}"; then
+		ztp_log "Failed to install provisioned configuration to ${ZTP_CONFIG_XML}"
+		return 1
+	fi
+
+	if ! touch "${ZTP_DONE_MARKER}"; then
+		ztp_log "Failed to create completion marker ${ZTP_DONE_MARKER}"
+		return 1
+	fi
+	rm -f "${ZTP_PENDING_FILE}" 2>/dev/null || true
+
+	ztp_log "Wrote provisioned configuration to ${ZTP_CONFIG_XML}"
+
+	if [ -s "${ZTP_WORKDIR}/resp_fw_ver" ]; then
+		RESP_FW_VER=$(cat "${ZTP_WORKDIR}/resp_fw_ver")
+	fi
+	if [ -n "${DL_FW_VER}" ]; then
+		FINAL_FW_VER="${DL_FW_VER}"
+	elif [ -n "${SEED_FW_VER}" ]; then
+		FINAL_FW_VER="${SEED_FW_VER}"
+	elif [ -n "${RESP_FW_VER}" ]; then
+		FINAL_FW_VER="${RESP_FW_VER}"
+	fi
+	if [ -n "${FINAL_FW_VER}" ]; then
+		trigger_firmware_sync "${FINAL_FW_VER}"
+	fi
+
+	ztp_log "Rebooting into production configuration"
+	if [ -x "${ZTP_REBOOT_CMD}" ]; then
+		"${ZTP_REBOOT_CMD}"
+	elif command -v reboot >/dev/null 2>&1; then
+		reboot
+	fi
+
+	return 0
+}
+
+MODE="${1:-early}"
+SHIFT_IF="${2:-${interface:-}}"
+
+if ! acquire_lock; then
+	exit 0
+fi
+
+case "${MODE}" in
+local)
+	ztp_local || true
+	;;
+dhcp|network)
+	ztp_network "${SHIFT_IF}" || true
+	;;
+early|*)
+	if ! ztp_local; then
+		ztp_network "${SHIFT_IF}" || true
+	elif [ -f "${ZTP_PENDING_FILE}" ] || [ -n "${ZTP_PROV_URL}" ]; then
+		ztp_network "${SHIFT_IF}" || true
+	fi
+	;;
+esac
+
+exit 0
