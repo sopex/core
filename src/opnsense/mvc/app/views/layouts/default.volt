@@ -197,10 +197,12 @@
                 $("#menu_search_box").focus(function(){
                     $("#menu_search_box").css('width', '450px');
                     $("#system_status").hide();
+                    $("#config_protect").closest('li').hide();
                 });
                 $("#menu_search_box").focusout(function(){
                     $("#menu_search_box").css('width', '250px');
                     $("#system_status").show();
+                    $("#config_protect").closest('li').show();
                 });
                 // enable bootstrap tooltips
                 $('body').tooltip({

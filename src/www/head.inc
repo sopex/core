@@ -255,10 +255,12 @@ $pagetitle .= html_safe(sprintf(' | %s.%s', $config['system']['hostname'], $conf
       $("#menu_search_box").focus(function(){
           $("#menu_search_box").css('width', '450px');
           $("#system_status").hide();
+          $("#config_protect").closest('li').hide();
       });
       $("#menu_search_box").focusout(function(){
           $("#menu_search_box").css('width', '250px');
           $("#system_status").show();
+          $("#config_protect").closest('li').show();
       });
       // convert input form tables for better mobile experience
       hook_stacked_form_tables(".opnsense_standard_table_form");
