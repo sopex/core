@@ -166,15 +166,35 @@ function protect_spawn_watcher()
 }
 
 /**
- * restore the baseline configuration and apply it: regenerate all templates, press the
- * apply buttons used since the baseline again (they may do more than a service reload,
- * e.g. rebuild Unbound blocklists) and finally reload all services for legacy pages
- * which apply without configd.
+ * Settings outside the OPNsense section belong to legacy pages and models mounted on legacy
+ * paths, which may apply without configd (so without journal entries) and need a full reload.
+ * @param SimpleXMLElement|null $baseline configuration to restore
+ * @param SimpleXMLElement|null $discarded configuration to revert
+ * @return bool when legacy settings changed (or the configurations can't be compared)
+ */
+function protect_legacy_changed($baseline, $discarded)
+{
+    if ($baseline === null || $discarded === null) {
+        return true;
+    }
+    unset($baseline->OPNsense, $discarded->OPNsense);
+    return protect_config_content($baseline) !== protect_config_content($discarded);
+}
+
+/**
+ * restore the baseline configuration and apply it: press the apply buttons used since the
+ * baseline again (they may do more than a service reload, e.g. rebuild Unbound blocklists).
+ * When legacy settings changed, also regenerate all templates and reload all services as these
+ * may apply without configd.
  * @return bool configuration restored and all actions succeeded
  */
 function protect_revert()
 {
     syslog(LOG_WARNING, 'config protection: reverting unconfirmed changes');
+    $full_reload = protect_legacy_changed(
+        protect_parse_config(protect_read_config(PROTECT_BASELINE)),
+        protect_parse_config(protect_read_config('/conf/config.xml'))
+    );
     $cnf = Config::getInstance();
     if (!$cnf->restoreBackup(PROTECT_BASELINE)) {
         syslog(LOG_ERR, 'config protection: unable to restore ' . PROTECT_BASELINE);
@@ -198,8 +218,12 @@ function protect_revert()
         }
     };
 
-    /* actions below use the generated files, wait for them to be written */
-    $run('template reload *', 120, true);
+    if ($full_reload) {
+        /* actions below use the generated files, wait for them to be written */
+        $run('template reload *', 120, true);
+    } else {
+        syslog(LOG_NOTICE, 'config protection: only OPNsense settings changed, skipping full reload');
+    }
     foreach (array_unique($applied) as $line) {
         /* the journal is writable by the GUI, only replay what it is allowed to record */
         $event = Backend::protectJournalEvent($line);
@@ -210,8 +234,10 @@ function protect_revert()
         syslog(LOG_NOTICE, "config protection: replaying '{$event}'");
         $run($event);
     }
-    /* wait for the reload to finish, the GUI reloads the page when the revert is reported as done */
-    $run('service reload all', 900, true);
+    if ($full_reload) {
+        /* wait for the reload to finish, the GUI reloads the page when the revert is reported as done */
+        $run('service reload all', 900, true);
+    }
     syslog($success ? LOG_NOTICE : LOG_ERR, 'config protection: revert finished' . ($success ? '' : ' with errors'));
     return $success;
 }
