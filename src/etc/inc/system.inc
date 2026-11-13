@@ -112,6 +112,7 @@ function system_sysctl_defaults()
         'net.inet.udp.blackhole' => [ 'default' => '1' ],
         'net.inet.udp.checksum' => [ 'default' => 1 ],
         'net.inet.udp.maxdgram' => [ 'default' => '57344' ],
+        'net.inet6.icmp6.nd6_onlink_ns_rfc4861' => [ 'default' => '1' ],
         'net.inet6.ip6.forwarding' => [ 'default' => '1' ],
         'net.inet6.ip6.intr_queue_maxlen' => [ 'default' => '1000' ],
         'net.inet6.ip6.log_cannot_forward' => [ 'default' => '0' ],

@@ -77,11 +77,12 @@ else
 	exit 0
 fi
 
+force=
 /usr/local/sbin/ifctl -i ${ifname} -6nu ${nameservers} && need_update=1
 /usr/local/sbin/ifctl -i ${ifname} -6su ${searchlist} && need_update=1
-/usr/local/sbin/ifctl -i ${ifname} -6ru ${rasrcalist} && need_update=1
+/usr/local/sbin/ifctl -i ${ifname} -6ru ${rasrcalist} && need_update=1 && force=router
 
 if [ -n "${need_update}" ]; then
 	# remove slaac suffix here to reload correct interface
-	/usr/local/sbin/configctl -d interface newipv6 ${ifname%%:slaac}
+	/usr/local/sbin/configctl -d interface newipv6 ${ifname%%:slaac} ${force}
 fi

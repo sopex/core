@@ -4038,11 +4038,6 @@ function _interfaces_primary_address6($interface, $ifconfig_details = null, $all
 {
     $ifcfgipv6 = $networkv6 = $subnetbitsv6 = $devicev6 = null;
 
-    if ($allow_track && !$link_local && interfaces_has_prefix_only($interface)) {
-        /* extend the search scope for a non-NA mode to tracking interfaces */
-        $interface = array_merge([$interface], array_keys(link_interface_to_track6($interface)));
-    }
-
     $lifetime = 0;
 
     foreach (interfaces_addresses($interface, false, $ifconfig_details) as $addr) {
@@ -4097,6 +4092,14 @@ function _interfaces_primary_address6($interface, $ifconfig_details = null, $all
             $ifcfgipv6 .= "%{$addr['name']}";
         }
         $devicev6 = $addr['name'];
+    }
+
+    if ($ifcfgipv6 === null && $allow_track && !$link_local && interfaces_has_prefix_only($interface)) {
+        /* extend the search scope for a non-NA mode to tracking interfaces */
+        $trackifs = array_keys(link_interface_to_track6($interface));
+        if (count($trackifs)) {
+            return _interfaces_primary_address6($trackifs, $ifconfig_details, false, $link_local);
+        }
     }
 
     return [ $ifcfgipv6, $networkv6, $subnetbitsv6, $devicev6 ];

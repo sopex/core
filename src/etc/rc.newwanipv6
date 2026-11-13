@@ -75,6 +75,40 @@ if (!$fp || !flock($fp, LOCK_EX | LOCK_NB)) {
 /* wait for DAD to complete to avoid discarding tentative address */
 waitfordad();
 
+if ($reason == 'slaac') {
+    $ipaddrv6 = $config['interfaces'][$interface]['ipaddrv6'] ?? '';
+    if (!in_array($ipaddrv6, ['slaac', 'dhcp6'], true)) {
+        return;
+    }
+
+    $deprecated_slaac = [];
+    $has_preferred_slaac = false;
+    $details = legacy_interfaces_details($device);
+    foreach ($details[$device]['ipv6'] ?? [] as $addr) {
+        if ($addr['link-local'] || !$addr['autoconf'] || $addr['detached'] || $addr['tentative']) {
+            continue;
+        }
+        if ($addr['deprecated'] || $addr['pltime'] === '0') {
+            $deprecated_slaac[] = $addr['ipaddr'];
+        } else {
+            $has_preferred_slaac = true;
+        }
+    }
+
+    if (!$has_preferred_slaac) {
+        return;
+    }
+
+    foreach ($deprecated_slaac as $old_addr) {
+        log_msg("Removing deprecated SLAAC address {$old_addr} on {$interface} ({$device})");
+        legacy_interface_deladdress($device, $old_addr, 6);
+    }
+
+    if (count($deprecated_slaac) && $ipaddrv6 == 'dhcp6') {
+        killbypid('/var/run/dhcp6c.pid', 'HUP');
+    }
+}
+
 /* this may be required to cleanse the DNS information no longer available */
 system_resolver_configure();
 
