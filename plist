@@ -142,6 +142,7 @@
 /usr/local/etc/rc.syshook.d/start/90-openvpn
 /usr/local/etc/rc.syshook.d/start/90-sysctl
 /usr/local/etc/rc.syshook.d/start/95-beep
+/usr/local/etc/rc.syshook.d/start/99-beguard
 /usr/local/etc/rc.syshook.d/stop/05-beep
 /usr/local/etc/rc.syshook.d/stop/80-freebsd
 /usr/local/etc/rc.syshook.d/stop/99-config
@@ -595,6 +596,7 @@
 /usr/local/opnsense/mvc/app/library/OPNsense/OpenVPN/ViscosityVisz.php
 /usr/local/opnsense/mvc/app/library/OPNsense/System/AbstractStatus.php
 /usr/local/opnsense/mvc/app/library/OPNsense/System/StaticRoute.php
+/usr/local/opnsense/mvc/app/library/OPNsense/System/Status/BeGuardStatus.php
 /usr/local/opnsense/mvc/app/library/OPNsense/System/Status/CaptivePortalStatus.php
 /usr/local/opnsense/mvc/app/library/OPNsense/System/Status/ConfigdProxyOverrideStatus.php
 /usr/local/opnsense/mvc/app/library/OPNsense/System/Status/CrashReporterStatus.php
@@ -1132,6 +1134,7 @@
 /usr/local/opnsense/mvc/tests/app/library/OPNsense/Firewall/FilterRuleTest/testProtocol.conf
 /usr/local/opnsense/mvc/tests/app/library/OPNsense/Firewall/UtilTest.php
 /usr/local/opnsense/mvc/tests/app/library/OPNsense/Interface/IdassocTest.php
+/usr/local/opnsense/mvc/tests/app/library/OPNsense/System/Status/BeGuardStatusTest.php
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/ACL/AclConfig/config.xml
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/ACL/AclTest.php
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Base/BaseModel/Migrations/M0_0_1.php
@@ -1175,6 +1178,7 @@
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Base/FieldTypes/VirtualIPFieldTest.php
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Base/FieldTypes/VirtualIPFieldTest/config.xml
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/CaptivePortal/FieldTypes/OriginFieldTest.php
+/usr/local/opnsense/mvc/tests/app/models/OPNsense/Core/FirmwareTest.php
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Dnsmasq/FieldTypes/HostnameFieldTest.php
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Interfaces/NetworkInterfaceTest.php
 /usr/local/opnsense/mvc/tests/app/models/OPNsense/Interfaces/config/config.xml
@@ -1261,6 +1265,7 @@
 /usr/local/opnsense/scripts/filter/tests/__init__.py
 /usr/local/opnsense/scripts/filter/tests/alias_tests.py
 /usr/local/opnsense/scripts/filter/update_tables.py
+/usr/local/opnsense/scripts/firmware/be_guard.py
 /usr/local/opnsense/scripts/firmware/bogons.sh
 /usr/local/opnsense/scripts/firmware/changelog-date.php
 /usr/local/opnsense/scripts/firmware/changelog.sh
@@ -1278,6 +1283,7 @@
 /usr/local/opnsense/scripts/firmware/license.sh
 /usr/local/opnsense/scripts/firmware/lock.sh
 /usr/local/opnsense/scripts/firmware/plugin.sh
+/usr/local/opnsense/scripts/firmware/preflight.py
 /usr/local/opnsense/scripts/firmware/product.php
 /usr/local/opnsense/scripts/firmware/query.sh
 /usr/local/opnsense/scripts/firmware/read.sh
@@ -1288,10 +1294,14 @@
 /usr/local/opnsense/scripts/firmware/repos/OPNsense.php
 /usr/local/opnsense/scripts/firmware/repos/README
 /usr/local/opnsense/scripts/firmware/resync.sh
+/usr/local/opnsense/scripts/firmware/run_unittests.py
 /usr/local/opnsense/scripts/firmware/running.sh
 /usr/local/opnsense/scripts/firmware/security.sh
 /usr/local/opnsense/scripts/firmware/sync.sh
 /usr/local/opnsense/scripts/firmware/sync.subr.sh
+/usr/local/opnsense/scripts/firmware/tests/__init__.py
+/usr/local/opnsense/scripts/firmware/tests/be_guard_tests.py
+/usr/local/opnsense/scripts/firmware/tests/preflight_tests.py
 /usr/local/opnsense/scripts/firmware/unlock.sh
 /usr/local/opnsense/scripts/firmware/update.sh
 /usr/local/opnsense/scripts/firmware/upgrade.sh

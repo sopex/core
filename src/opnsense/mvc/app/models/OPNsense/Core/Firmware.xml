@@ -1,6 +1,6 @@
 <model>
     <mount>//system/firmware</mount>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <description>Firmware settings</description>
     <items>
         <mirror type="StrictTextField">
@@ -20,5 +20,23 @@
         </subscription>
         <reboot type="BooleanField"/>
         <aux type="BooleanField"/>
+        <be_guard type="BooleanField">
+            <Default>1</Default>
+            <Required>Y</Required>
+        </be_guard>
+        <be_guard_timeout type="IntegerField">
+            <Default>300</Default>
+            <MinimumValue>30</MinimumValue>
+            <MaximumValue>3600</MaximumValue>
+            <Required>Y</Required>
+            <ValidationMessage>Boot verification timeout must be between 30 and 3600 seconds.</ValidationMessage>
+        </be_guard_timeout>
+        <be_guard_retention type="IntegerField">
+            <Default>3</Default>
+            <MinimumValue>1</MinimumValue>
+            <MaximumValue>50</MaximumValue>
+            <Required>Y</Required>
+            <ValidationMessage>Pre-upgrade boot environment retention count must be between 1 and 50.</ValidationMessage>
+        </be_guard_retention>
     </items>
 </model>

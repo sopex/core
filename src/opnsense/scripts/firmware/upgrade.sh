@@ -29,17 +29,32 @@ REQUEST="UPGRADE"
 
 . /usr/local/opnsense/scripts/firmware/config.sh
 
+# create pre-upgrade ZFS boot environment if enabled (skips gracefully on UFS)
+if [ -x "${BASEDIR}/be_guard.py" ]; then
+	if ! output_cmd ${BASEDIR}/be_guard.py prepare --mode upgrade --no-prune; then
+		output_txt "Upgrade aborted: ZFS boot environment auto-guard preparation failed."
+		output_done keep-log
+	fi
+fi
+
 if output_cmd opnsense-update -u; then
 	if output_cmd /usr/local/etc/rc.syshook upgrade; then
 		# pending kernel applies before reboot
 		if output_cmd opnsense-update -K -c; then
 			output_cmd opnsense-update -K
 		fi
+		if [ -x "${BASEDIR}/be_guard.py" ]; then
+			output_cmd ${BASEDIR}/be_guard.py arm --mode upgrade
+		fi
 		output_reboot keep-log
 	fi
 
 	output_txt "The upgrade was aborted due to an error."
 	output_cmd opnsense-update -es
+fi
+
+if [ -x "${BASEDIR}/be_guard.py" ]; then
+	output_cmd ${BASEDIR}/be_guard.py discard-pending || true
 fi
 
 output_done keep-log

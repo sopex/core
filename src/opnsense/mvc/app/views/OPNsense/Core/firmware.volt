@@ -131,7 +131,7 @@
     /**
      * perform backend action and install poller to update status
      */
-    function backend(type) {
+    function backend(type, params) {
         $.upgrade_check = type == 'check';
 
         $('#update_status').html('');
@@ -140,7 +140,12 @@
         $('#updatetab > a').tab('show');
         $('#updatetab_progress').addClass("fa fa-spinner fa-pulse");
 
-        ajaxCall('/api/core/firmware/' + type, {}, function () {
+        ajaxCall('/api/core/firmware/' + type, params || {}, function (data) {
+            if (data && data['status'] == 'blocked' && data['preflight']) {
+                $('#updatetab_progress').removeClass("fa fa-spinner fa-pulse");
+                show_preflight_dialog(type === 'upgrade', data['preflight']);
+                return;
+            }
             setTimeout(trackStatus, 500);
         });
     }
@@ -236,37 +241,215 @@
     }
 
     /**
-     *  check if a reboot is required, warn user or just upgrade
+     * safely decode HTML entities from browser API JSON responses for .text() insertion
+     */
+    function decodeApiText(val) {
+        return (val !== null && val !== undefined && val !== '') ? htmlDecode(String(val)) : '';
+    }
+
+    /**
+     * build DOM content for a pre-flight validation report
+     */
+    function build_preflight_dom(report, reboot_msg, readonlyMode) {
+        let $wrap = $('<div/>');
+        let summary = (report && report.summary) ? report.summary : { blockers: 0, warnings: 0, info: 0 };
+        let findings = (report && Array.isArray(report.findings)) ? report.findings : [];
+
+        if (reboot_msg) {
+            $wrap.append($('<p/>').append($('<strong/>').text(reboot_msg)));
+        }
+
+        let $summary = $('<div class="__mb"/>');
+        $summary.append($('<span class="label label-danger"/>').text("{{ lang._('Blockers') }}: " + (summary.blockers || 0))).append(' ');
+        $summary.append($('<span class="label label-warning"/>').text("{{ lang._('Warnings') }}: " + (summary.warnings || 0))).append(' ');
+        $summary.append($('<span class="label label-info"/>').text("{{ lang._('Info') }}: " + (summary.info || 0)));
+        $wrap.append($summary);
+
+        if (findings.length > 0) {
+            let $table = $('<table class="table table-condensed table-striped"/>');
+            let $tbody = $('<tbody/>');
+            findings.forEach(function (item) {
+                let badgeClass = 'label-info';
+                if (item.severity === 'BLOCKER') {
+                    badgeClass = 'label-danger';
+                } else if (item.severity === 'WARNING') {
+                    badgeClass = 'label-warning';
+                }
+                let $tr = $('<tr/>');
+                $tr.append($('<td style="width:90px;vertical-align:top;"/>').append(
+                    $('<span class="label"/>').addClass(badgeClass).text(decodeApiText(item.severity || 'INFO'))
+                ));
+                let $detail = $('<td/>');
+                $detail.append($('<strong/>').text(decodeApiText(item.title)));
+                if (item.message) {
+                    $detail.append($('<div/>').text(decodeApiText(item.message)));
+                }
+                if (item.remediation) {
+                    $detail.append($('<div class="text-muted"><small/></div>').find('small').text(decodeApiText(item.remediation)).end());
+                }
+                $tr.append($detail);
+                $tbody.append($tr);
+            });
+            $table.append($tbody);
+            $wrap.append($('<div style="max-height:360px;overflow-y:auto;"/>').append($table));
+        } else {
+            $wrap.append($('<p class="text-success"/>').text("{{ lang._('All pre-flight validation checks passed.') }}"));
+        }
+
+        if (!readonlyMode && (summary.blockers || 0) > 0) {
+            let $overrideBox = $('<div class="alert alert-danger" style="margin-top:10px;margin-bottom:0;"/>');
+            let $label = $('<label style="font-weight:normal;cursor:pointer;margin-bottom:0;"/>');
+            let $cb = $('<input type="checkbox" id="preflight_override_cb" style="margin-right:6px;"/>');
+            $label.append($cb).append(document.createTextNode("{{ lang._('I understand the risks and want to override pre-flight blockers and proceed anyway.') }}"));
+            $overrideBox.append($label);
+            $wrap.append($overrideBox);
+        }
+
+        return $wrap;
+    }
+
+    /**
+     * display pre-flight validation report before confirming update or upgrade
+     */
+    function show_preflight_dialog(major, report, readonlyMode) {
+        let blockers = (report && report.summary) ? (report.summary.blockers || 0) : 0;
+        let warnings = (report && report.summary) ? (report.summary.warnings || 0) : 0;
+        let reboot_msg = '';
+
+        if (!readonlyMode) {
+            if (major === true) {
+                reboot_msg = "{{ lang._('The firewall will download all firmware sets and reboot multiple times for this upgrade. All operating system files and packages will be reinstalled as a consequence. This may take several minutes to complete.') }}";
+            } else if ($.status_reboot == "1") {
+                reboot_msg = "{{ lang._('The firewall will reboot directly after this firmware update.') }}";
+            }
+        }
+
+        let dlgType = BootstrapDialog.TYPE_INFO;
+        if (blockers > 0) {
+            dlgType = BootstrapDialog.TYPE_DANGER;
+        } else if (warnings > 0 || reboot_msg) {
+            dlgType = BootstrapDialog.TYPE_WARNING;
+        }
+
+        let buttons = [];
+        if (!readonlyMode) {
+            buttons.push({
+                id: 'btn_preflight_proceed',
+                label: blockers > 0 ? "{{ lang._('Override and Proceed') }}" : "{{ lang._('Proceed') }}",
+                cssClass: blockers > 0 ? 'btn-danger' : (warnings > 0 || reboot_msg ? 'btn-warning' : 'btn-primary'),
+                action: function (dialogRef) {
+                    let doOverride = blockers > 0 && dialogRef.getModalBody().find('#preflight_override_cb').is(':checked');
+                    if (blockers > 0 && !doOverride) {
+                        return;
+                    }
+                    dialogRef.close();
+                    backend(major === true ? 'upgrade' : 'update', doOverride ? { override: '1' } : {});
+                }
+            });
+        }
+        buttons.push({
+            label: readonlyMode ? "{{ lang._('Close') }}" : "{{ lang._('Cancel') }}",
+            action: function (dialogRef) {
+                dialogRef.close();
+            }
+        });
+
+        BootstrapDialog.show({
+            type: dlgType,
+            size: BootstrapDialog.SIZE_WIDE,
+            title: "{{ lang._('Pre-Flight Validation Report') }}",
+            message: build_preflight_dom(report, reboot_msg, readonlyMode),
+            buttons: buttons,
+            onshown: function (dialogRef) {
+                if (!readonlyMode && blockers > 0) {
+                    let $btn = dialogRef.getButton('btn_preflight_proceed');
+                    $btn.disable();
+                    dialogRef.getModalBody().find('#preflight_override_cb').on('change', function () {
+                        if ($(this).is(':checked')) {
+                            $btn.enable();
+                        } else {
+                            $btn.disable();
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    /**
+     *  run pre-flight validation, show report and reboot notice before confirming
      */
     function upgrade_ui(major)
     {
-        if (major !== true && $.status_reboot != "1") {
-            backend('update');
-        } else {
-            let reboot_msg = "{{ lang._('The firewall will reboot directly after this firmware update.') }}";
-            if (major === true) {
-                reboot_msg = "{{ lang._('The firewall will download all firmware sets and reboot multiple times for this upgrade. All operating system files and packages will be reinstalled as a consequence. This may take several minutes to complete.') }}";
+        let mode = major === true ? 'upgrade' : 'update';
+        ajaxGet('/api/core/firmware/preflight/' + mode, {}, function (report, status) {
+            if (status !== 'success' || !report) {
+                report = {
+                    status: 'error',
+                    can_proceed: false,
+                    summary: { blockers: 1, warnings: 0, info: 0 },
+                    findings: [{
+                        severity: 'BLOCKER',
+                        title: "{{ lang._('Pre-flight check failed') }}",
+                        message: "{{ lang._('Unable to retrieve pre-flight validation report from backend.') }}"
+                    }]
+                };
             }
-            // reboot required, inform the user.
-            BootstrapDialog.show({
-                type:BootstrapDialog.TYPE_WARNING,
-                title: "{{ lang._('Reboot required') }}",
-                message: reboot_msg,
-                buttons: [{
-                    label: "{{ lang._('OK') }}",
-                    cssClass: 'btn-warning',
-                    action: function(dialogRef){
-                        dialogRef.close();
-                        backend(major === true ? 'upgrade' : 'update');
-                    }
-                },{
-                    label: "{{ lang._('Cancel') }}",
-                    action: function(dialogRef){
-                        dialogRef.close();
-                    }
-                }]
-            });
-        }
+            show_preflight_dialog(major, report, false);
+        });
+    }
+
+    /**
+     * load and render ZFS Boot Environment Auto-Guard status
+     */
+    function loadBeGuardStatus() {
+        ajaxGet('/api/core/firmware/beguard_status', {}, function (data, status) {
+            if (status !== 'success' || !data) {
+                return;
+            }
+            if (!data.zfs_supported) {
+                $('#beguard_status_text').text("{{ lang._('Not available (non-ZFS root filesystem)') }}");
+            } else if (!data.configured_enabled) {
+                $('#beguard_status_text').text("{{ lang._('Disabled') }}");
+            } else {
+                $('#beguard_status_text').text(
+                    "{{ lang._('Enabled') }}" +
+                    ' (' + "{{ lang._('BE') }}: " + (decodeApiText(data.current_be) || 'unknown') +
+                    ', ' + "{{ lang._('timeout') }}: " + data.timeout + 's' +
+                    ', ' + "{{ lang._('retention') }}: " + data.retention + ')'
+                );
+            }
+
+            if (data.state === 'reverted') {
+                $('#beguard_revert_reason').text(
+                    decodeApiText(data.reason) || "{{ lang._('Previous upgrade failed boot verification and was automatically reverted.') }}"
+                );
+                let meta = [];
+                if (data.target_be) {
+                    meta.push("{{ lang._('Failed BE') }}: " + decodeApiText(data.target_be));
+                }
+                if (data.fallback_be) {
+                    meta.push("{{ lang._('Reverted to') }}: " + decodeApiText(data.fallback_be));
+                }
+                if (data.reverted_at) {
+                    meta.push("{{ lang._('Time') }}: " + new Date(data.reverted_at * 1000).toLocaleString());
+                }
+                $('#beguard_revert_meta').text(meta.join(' | '));
+                $('#beguard_revert_alert').show();
+            } else {
+                $('#beguard_revert_alert').hide();
+            }
+
+            if (data.state === 'armed') {
+                $('#beguard_armed_detail').text(
+                    "{{ lang._('Boot verification is active for') }} " + decodeApiText(data.target_be) +
+                    ' (' + "{{ lang._('fallback') }}: " + decodeApiText(data.fallback_be) + ')'
+                );
+                $('#beguard_armed_alert').show();
+            } else {
+                $('#beguard_armed_alert').hide();
+            }
+        });
     }
 
     function rebootWait() {
@@ -302,6 +485,7 @@
                     updateStatus();
                 } else {
                     packagesInfo(true);
+                    loadBeGuardStatus();
                 }
             } else if (data['status'] == 'reboot') {
                 BootstrapDialog.show({
@@ -644,7 +828,46 @@
         $('#audit_cleanup').click(function () { backend('cleanup'); });
         $('#audit_connection').click(function () { backend('connection'); });
         $('#audit_health').click(function () { backend('health'); });
+        $('#audit_preflight').click(function (event) {
+            event.preventDefault();
+            ajaxGet('/api/core/firmware/preflight/update', {}, function (report, status) {
+                if (status !== 'success' || !report) {
+                    report = {
+                        status: 'error',
+                        can_proceed: false,
+                        summary: { blockers: 1, warnings: 0, info: 0 },
+                        findings: [{
+                            severity: 'BLOCKER',
+                            title: "{{ lang._('Pre-flight check failed') }}",
+                            message: "{{ lang._('Unable to retrieve pre-flight validation report from backend.') }}"
+                        }]
+                    };
+                }
+                show_preflight_dialog(false, report, true);
+            });
+        });
         $('#audit_security').click(function () { backend('audit'); });
+        $('#beguard_revert_dismiss').click(function () {
+            ajaxCall('/api/core/firmware/beguard_dismiss', {}, function (data, status) {
+                if (status === 'success' && data && data['status'] === 'ok') {
+                    $('#beguard_revert_alert').hide();
+                    if (typeof updateSystemStatus === 'function') {
+                        updateSystemStatus();
+                    }
+                } else {
+                    let errMsg = (data && (data['errorMessage'] || data['message']))
+                        ? decodeApiText(data['errorMessage'] || data['message'])
+                        : "{{ lang._('Unable to dismiss Boot Environment Auto-Guard notice.') }}";
+                    stdDialogInform(
+                        "{{ lang._('Dismiss failed') }}",
+                        $('<div/>').text(errMsg),
+                        "{{ lang._('Close') }}",
+                        undefined,
+                        'danger'
+                    );
+                }
+            });
+        });
         $('#audit_upgrade').click(function () {
             ajaxCall('/api/core/firmware/log/0', {}, function (data, status) {
                 if (data['log'] != undefined) {
@@ -657,8 +880,9 @@
             });
         });
 
-        // populate package information
+        // populate package information and BE guard status
         packagesInfo(true);
+        loadBeGuardStatus();
 
         $("#plugin_search").keyup(function () { generic_search(this, 'plugin_entry'); });
         $("#package_search").keyup(function () { generic_search(this, 'package_entry'); });
@@ -691,6 +915,14 @@
                     $("#firmware_flavour").find('option').remove();
                     $("#firmware_reboot").prop('checked', fwconf['reboot'] == '1');
                     $("#firmware_aux").prop('checked', fwconf['aux'] == '1');
+                    $("#firmware_be_guard").prop('checked', fwconf['be_guard'] != '0');
+                    $("#firmware_be_guard_timeout").val(fwconf['be_guard_timeout'] || '300');
+                    $("#firmware_be_guard_retention").val(fwconf['be_guard_retention'] || '3');
+                    if (fwopts.zfs_supported === false) {
+                        $("#firmware_be_guard_ufs_note").show();
+                    } else {
+                        $("#firmware_be_guard_ufs_note").hide();
+                    }
 
                     $.each(fwopts.mirrors, function(key, value) {
                         var selected = false;
@@ -786,11 +1018,15 @@
             confopt.type = $("#firmware_type").val();
             confopt.reboot = $("#firmware_reboot").is(":checked") ? '1' : '0';
             confopt.aux = $("#firmware_aux").is(":checked") ? '1' : '0';
+            confopt.be_guard = $("#firmware_be_guard").is(":checked") ? '1' : '0';
+            confopt.be_guard_timeout = $("#firmware_be_guard_timeout").val();
+            confopt.be_guard_retention = $("#firmware_be_guard_retention").val();
             confopt.subscription = $("#firmware_subscription").val();
             ajaxCall('/api/core/firmware/set', { 'firmware': confopt }, function (data, status) {
                 $("#settingstab_progress").removeClass("fa fa-spinner fa-pulse");
                 if (data['status'] == 'ok') {
                     packagesInfo(true);
+                    loadBeGuardStatus();
                 } else {
                     let validation_msgs = '<ul>';
                     for (i = 0; i < data['status_msg'].length; i++) {
@@ -876,6 +1112,16 @@
                     </div>
                 </div>
                 <div id="status" class="tab-pane active table-responsive">
+                    <div id="beguard_revert_alert" class="alert alert-danger" style="display:none; margin:10px;">
+                        <button type="button" id="beguard_revert_dismiss" class="close" aria-label="{{ lang._('Dismiss') }}"><span aria-hidden="true">&times;</span></button>
+                        <strong><i class="fa fa-exclamation-triangle"></i> {{ lang._('Boot Environment Auto-Guard Reverted Previous Upgrade') }}</strong>
+                        <p id="beguard_revert_reason" style="margin:6px 0 4px 0;"></p>
+                        <small id="beguard_revert_meta" class="text-muted"></small>
+                    </div>
+                    <div id="beguard_armed_alert" class="alert alert-info" style="display:none; margin:10px;">
+                        <strong><i class="fa fa-shield"></i> {{ lang._('Boot Environment Verification Pending') }}:</strong>
+                        <span id="beguard_armed_detail"></span>
+                    </div>
                     <table class="table table-striped table-condensed">
                         <tbody>
                             <tr>
@@ -924,6 +1170,11 @@
                                 <td></td>
                             </tr>
                             <tr>
+                                <td style="width: 150px;">{{ lang._('Boot Guard') }}</td>
+                                <td id="beguard_status_text"></td>
+                                <td></td>
+                            </tr>
+                            <tr>
                                 <td style="width: 150px;"></td>
                                 <td style="min-width: 500px;">
                                     <button class="btn btn-primary" id="checkupdate"><i class="fa fa-refresh"></i> {{ lang._('Check for updates') }}</button>
@@ -935,6 +1186,7 @@
                                             <li><a id="audit_cleanup" href="#">{{ lang._('Cleanup') }}</a></li>
                                             <li><a id="audit_connection" href="#">{{ lang._('Connectivity') }}</a></li>
                                             <li><a id="audit_health" href="#">{{ lang._('Health') }}</a></li>
+                                            <li><a id="audit_preflight" href="#">{{ lang._('Pre-flight check') }}</a></li>
                                             <li><a id="audit_security" href="#">{{ lang._('Security') }}</a></li>
                                             <li><a id="audit_upgrade" href="#">{{ lang._('Upgrade') }}</a></li>
                                         </ul>
@@ -1066,6 +1318,42 @@
                                     <td>
                                         <input type="checkbox" id="firmware_aux">
                                         {{ lang._('Activate the auxiliary packages repository') }}
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td style="width: 150px;"><a id="help_for_be_guard" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a> {{ lang._('Boot Guard') }}</td>
+                                    <td>
+                                        <input type="checkbox" id="firmware_be_guard">
+                                        {{ lang._('Enable ZFS Boot Environment Auto-Guard before firmware upgrades') }}
+                                        <div id="firmware_be_guard_ufs_note" class="text-warning" style="display:none; margin-top:4px;">
+                                            <small><i class="fa fa-warning"></i> {{ lang._('This installation does not use ZFS on root. Boot Environment Auto-Guard will skip gracefully during upgrades.') }}</small>
+                                        </div>
+                                        <div class="hidden" data-for="help_for_be_guard">
+                                            {{ lang._('Automatically creates a ZFS boot environment snapshot before upgrades, boots the upgraded environment once, and reverts automatically if health verification fails.') }}
+                                        </div>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td style="width: 150px;"><a id="help_for_be_guard_timeout" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a> {{ lang._('Guard Timeout') }}</td>
+                                    <td>
+                                        <input type="number" id="firmware_be_guard_timeout" min="30" max="3600" style="width: 120px;">
+                                        <small class="text-muted">{{ lang._('seconds (30-3600, default: 300)') }}</small>
+                                        <div class="hidden" data-for="help_for_be_guard_timeout">
+                                            {{ lang._('Maximum time on first boot after an upgrade to pass kernel, web GUI, interface, default route, and pf ruleset checks before automatically reverting.') }}
+                                        </div>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td style="width: 150px;"><a id="help_for_be_guard_retention" href="#" class="showhelp"><i class="fa fa-info-circle"></i></a> {{ lang._('Guard Retention') }}</td>
+                                    <td>
+                                        <input type="number" id="firmware_be_guard_retention" min="1" max="50" style="width: 120px;">
+                                        <small class="text-muted">{{ lang._('pre-upgrade snapshots (1-50, default: 3)') }}</small>
+                                        <div class="hidden" data-for="help_for_be_guard_retention">
+                                            {{ lang._('Number of automatic pre-upgrade ZFS boot environments to retain. Older inactive pre-upgrade snapshots are pruned automatically.') }}
+                                        </div>
                                     </td>
                                     <td></td>
                                 </tr>

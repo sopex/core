@@ -29,6 +29,7 @@
 namespace OPNsense\Core\Api;
 
 use OPNsense\Base\ApiControllerBase;
+use OPNsense\Core\Backend;
 use OPNsense\Core\Config;
 use OPNsense\Core\Shell;
 
@@ -153,6 +154,66 @@ class BackupController extends ApiControllerBase
     }
 
     /**
+     * sanitize optional NIC remapping associative array into old=new,... string
+     * @param mixed $raw
+     * @return string
+     */
+    private function serializeRemap($raw): string
+    {
+        if (!is_array($raw)) {
+            return '';
+        }
+        $pairs = [];
+        foreach ($raw as $old => $new) {
+            $old = trim((string)$old);
+            $new = trim((string)$new);
+            if (
+                $new !== '' &&
+                preg_match('/^[A-Za-z][A-Za-z0-9_.:-]{0,31}$/', $old) &&
+                preg_match('/^[A-Za-z][A-Za-z0-9_.:-]{0,31}$/', $new)
+            ) {
+                $pairs[] = "{$old}={$new}";
+            }
+        }
+        return implode(',', $pairs);
+    }
+
+    /**
+     * run pre-flight validation on a local backup before reverting
+     * @param string $backup
+     * @return array
+     */
+    public function preflightBackupAction($backup)
+    {
+        foreach (glob("/conf/backup/config-*.xml") as $filename) {
+            if ($backup === basename($filename)) {
+                $remapStr = $this->request->isPost() ? $this->serializeRemap($this->request->getPost('remap')) : '';
+                $raw = trim((string)(new Backend())->configdpRun(
+                    'firmware preflight_restore',
+                    [$filename, '', $remapStr, '']
+                ));
+                $report = json_decode($raw, true);
+                if (is_array($report)) {
+                    return $report;
+                }
+                return [
+                    'status' => 'error',
+                    'can_proceed' => false,
+                    'summary' => ['blockers' => 1, 'warnings' => 0, 'info' => 0],
+                    'findings' => [[
+                        'id' => 'preflight_exec_error',
+                        'severity' => 'BLOCKER',
+                        'category' => 'system',
+                        'title' => gettext('Pre-flight validation failed to execute'),
+                        'message' => gettext('Backend pre-flight check returned an invalid response.'),
+                    ]],
+                ];
+            }
+        }
+        return ['status' => 'not_found'];
+    }
+
+    /**
      * revert to local backup from history
      */
     public function revertBackupAction($backup)
@@ -164,10 +225,65 @@ class BackupController extends ApiControllerBase
         foreach (glob("/conf/backup/config-*.xml") as $filename) {
             $bckfilename = basename($filename);
             if ($backup === $bckfilename) {
+                $remapStr = $this->serializeRemap($this->request->getPost('remap'));
+                $rawOverride = $this->request->getPost('override', 'string', '0');
+                $override = is_scalar($rawOverride) && in_array(
+                    strtolower((string)$rawOverride),
+                    ['1', 'true', 'yes'],
+                    true
+                );
+                $remappedPath = $remapStr !== ''
+                    ? ('/var/lib/php/tmp/revert_remapped_' . bin2hex(random_bytes(16)) . '.xml')
+                    : '';
+                $raw = trim((string)(new Backend())->configdpRun(
+                    'firmware preflight_restore',
+                    [$filename, '', $remapStr, $remappedPath]
+                ));
+                $report = json_decode($raw, true);
+
+                if (!is_array($report)) {
+                    if ($remappedPath !== '') {
+                        @unlink($remappedPath);
+                    }
+                    return [
+                        'status' => 'error',
+                        'message' => gettext('Pre-flight validation failed to execute; restore aborted.'),
+                    ];
+                }
+
+                if (empty($report['can_proceed']) && !$override) {
+                    if ($remappedPath !== '') {
+                        @unlink($remappedPath);
+                    }
+                    return ['status' => 'blocked', 'preflight' => $report];
+                }
+
+                if ($remappedPath !== '') {
+                    if (!file_exists($remappedPath) || !is_readable($remappedPath)) {
+                        @unlink($remappedPath);
+                        return [
+                            'status' => 'error',
+                            'message' => gettext('Remapped configuration file could not be read; restore aborted.'),
+                        ];
+                    }
+                    $source = $remappedPath;
+                } else {
+                    $source = $filename;
+                }
+
                 $cnf = Config::getInstance();
-                $cnf->restoreBackup($filename);
+                $ok = $cnf->restoreBackup($source);
+                if ($remappedPath !== '') {
+                    @unlink($remappedPath);
+                }
+                if (!$ok) {
+                    return [
+                        'status' => 'error',
+                        'message' => gettext('Failed to restore configuration backup.'),
+                    ];
+                }
                 $cnf->save();
-                return ['status' => 'reverted'];
+                return ['status' => 'reverted', 'preflight' => $report];
             }
         }
         return ['status' => 'not_found'];

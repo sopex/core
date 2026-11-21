@@ -4,6 +4,9 @@
 
 for STAGE in K B P; do
 	if opnsense-update -${STAGE}; then
+		if [ -x /usr/local/opnsense/scripts/firmware/be_guard.py ]; then
+			/usr/local/opnsense/scripts/firmware/be_guard.py rearm || true
+		fi
 		echo "Rebooting now."
 		/usr/local/etc/rc.reboot
 	fi

@@ -71,6 +71,17 @@ done
 SORTED="$(echo -n "${DATED}" | sort -r)"
 INDEX=0
 RESTORE=
+REMAPPED_TMP=
+
+cleanup_remapped_tmp()
+{
+	if [ -n "${REMAPPED_TMP}" ]; then
+		rm -f "${REMAPPED_TMP}"
+		REMAPPED_TMP=
+	fi
+}
+
+trap cleanup_remapped_tmp EXIT INT TERM HUP
 
 while [ -z "${RESTORE}" ]; do
 	clear
@@ -113,21 +124,74 @@ while [ -z "${RESTORE}" ]; do
 		    ${DIFF} | less -R -P "Viewing resulting diff - press UP/DOWN to review, 'q' to continue"
 
 		clear
-		read -p "Do you want to proceed restoring this backup? [y/N] " YN
+		PREFLIGHT="/usr/local/opnsense/scripts/firmware/preflight.py"
+		RESTORE_SRC="/conf/backup/${RESTORE}"
+		REMAPPED_TMP=
+		PF_RET=0
+		if [ -x "${PREFLIGHT}" ]; then
+			set +e
+			${PREFLIGHT} --mode restore --config "${RESTORE_SRC}" --text --exit-on-blocker
+			PF_RET=${?}
+			set -e
+			echo
+		fi
+		if [ ${PF_RET} -ne 0 ]; then
+			echo "Pre-flight validation reported BLOCKER issue(s) for this backup."
+			echo "You may enter interface remapping pairs (e.g. igb0=ix0,igb1=ix1), type OVERRIDE, or press Enter to cancel."
+			read -p "Action [old=new,... | OVERRIDE | Enter to cancel]: " YN
+			if [ "${YN}" = "OVERRIDE" ]; then
+				:
+			elif [ -n "${YN}" -a "${YN#*=}" != "${YN}" ]; then
+				REMAPPED_TMP=$(mktemp /tmp/restore_remapped.XXXXXX)
+				set +e
+				${PREFLIGHT} --mode restore --config "${RESTORE_SRC}" --remap "${YN}" --write-remapped "${REMAPPED_TMP}" --text --exit-on-blocker
+				PF_REMAP_RET=${?}
+				set -e
+				echo
+				if [ ${PF_REMAP_RET} -eq 0 -a -s "${REMAPPED_TMP}" ]; then
+					read -p "Remapping cleared blockers. Proceed restoring remapped backup? [y/N] " CONFIRM
+					case ${CONFIRM} in
+					[yY])
+						RESTORE_SRC="${REMAPPED_TMP}"
+						;;
+					*)
+						rm -f "${REMAPPED_TMP}"
+						REMAPPED_TMP=
+						RESTORE=
+						;;
+					esac
+				else
+					echo "Remapping did not resolve all blockers."
+					read -p "Type OVERRIDE to restore remapped backup anyway, or press Enter to cancel: " CONFIRM
+					if [ "${CONFIRM}" = "OVERRIDE" -a -s "${REMAPPED_TMP}" ]; then
+						RESTORE_SRC="${REMAPPED_TMP}"
+					else
+						rm -f "${REMAPPED_TMP}"
+						REMAPPED_TMP=
+						RESTORE=
+					fi
+				fi
+			else
+				RESTORE=
+			fi
+		else
+			read -p "Do you want to proceed restoring this backup? [y/N] " YN
 
-		case ${YN} in
-		[yY])
-			;;
-		*)
-			RESTORE=
-			;;
-		esac
+			case ${YN} in
+			[yY])
+				;;
+			*)
+				RESTORE=
+				;;
+			esac
+		fi
 	fi
 
 	echo
 done
 
-cp /conf/backup/${RESTORE} /conf/config.xml
+cp "${RESTORE_SRC}" /conf/config.xml
+cleanup_remapped_tmp
 
 read -p "Do you want to reboot to apply the backup cleanly? [y/N]: " YN
 

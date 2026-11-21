@@ -9,7 +9,11 @@
                 const snapshot_state_desc = {
                     'N':  "{{ lang._('Snapshot is active right now') }}",
                     'R':  "{{ lang._('Snapshot will be active after reboot') }}",
+                    'T':  "{{ lang._('Snapshot will be active for next boot only (temporary)') }}",
                     'NR': "{{ lang._('Snapshot is active and will be used on reboots') }}",
+                    'NT': "{{ lang._('Snapshot is active now and armed for next boot only (temporary)') }}",
+                    'RT': "{{ lang._('Snapshot will be active on reboot and next boot (temporary)') }}",
+                    'NRT': "{{ lang._('Snapshot is active now, on reboot, and for next boot (temporary)') }}",
                     '-':  "{{ lang._('Snapshot is not active') }}"
                 };
                 $("#{{formGridSnapshot['table_id']}}").UIBootgrid({

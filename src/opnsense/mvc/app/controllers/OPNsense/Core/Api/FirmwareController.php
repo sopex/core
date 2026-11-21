@@ -454,6 +454,94 @@ class FirmwareController extends ApiMutableModelControllerBase
     }
 
     /**
+     * run pre-flight validation report for firmware update or upgrade
+     * @param string $mode 'update' or 'upgrade'
+     * @return array pre-flight report
+     */
+    public function preflightAction($mode = 'update')
+    {
+        $mode = ($mode === 'upgrade') ? 'upgrade' : 'update';
+        $backend = new Backend();
+        $raw = trim((string)$backend->configdpRun('firmware preflight', [$mode]));
+        $report = json_decode($raw, true);
+        if (!is_array($report)) {
+            return [
+                'status' => 'error',
+                'can_proceed' => false,
+                'summary' => ['blockers' => 1, 'warnings' => 0, 'info' => 0],
+                'findings' => [[
+                    'id' => 'preflight_exec_error',
+                    'severity' => 'BLOCKER',
+                    'category' => 'system',
+                    'title' => gettext('Pre-flight validation failed to execute'),
+                    'message' => gettext('Backend pre-flight check returned an invalid response.'),
+                    'remediation' => gettext('Inspect system and configd logs before proceeding.'),
+                ]],
+            ];
+        }
+        return $report;
+    }
+
+    /**
+     * retrieve ZFS Boot Environment Auto-Guard status
+     * @return array
+     */
+    public function beguardStatusAction()
+    {
+        $backend = new Backend();
+        $raw = trim((string)$backend->configdRun('firmware beguard status'));
+        $decoded = json_decode($raw, true);
+        return is_array($decoded) ? $decoded : ['zfs_supported' => false, 'state' => 'unknown'];
+    }
+
+    /**
+     * dismiss ZFS Boot Environment Auto-Guard revert notice
+     * @return array
+     */
+    public function beguardDismissAction()
+    {
+        if ($this->request->isPost()) {
+            $this->throwReadOnly();
+            $this->getLogger('audit')->notice(
+                sprintf('[Firmware] User %s dismissed BE Auto-Guard status notice', $this->getUserName())
+            );
+            $backend = new Backend();
+            $decoded = json_decode(trim((string)$backend->configdRun('firmware beguard dismiss')), true);
+            return is_array($decoded) ? $decoded : ['status' => 'ok'];
+        }
+        return ['status' => 'failure'];
+    }
+
+    /**
+     * evaluate pre-flight blockers unless explicitly overridden
+     * @param string $mode 'update' or 'upgrade'
+     * @return array|null blocked response or null if allowed
+     */
+    private function checkPreflightGate(string $mode): ?array
+    {
+        $override = $this->request->getPost('override', 'string', '0');
+        if (is_scalar($override) && in_array(strtolower((string)$override), ['1', 'true', 'yes'], true)) {
+            $this->getLogger('audit')->warning(
+                sprintf('[Firmware] User %s overrode pre-flight validation blockers for firmware %s', $this->getUserName(), $mode)
+            );
+            return null;
+        }
+
+        $report = $this->preflightAction($mode);
+        if (empty($report['can_proceed'])) {
+            $this->getLogger('audit')->warning(
+                sprintf('[Firmware] Firmware %s requested by %s refused due to pre-flight blockers', $mode, $this->getUserName())
+            );
+            return [
+                'status' => 'blocked',
+                'preflight' => $report,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
      * perform (stable) update
      * @return array status
      * @throws \Exception
@@ -463,6 +551,10 @@ class FirmwareController extends ApiMutableModelControllerBase
         $backend = new Backend();
         $response = [];
         if ($this->request->isPost()) {
+            $blocked = $this->checkPreflightGate('update');
+            if ($blocked !== null) {
+                return $blocked;
+            }
             $this->getLogger('audit')->notice(sprintf("[Firmware] User %s executed a firmware update", $this->getUserName()));
             $backend->configdRun('firmware flush');
             $response['msg_uuid'] = trim($backend->configdRun('firmware update', true));
@@ -484,6 +576,10 @@ class FirmwareController extends ApiMutableModelControllerBase
         $backend = new Backend();
         $response = [];
         if ($this->request->isPost()) {
+            $blocked = $this->checkPreflightGate('upgrade');
+            if ($blocked !== null) {
+                return $blocked;
+            }
             $this->getLogger('audit')->notice(sprintf("[Firmware] User %s executed a firmware upgrade", $this->getUserName()));
             $backend->configdRun('firmware flush');
             $response['msg_uuid'] = trim($backend->configdRun('firmware upgrade', true));
@@ -967,7 +1063,10 @@ class FirmwareController extends ApiMutableModelControllerBase
      */
     public function getOptionsAction()
     {
-        return $this->getModel()->getRepositoryOptions();
+        $options = $this->getModel()->getRepositoryOptions();
+        $zfs = json_decode((string)(new Backend())->configdRun('zfs snapshot supported'), true);
+        $options['zfs_supported'] = is_array($zfs) && ($zfs['status'] ?? '') === 'OK';
+        return $options;
     }
 
     /**

@@ -39,6 +39,21 @@ else
 fi
 
 if [ -z "${RELEASE}" ]; then
+	PREFLIGHT_MODE="update"
+else
+	PREFLIGHT_MODE="upgrade"
+fi
+
+# Run pre-flight validation and abort unattended/scripted upgrades on blockers unless overridden
+PREFLIGHT="/usr/local/opnsense/scripts/firmware/preflight.py"
+if [ -x "${PREFLIGHT}" -a "${FORCE_PREFLIGHT}" != "1" ]; then
+	if ! ${PREFLIGHT} --mode "${PREFLIGHT_MODE}" --skip-lock-check --text --exit-on-blocker; then
+		echo "Firmware ${PREFLIGHT_MODE} aborted by pre-flight validation blockers."
+		exit 2
+	fi
+fi
+
+if [ -z "${RELEASE}" ]; then
 	# already locked here, ok to call without launcher.sh
 	/usr/local/opnsense/scripts/firmware/update.sh sync
 else

@@ -48,6 +48,14 @@ ALWAYS_REBOOT=$(/usr/local/sbin/pluginctl -g system.firmware.reboot)
 PKGS_HASH=$(${PKG} query %n-%v 2> /dev/null | sha256)
 UPDATE_FAILED=
 
+# create pre-upgrade ZFS boot environment if enabled (skips gracefully on UFS)
+if [ -x "${BASEDIR}/be_guard.py" ]; then
+	if ! output_cmd ${BASEDIR}/be_guard.py prepare --mode update --no-prune; then
+		output_txt "Update aborted: ZFS boot environment auto-guard preparation failed."
+		output_done keep-log
+	fi
+fi
+
 # update all packages if possible
 if ! output_cmd opnsense-update ${FORCE} -pt "opnsense${SUFFIX}"; then
 	UPDATE_FAILED=1
@@ -60,6 +68,9 @@ output_cmd /usr/local/etc/rc.restart_webgui
 if [ -n "${UPDATE_FAILED}" ]; then
 	output_txt "Partial update failure detected: report this error log to OPNsense."
 	output_txt "No further actions will be taken. Please restart the update now."
+	if [ -x "${BASEDIR}/be_guard.py" ]; then
+		output_cmd ${BASEDIR}/be_guard.py finalize || true
+	fi
 	output_done keep-log
 fi
 
@@ -68,16 +79,35 @@ if [ "${CMD}" = "sync" ]; then
 	/usr/local/opnsense/scripts/firmware/sync.subr.sh
 fi
 
+BASE_FAILED=
+
 # if we can update base, we'll do that as well
 if opnsense-update ${FORCE} -bk -c; then
 	if output_cmd opnsense-update ${FORCE} -bk; then
+		if [ -x "${BASEDIR}/be_guard.py" ]; then
+			output_cmd ${BASEDIR}/be_guard.py arm --mode update
+		fi
 		output_reboot keep-log
+	else
+		BASE_FAILED=1
 	fi
 fi
 
 if [ "${ALWAYS_REBOOT}" = "1" ]; then
 	if [ "${PKGS_HASH}" != "$(${PKG} query %n-%v 2> /dev/null | sha256)" ]; then
+		if [ -x "${BASEDIR}/be_guard.py" ]; then
+			output_cmd ${BASEDIR}/be_guard.py arm --mode update
+		fi
 		output_reboot keep-log
+	fi
+fi
+
+# Clean up no-op BE snapshot if nothing changed, or enforce retention for non-rebooting updates
+if [ -x "${BASEDIR}/be_guard.py" ]; then
+	if [ -z "${BASE_FAILED}" -a "${PKGS_HASH}" = "$(${PKG} query %n-%v 2> /dev/null | sha256)" ]; then
+		output_cmd ${BASEDIR}/be_guard.py discard-pending || true
+	else
+		output_cmd ${BASEDIR}/be_guard.py finalize || true
 	fi
 fi
 

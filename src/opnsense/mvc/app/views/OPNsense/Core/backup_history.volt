@@ -134,27 +134,160 @@
 
         $("#act_revert").click(function(event){
             event.preventDefault();
-            if (!$("#backups1").val()) {
+            let backupId = $("#backups1").val();
+            if (!backupId) {
                 return;
             }
-            BootstrapDialog.show({
-                type: BootstrapDialog.TYPE_WARNING,
-                title: "{{ lang._('Confirmation required') }}",
-                message: "{{ lang._('Restore from Configuration Backup') }} <br/>" + $("#backups1 option:selected").data('content'),
-                buttons: [{
-                label: "{{ lang._('No') }}",
-                action: function(dialogRef) {
-                    dialogRef.close();
-                }}, {
-                    label: "{{ lang._('Yes') }}",
-                    cssClass: 'btn-warning',
-                    action: function(dialogRef) {
-                        ajaxCall("/api/core/backup/revert_backup/" + $("#backups1").val(),{}, function(){
-                            dialogRef.close();
-                            get_backups();
+            ajaxGet("/api/core/backup/preflight_backup/" + encodeURIComponent(backupId), {}, function(report, status) {
+                if (status !== 'success' || !report || report.status === 'not_found') {
+                    report = {
+                        status: 'error',
+                        can_proceed: false,
+                        summary: { blockers: 1, warnings: 0, info: 0 },
+                        findings: [{
+                            severity: 'BLOCKER',
+                            title: "{{ lang._('Pre-flight validation failed') }}",
+                            message: "{{ lang._('Unable to retrieve pre-flight validation report for the selected backup.') }}"
+                        }],
+                        interface_remapping: { required: false, missing: [], available_hardware: [] }
+                    };
+                }
+                let summary = (report && report.summary) ? report.summary : { blockers: 0, warnings: 0, info: 0 };
+                let findings = (report && Array.isArray(report.findings)) ? report.findings : [];
+                let blockers = summary.blockers || 0;
+                let remapping = (report && report.interface_remapping) ? report.interface_remapping : { required: false, missing: [], available_hardware: [] };
+
+                let $msg = $('<div/>');
+                $msg.append($('<p/>').html("{{ lang._('Restore from Configuration Backup') }} <br/>" + $("#backups1 option:selected").data('content')));
+
+                let $sum = $('<div class="__mb"/>');
+                $sum.append($('<span class="label label-danger"/>').text("{{ lang._('Blockers') }}: " + blockers)).append(' ');
+                $sum.append($('<span class="label label-warning"/>').text("{{ lang._('Warnings') }}: " + (summary.warnings || 0))).append(' ');
+                $sum.append($('<span class="label label-info"/>').text("{{ lang._('Info') }}: " + (summary.info || 0)));
+                $msg.append($sum);
+
+                let decodeApiText = function (val) {
+                    return (val !== null && val !== undefined && val !== '') ? htmlDecode(String(val)) : '';
+                };
+
+                if (findings.length > 0) {
+                    let $tbl = $('<table class="table table-condensed table-striped"/>');
+                    let $tb = $('<tbody/>');
+                    findings.forEach(function (f) {
+                        let cls = f.severity === 'BLOCKER' ? 'label-danger' : (f.severity === 'WARNING' ? 'label-warning' : 'label-info');
+                        let $tr = $('<tr/>');
+                        $tr.append($('<td style="width:90px;"/>').append($('<span class="label"/>').addClass(cls).text(decodeApiText(f.severity || 'INFO'))));
+                        let $td = $('<td/>').append($('<strong/>').text(decodeApiText(f.title)));
+                        if (f.message) {
+                            $td.append($('<div/>').text(decodeApiText(f.message)));
+                        }
+                        if (f.remediation) {
+                            $td.append($('<small class="text-muted"/>').text(decodeApiText(f.remediation)));
+                        }
+                        $tr.append($td);
+                        $tb.append($tr);
+                    });
+                    $tbl.append($tb);
+                    $msg.append($('<div style="max-height:240px;overflow-y:auto;"/>').append($tbl));
+                }
+
+                if (remapping.required && Array.isArray(remapping.missing) && remapping.missing.length > 0) {
+                    let $rtbl = $('<table class="table table-condensed table-bordered"/>');
+                    $rtbl.append('<thead><tr><th>{{ lang._("Missing NIC") }}</th><th>{{ lang._("Map to Local Hardware NIC") }}</th></tr></thead>');
+                    let $rtb = $('<tbody/>');
+                    remapping.missing.forEach(function (miss) {
+                        let missDev = decodeApiText(miss.device);
+                        let $sel = $('<select class="form-control backup_nic_remap"/>').attr('data-old', missDev);
+                        $sel.append($('<option value=""/>').text("{{ lang._('-- Do not remap --') }}"));
+                        (remapping.available_hardware || []).forEach(function (hw) {
+                            let hwDev = decodeApiText(hw.device);
+                            let hwMac = decodeApiText(hw.mac);
+                            let hwStatus = decodeApiText(hw.status);
+                            let lbl = hwDev + (hwMac ? ' (' + hwMac + ')' : '') + (hwStatus ? ' [' + hwStatus + ']' : '');
+                            $sel.append($('<option/>').attr('value', hwDev).text(lbl));
                         });
-                    }
-                }]
+                        $rtb.append($('<tr/>').append($('<td/>').append($('<code/>').text(missDev))).append($('<td/>').append($sel)));
+                    });
+                    $rtbl.append($rtb);
+                    $msg.append($('<div/>').append($('<strong/>').text("{{ lang._('Remap Missing Hardware Interfaces') }}")).append($rtbl));
+                }
+
+                if (blockers > 0) {
+                    let $ov = $('<div class="alert alert-danger" style="margin-top:8px;margin-bottom:0;"/>');
+                    let $lbl = $('<label style="font-weight:normal;cursor:pointer;margin-bottom:0;"/>');
+                    $lbl.append('<input type="checkbox" id="backup_preflight_override" style="margin-right:6px;"/>');
+                    $lbl.append(document.createTextNode("{{ lang._('Override remaining pre-flight blockers and restore anyway.') }}"));
+                    $ov.append($lbl);
+                    $msg.append($ov);
+                }
+
+                BootstrapDialog.show({
+                    type: blockers > 0 ? BootstrapDialog.TYPE_DANGER : BootstrapDialog.TYPE_WARNING,
+                    size: BootstrapDialog.SIZE_WIDE,
+                    title: "{{ lang._('Confirmation required') }}",
+                    message: $msg,
+                    buttons: [{
+                        label: "{{ lang._('No') }}",
+                        action: function(dialogRef) {
+                            dialogRef.close();
+                        }
+                    }, {
+                        id: 'btn_backup_revert_yes',
+                        label: "{{ lang._('Yes') }}",
+                        cssClass: blockers > 0 ? 'btn-danger' : 'btn-warning',
+                        action: function(dialogRef) {
+                            let $body = dialogRef.getModalBody();
+                            let remapPayload = {};
+                            $body.find('.backup_nic_remap').each(function () {
+                                let v = $(this).val();
+                                if (v) {
+                                    remapPayload[$(this).data('old')] = v;
+                                }
+                            });
+                            let doOverride = $body.find('#backup_preflight_override').is(':checked') ? '1' : '0';
+                            ajaxCall("/api/core/backup/revert_backup/" + encodeURIComponent(backupId), {
+                                remap: remapPayload,
+                                override: doOverride
+                            }, function(resp, status) {
+                                if (resp && resp.status === 'blocked') {
+                                    let detail = "{{ lang._('Pre-flight blockers remain. Remap all missing interfaces or check override.') }}";
+                                    if (resp.preflight && Array.isArray(resp.preflight.findings)) {
+                                        let titles = resp.preflight.findings
+                                            .filter(function (f) { return f.severity === 'BLOCKER'; })
+                                            .map(function (f) { return decodeApiText(f.title || f.message); })
+                                            .filter(Boolean);
+                                        if (titles.length > 0) {
+                                            detail += ' (' + titles.join('; ') + ')';
+                                        }
+                                    }
+                                    stdDialogInform(
+                                        "{{ lang._('Restore blocked') }}",
+                                        $('<div/>').text(detail),
+                                        "{{ lang._('Close') }}",
+                                        undefined,
+                                        'danger'
+                                    );
+                                    return;
+                                }
+                                if (status !== 'success' || !resp || resp.status !== 'reverted') {
+                                    let errMsg = (resp && (resp.message || resp.errorMessage))
+                                        ? decodeApiText(resp.message || resp.errorMessage)
+                                        : "{{ lang._('Failed to restore configuration backup.') }}";
+                                    stdDialogInform(
+                                        "{{ lang._('Restore failed') }}",
+                                        $('<div/>').text(errMsg),
+                                        "{{ lang._('Close') }}",
+                                        undefined,
+                                        'danger'
+                                    );
+                                    return;
+                                }
+                                dialogRef.close();
+                                get_backups();
+                            });
+                        }
+                    }]
+                });
             });
         });
         $("#act_remove").click(function(event){

@@ -41,10 +41,11 @@ if __name__ == '__main__':
     parser.add_argument(
         'action',
         help='action to perform, see bectl for details',
-        choices=['is_supported', 'activate', 'create', 'clone', 'destroy', 'list', 'rename']
+        choices=['is_supported', 'activate', 'clear_temporary', 'create', 'clone', 'destroy', 'list', 'rename']
     )
     parser.add_argument('--beName', help='name of boot environment', type=str)
     parser.add_argument('--from-source', help='boot environment to clone', type=str)
+    parser.add_argument('--temporary', help='activate boot environment for next boot only', action='store_true')
     inputargs = parser.parse_args()
 
     datasets = {}
@@ -62,7 +63,12 @@ if __name__ == '__main__':
                 parts = line.split()
                 datasets[parts[0].split('/')[-1]] = parts[2]
     elif inputargs.action == 'activate' and inputargs.beName:
-        cmd = ['bectl', 'activate', '--', inputargs.beName]
+        if inputargs.temporary:
+            cmd = ['bectl', 'activate', '-t', '--', inputargs.beName]
+        else:
+            cmd = ['bectl', 'activate', '--', inputargs.beName]
+    elif inputargs.action == 'clear_temporary':
+        cmd = ['bectl', 'activate', '-T']
     elif inputargs.action == 'create':
         name = inputargs.beName if inputargs.beName else "{date:%Y%m%d%H%M%S}".format(date=datetime.datetime.now())
         cmd = ['bectl', 'create', '--', name]
@@ -70,7 +76,18 @@ if __name__ == '__main__':
         name = inputargs.beName if inputargs.beName else "{date:%Y%m%d%H%M%S}".format(date=datetime.datetime.now())
         cmd = ['bectl', 'create', '-e', inputargs.from_source, '--', name]
     elif inputargs.action == 'destroy' and inputargs.beName:
-        cmd = ['bectl', 'destroy', '--', inputargs.beName]
+        # Defense-in-depth: never destroy the currently running or scheduled BE
+        list_sp = subprocess.run(['bectl', 'list', '-H'], capture_output=True, text=True)
+        if list_sp.returncode != 0:
+            error_msg = 'Refusing to destroy boot environment %s: unable to verify active state' % inputargs.beName
+        else:
+            for line in list_sp.stdout.split("\n"):
+                parts = line.split("\t")
+                if len(parts) >= 2 and parts[0] == inputargs.beName and parts[1] != '-':
+                    error_msg = 'Refusing to destroy active boot environment %s (%s)' % (inputargs.beName, parts[1])
+                    break
+        if not error_msg:
+            cmd = ['bectl', 'destroy', '--', inputargs.beName]
     elif inputargs.action == 'rename' and inputargs.beName and inputargs.from_source:
         cmd = ['bectl', 'rename', inputargs.from_source, inputargs.beName]
     else:

@@ -119,4 +119,29 @@ if [ -n "${CHANGELOG}" ]; then
 	echo
 fi
 
+PREFLIGHT="/usr/local/opnsense/scripts/firmware/preflight.py"
+PREFLIGHT_MODE="update"
+if [ -n "${ARGS}" ]; then
+	PREFLIGHT_MODE="upgrade"
+fi
+
+if [ -x "${PREFLIGHT}" ]; then
+	echo "Running pre-flight validation..."
+	set +e
+	${PREFLIGHT} --mode "${PREFLIGHT_MODE}" --text --exit-on-blocker
+	PF_RET=${?}
+	set -e
+	echo
+	if [ ${PF_RET} -ne 0 ]; then
+		echo "Pre-flight validation reported BLOCKER issue(s) or failed. Upgrade refused by default."
+		read -p "Type OVERRIDE to proceed despite blockers, or press Enter to abort: " OVERRIDE
+		if [ "${OVERRIDE}" != "OVERRIDE" ]; then
+			echo "Aborted by pre-flight validation."
+			exit 0
+		fi
+	fi
+	# Already validated (or explicitly overridden) here; avoid duplicate run in rc.firmware.subr
+	export FORCE_PREFLIGHT=1
+fi
+
 /usr/local/etc/rc.firmware ${ARGS}
