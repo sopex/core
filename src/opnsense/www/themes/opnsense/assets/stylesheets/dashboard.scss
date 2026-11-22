@@ -1,7 +1,7 @@
 @import "config/colors";
 
 :root {
-    --chart-js-font-color: map-get($colors, text-color);
+    --chart-js-font-color: #{map-get($colors, text-color)};
 }
 
 .ui-resizable-handle {
