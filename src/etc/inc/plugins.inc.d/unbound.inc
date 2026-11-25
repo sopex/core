@@ -208,6 +208,9 @@ function unbound_generate_config()
     $anchor_file = '';
     $dns64_config = '';
 
+    if (!empty($general['safesearch_providers'])) {
+        $module_config .= 'respip ';
+    }
     if (!empty($general['dns64'])) {
         if (!empty($general['dns64prefix'])) {
             $dns64_config .= "\ndns64-prefix: {$general['dns64prefix']}";
