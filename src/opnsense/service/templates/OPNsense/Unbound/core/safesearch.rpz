@@ -78,6 +78,8 @@ www.duck.com CNAME safe.duckduckgo.com.
 ; Bing
 bing.com CNAME strict.bing.com.
 www.bing.com CNAME strict.bing.com.
+www2.bing.com CNAME strict.bing.com.
+www4.bing.com CNAME strict.bing.com.
 edgeservices.bing.com CNAME strict.bing.com.
 {%   endif %}
 
