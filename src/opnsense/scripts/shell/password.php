@@ -47,7 +47,7 @@ if (isset($argv[2]) && isset($argv[3]) && $argv[2] === '-h' && $argv[3] === '0')
 
     echo "new password for user {$admin_user['name']}:";
     shell_safe('/bin/stty -echo');
-    $password = chop(fgets($fp));
+    $password = rtrim((string)fgets($fp), "\r\n");
     shell_safe('/bin/stty echo');
     echo "\n";
 
@@ -82,7 +82,7 @@ if (isset($argv[2]) && isset($argv[3]) && $argv[2] === '-h' && $argv[3] === '0')
 
     echo "new password for user {$admin_user['name']}:";
     shell_safe('/bin/stty -echo');
-    $password = chop(fgets($fp));
+    $password = rtrim((string)fgets($fp), "\r\n");
     shell_safe('/bin/stty echo');
     echo "\n";
 
@@ -135,7 +135,7 @@ if (isset($admin_user['shell'])) {
 echo "\nType a new password: ";
 
 shell_safe('/bin/stty -echo');
-$password = chop(fgets($fp));
+$password = rtrim((string)fgets($fp), "\r\n");
 shell_safe('/bin/stty echo');
 echo "\n";
 if (empty($password)) {
@@ -145,7 +145,7 @@ if (empty($password)) {
 
 echo "Confirm new password: ";
 shell_safe('/bin/stty -echo');
-$confirm = chop(fgets($fp));
+$confirm = rtrim((string)fgets($fp), "\r\n");
 shell_safe('/bin/stty echo');
 echo "\n";
 if ($password !== $confirm) {
